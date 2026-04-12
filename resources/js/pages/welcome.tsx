@@ -12,7 +12,7 @@ export default function Welcome() {
                 
             </Head>
 
-            <div class="alert alert-info text-center" role="alert">
+            <div className="alert alert-info text-center" role="alert">
                 Welcome to your new Inertia.js application!
             </div>
         </>
