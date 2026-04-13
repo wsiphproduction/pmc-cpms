@@ -11,9 +11,11 @@
         <link href="https://fonts.bunny.net/css?family=instrument-sans:400,500,600" rel="stylesheet" />
 
         @routes
-        {{-- 
-        @viteReactRefresh
-         --}}
+        
+        @if(app()->isLocal())
+            @viteReactRefresh
+        @endif
+        
         @vite(['resources/js/app.tsx', "resources/js/pages/{$page['component']}.tsx"])
         @inertiaHead
     </head>
