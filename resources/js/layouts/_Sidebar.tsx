@@ -96,9 +96,15 @@ const navItems: NavItem[] = [
 export default function Sidebar() {
     const { url } = usePage();
 
-    // Auto-open Projects submenu if on a child route
     const defaultOpen = navItems
-        .filter(item => item.children && item.children.some(c => url.startsWith(c.href)))
+        .filter(item => item.children && item.children.some(c => {
+            try {
+                const path = new URL(c.href).pathname;
+                return url.startsWith(path);
+            } catch {
+                return url.startsWith(c.href);
+            }
+        }))
         .map(item => item.label);
 
     const [openMenus, setOpenMenus] = useState<string[]>(
@@ -110,7 +116,14 @@ export default function Sidebar() {
             prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]
         );
 
-    const isActive = (href: string) => url === href || url.startsWith(href + '/');
+    const isActive = (href: string) => {
+        try {
+            const path = new URL(href).pathname;
+            return url === path || url.startsWith(path + '/');
+        } catch {
+            return url === href || url.startsWith(href + '/');
+        }
+    };
 
     const navLinkStyle = (active: boolean): React.CSSProperties => ({
         display: 'flex', alignItems: 'center', gap: '9px',
@@ -187,9 +200,9 @@ export default function Sidebar() {
                                                     display: 'block',
                                                     padding: '7px 12px 7px 37px',
                                                     fontSize: '12.5px',
-                                                    fontWeight: url === child.href ? 600 : 400,
-                                                    color: url === child.href ? '#2563eb' : '#6b7280',
-                                                    background: url === child.href ? '#eff6ff' : 'transparent',
+                                                    fontWeight: isActive(child.href) ? 600 : 400,
+                                                    color: isActive(child.href) ? '#2563eb' : '#6b7280',
+                                                    background: isActive(child.href) ? '#eff6ff' : 'transparent',
                                                     borderRadius: '6px', textDecoration: 'none',
                                                     marginBottom: '1px', transition: 'all 0.12s',
                                                 }}
