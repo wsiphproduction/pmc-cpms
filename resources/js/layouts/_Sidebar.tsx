@@ -213,27 +213,25 @@ export default function Sidebar() {
             </nav>
 
             {/* Logout */}
-            <div style={{ padding: '8px', borderTop: '1px solid #f3f4f6' }}>
-                <Link
-                    href="/logout"
-                    method="post"
-                    as="button"
-                    style={{
-                        display: 'flex', alignItems: 'center', gap: '9px',
-                        padding: '8px 12px', borderRadius: '7px', width: '100%',
-                        fontSize: '13px', fontWeight: 500, color: '#dc2626',
-                        background: 'none', border: 'none', cursor: 'pointer',
-                        textAlign: 'left', fontFamily: 'inherit',
-                    }}
-                >
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                        <polyline points="16 17 21 12 16 7"/>
-                        <line x1="21" y1="12" x2="9" y2="12"/>
-                    </svg>
-                    Logout
-                </Link>
-            </div>
+            <Link
+                href={route('logout')}
+                method="post"
+                as="button"
+                style={{
+                    display: 'flex', alignItems: 'center', gap: '9px',
+                    padding: '8px 12px', borderRadius: '7px', width: '100%',
+                    fontSize: '13px', fontWeight: 500, color: '#dc2626',
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    textAlign: 'left', fontFamily: 'inherit',
+                }}
+            >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                </svg>
+                Logout
+            </Link>
         </aside>
     );
 }
