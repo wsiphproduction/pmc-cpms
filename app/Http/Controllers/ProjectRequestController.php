@@ -56,38 +56,33 @@ class ProjectRequestController extends Controller
             'capex'           => ['boolean'],
             'for_budgeting'   => ['boolean'],
 
-            // Attachments
-            'attachments'              => ['nullable', 'array'],
-            'attachments.*.file'       => ['nullable', 'file', 'max:10240'],
-            'attachments.*.type'       => ['required_with:attachments.*.file', 'string', 'in:picture,drawing,report'],
-            'attachments.*.description'=> ['nullable', 'string', 'max:255'],
+            'attachments'               => ['nullable', 'array'],
+            'attachments.*.file'        => ['nullable', 'file', 'max:10240'],
+            'attachments.*.type'        => ['required_with:attachments.*.file', 'string', 'in:picture,drawing,report'],
+            'attachments.*.description' => ['nullable', 'string', 'max:255'],
         ]);
 
         $projectRequest = ProjectRequest::create([
-            'title'        => $request->title,
-            'job_type'     => $request->job_type,
-            'description'  => $request->description,
-            'requester_id' => auth()->id(),
-            'job_location' => $request->job_location,
-            'costcode'     => $request->costcode,
-            'opex'         => $request->boolean('opex'),
-            'capex'        => $request->boolean('capex'),
-            'for_budgeting'=> $request->boolean('for_budgeting'),
-            'status'       => 'pending',
+            'title'         => $request->title,
+            'job_type'      => $request->job_type,
+            'description'   => $request->description,
+            'requester_id'  => auth()->id(),
+            'job_location'  => $request->job_location,
+            'costcode'      => $request->costcode,
+            'opex'          => $request->boolean('opex'),
+            'capex'         => $request->boolean('capex'),
+            'for_budgeting' => $request->boolean('for_budgeting'),
+            'status'        => 'pending',
         ]);
 
-        // Store attachments
         $this->storeAttachments($request, $projectRequest);
-    
+
         return redirect()->route('requests.index')
             ->with('success', 'Project request submitted successfully.');
-            
     }
 
     public function show(ProjectRequest $projectRequest): Response
     {
-        //dd($projectRequest->id);
-        //dd($projectRequest->load(['requester', 'attachments'])->toArray());
         return Inertia::render('requests/show', [
             'projectRequest' => $projectRequest->load(['requester', 'attachments']),
         ]);
@@ -107,12 +102,12 @@ class ProjectRequestController extends Controller
             $request->validate([
                 'status' => ['required', 'string', 'in:approved,rejected,ongoing,completed,pending'],
             ]);
-    
+
             $projectRequest->update(['status' => $request->status]);
-    
+
             return back()->with('success', 'Request status updated.');
         }
-    
+
         // Full update (from edit form)
         $request->validate([
             'title'           => ['required', 'string', 'max:255'],
@@ -123,51 +118,51 @@ class ProjectRequestController extends Controller
             'opex'            => ['boolean'],
             'capex'           => ['boolean'],
             'for_budgeting'   => ['boolean'],
-    
+
             'attachments'               => ['nullable', 'array'],
             'attachments.*.file'        => ['nullable', 'file', 'max:10240'],
             'attachments.*.type'        => ['required_with:attachments.*.file', 'string', 'in:picture,drawing,report'],
             'attachments.*.description' => ['nullable', 'string', 'max:255'],
-    
+
             'deleted_attachments'   => ['nullable', 'array'],
             'deleted_attachments.*' => ['integer'],
         ]);
-    
+
         $projectRequest->update([
-            'title'        => $request->title,
-            'job_type'     => $request->job_type,
-            'description'  => $request->description,
-            'job_location' => $request->job_location,
-            'costcode'     => $request->costcode,
-            'opex'         => $request->boolean('opex'),
-            'capex'        => $request->boolean('capex'),
-            'for_budgeting'=> $request->boolean('for_budgeting'),
+            'title'         => $request->title,
+            'job_type'      => $request->job_type,
+            'description'   => $request->description,
+            'job_location'  => $request->job_location,
+            'costcode'      => $request->costcode,
+            'opex'          => $request->boolean('opex'),
+            'capex'         => $request->boolean('capex'),
+            'for_budgeting' => $request->boolean('for_budgeting'),
         ]);
-    
+
         // Delete removed attachments
         if ($request->filled('deleted_attachments')) {
-            $toDelete = \App\Models\Attachment::whereIn('id', $request->deleted_attachments)
+            $toDelete = Attachment::whereIn('id', $request->deleted_attachments)
                 ->where('reference_id', $projectRequest->id)
                 ->where('reference_type', ProjectRequest::class)
                 ->get();
-    
+
             foreach ($toDelete as $att) {
-                \Illuminate\Support\Facades\Storage::delete($att->filepath);
+                Storage::disk('public')->delete($att->filepath); // ✅ fixed: was Storage::delete()
                 $att->delete();
             }
         }
-    
+
         $this->storeAttachments($request, $projectRequest);
-    
+
         return redirect()->route('requests.index')
             ->with('success', 'Project request updated successfully.');
     }
 
     public function destroy(ProjectRequest $projectRequest): RedirectResponse
     {
-        // Delete physical files
         foreach ($projectRequest->attachments as $att) {
-            Storage::delete($att->filepath);
+            Storage::disk('public')->delete($att->filepath);
+            $att->delete(); // 👈 this was missing!
         }
 
         $projectRequest->delete();
@@ -184,7 +179,7 @@ class ProjectRequestController extends Controller
             if (empty($item['file'])) continue;
 
             $file = $item['file'];
-            $type = $item['type'] ?? 'other';        // ← add fallback
+            $type = $item['type'] ?? 'other';
             $desc = $item['description'] ?? null;
 
             $folder   = "requests/{$projectRequest->id}/{$type}s";
