@@ -1,9 +1,18 @@
 <?php
 
+use App\Models\Category;
 use App\Models\CostCode;
+use App\Models\Department;
 use App\Models\JobLocation;
 use App\Models\JobType;
+use App\Models\MasterClass;
+use App\Models\MasterStatus;
+use App\Models\Priority;
+use App\Models\ServiceType;
+use App\Models\Site;
+use App\Models\Structure;
 use App\Models\User;
+use App\Models\WorkForce;
 use Inertia\Testing\AssertableInertia as Assert;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
@@ -40,6 +49,15 @@ describe('index', function () {
         JobType::create(['name' => 'Civil', 'description' => 'Civil works']);
         JobLocation::create(['name' => 'Site A', 'description' => 'Main site']);
         CostCode::create(['name' => 'CC-001', 'description' => 'Budget code']);
+        Site::create(['name' => 'Plant 1']);
+        MasterClass::create(['name' => 'Class A']);
+        Priority::create(['name' => 'High']);
+        MasterStatus::create(['name' => 'Open']);
+        Department::create(['name' => 'Maintenance']);
+        Category::create(['name' => 'Repair']);
+        ServiceType::create(['name' => 'Preventive']);
+        WorkForce::create(['name' => 'Internal']);
+        Structure::create(['name' => 'Building']);
 
         $this->actingAs(makeMasterDataUser())
             ->get(route('master.index'))
@@ -49,9 +67,27 @@ describe('index', function () {
                 ->has('jobTypes', 1)
                 ->has('jobLocations', 1)
                 ->has('costCodes', 1)
+                ->has('sites', 1)
+                ->has('classes', 1)
+                ->has('priorities', 1)
+                ->has('statuses', 1)
+                ->has('departments', 1)
+                ->has('categories', 1)
+                ->has('serviceTypes', 1)
+                ->has('workForces', 1)
+                ->has('structures', 1)
                 ->where('jobTypes.0.name', 'Civil')
                 ->where('jobLocations.0.name', 'Site A')
                 ->where('costCodes.0.name', 'CC-001')
+                ->where('sites.0.name', 'Plant 1')
+                ->where('classes.0.name', 'Class A')
+                ->where('priorities.0.name', 'High')
+                ->where('statuses.0.name', 'Open')
+                ->where('departments.0.name', 'Maintenance')
+                ->where('categories.0.name', 'Repair')
+                ->where('serviceTypes.0.name', 'Preventive')
+                ->where('workForces.0.name', 'Internal')
+                ->where('structures.0.name', 'Building')
             );
     });
 
@@ -365,5 +401,93 @@ describe('cost codes', function () {
 
         $this->assertDatabaseMissing('cost_codes', ['id' => $costCode->id]);
     });
+
+});
+
+// -------------------------------------------------
+// REMAINING MASTER DATA TABS
+// -------------------------------------------------
+
+describe('remaining master data tabs', function () {
+
+    it('stores, updates, and deletes each remaining master data type', function (
+        string $routeBase,
+        string $modelClass,
+        string $table,
+        string $addedMessage,
+        string $updatedMessage,
+        string $deletedMessage
+    ) {
+        $user = makeMasterDataUser();
+
+        $this->actingAs($user)
+            ->post(route("{$routeBase}.store"), masterDataPayload([
+                'name'        => 'Original Entry',
+                'description' => 'Original description',
+            ]))
+            ->assertRedirect()
+            ->assertSessionHas('success', $addedMessage);
+
+        $this->assertDatabaseHas($table, [
+            'name'        => 'Original Entry',
+            'description' => 'Original description',
+        ]);
+
+        $item = $modelClass::where('name', 'Original Entry')->firstOrFail();
+
+        $this->actingAs($user)
+            ->put(route("{$routeBase}.update", $item), masterDataPayload([
+                'name'        => 'Updated Entry',
+                'description' => 'Updated description',
+            ]))
+            ->assertRedirect()
+            ->assertSessionHas('success', $updatedMessage);
+
+        $this->assertDatabaseHas($table, [
+            'id'          => $item->id,
+            'name'        => 'Updated Entry',
+            'description' => 'Updated description',
+        ]);
+
+        $item->refresh();
+
+        $this->actingAs($user)
+            ->delete(route("{$routeBase}.destroy", $item))
+            ->assertRedirect()
+            ->assertSessionHas('success', $deletedMessage);
+
+        $this->assertDatabaseMissing($table, ['id' => $item->id]);
+    })->with([
+        'sites'         => ['master.sites', Site::class, 'sites', 'Site added.', 'Site updated.', 'Site deleted.'],
+        'classes'       => ['master.classes', MasterClass::class, 'classes', 'Class added.', 'Class updated.', 'Class deleted.'],
+        'priorities'    => ['master.priorities', Priority::class, 'priorities', 'Priority added.', 'Priority updated.', 'Priority deleted.'],
+        'statuses'      => ['master.statuses', MasterStatus::class, 'statuses', 'Status added.', 'Status updated.', 'Status deleted.'],
+        'departments'   => ['master.departments', Department::class, 'departments', 'Department added.', 'Department updated.', 'Department deleted.'],
+        'categories'    => ['master.categories', Category::class, 'categories', 'Category added.', 'Category updated.', 'Category deleted.'],
+        'service types' => ['master.service-types', ServiceType::class, 'service_types', 'Service type added.', 'Service type updated.', 'Service type deleted.'],
+        'work forces'   => ['master.work-forces', WorkForce::class, 'work_forces', 'Work force added.', 'Work force updated.', 'Work force deleted.'],
+        'structures'    => ['master.structures', Structure::class, 'structures', 'Structure added.', 'Structure updated.', 'Structure deleted.'],
+    ]);
+
+    it('validates duplicate names for remaining master data types', function (
+        string $routeBase,
+        string $modelClass
+    ) {
+        $modelClass::create(['name' => 'Duplicate Entry']);
+
+        $this->actingAs(makeMasterDataUser())
+            ->post(route("{$routeBase}.store"), masterDataPayload(['name' => 'Duplicate Entry']))
+            ->assertSessionHasErrors(['name']);
+    })->with([
+        'sites'         => ['master.sites', Site::class],
+        'classes'       => ['master.classes', MasterClass::class],
+        'priorities'    => ['master.priorities', Priority::class],
+        'statuses'      => ['master.statuses', MasterStatus::class],
+        'departments'   => ['master.departments', Department::class],
+        'categories'    => ['master.categories', Category::class],
+        'service types' => ['master.service-types', ServiceType::class],
+        'work forces'   => ['master.work-forces', WorkForce::class],
+        'structures'    => ['master.structures', Structure::class],
+    ]);
 
 });

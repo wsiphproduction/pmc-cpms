@@ -14,9 +14,30 @@ interface Props {
     jobTypes:      MasterItem[];
     jobLocations:  MasterItem[];
     costCodes:     MasterItem[];
+    sites?:        MasterItem[];
+    classes?:      MasterItem[];
+    priorities?:   MasterItem[];
+    statuses?:     MasterItem[];
+    departments?:  MasterItem[];
+    categories?:   MasterItem[];
+    serviceTypes?: MasterItem[];
+    workForces?:   MasterItem[];
+    structures?:   MasterItem[];
 }
 
-type TabKey = 'job_types' | 'job_locations' | 'cost_codes';
+type TabKey =
+    | 'job_types'
+    | 'job_locations'
+    | 'cost_codes'
+    | 'sites'
+    | 'classes'
+    | 'priorities'
+    | 'statuses'
+    | 'departments'
+    | 'categories'
+    | 'service_types'
+    | 'work_forces'
+    | 'structures';
 
 const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode; addLabel: string }[] = [
     {
@@ -49,7 +70,113 @@ const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode; addLabel:
             </svg>
         ),
     },
+    {
+        key: 'sites',
+        label: 'Sites',
+        addLabel: 'Add Site',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+        ),
+    },
+    {
+        key: 'classes',
+        label: 'Class',
+        addLabel: 'Add Class',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+        ),
+    },
+    {
+        key: 'priorities',
+        label: 'Priority',
+        addLabel: 'Add Priority',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+        ),
+    },
+    {
+        key: 'statuses',
+        label: 'Status',
+        addLabel: 'Add Status',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+            </svg>
+        ),
+    },
+    {
+        key: 'departments',
+        label: 'Departments',
+        addLabel: 'Add Department',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+        ),
+    },
+    {
+        key: 'categories',
+        label: 'Categories',
+        addLabel: 'Add Category',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+        ),
+    },
+    {
+        key: 'service_types',
+        label: 'Service Types',
+        addLabel: 'Add Service Type',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+            </svg>
+        ),
+    },
+    {
+        key: 'work_forces',
+        label: 'Work Forces',
+        addLabel: 'Add Work Force',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+            </svg>
+        ),
+    },
+    {
+        key: 'structures',
+        label: 'Structures',
+        addLabel: 'Add Structure',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+            </svg>
+        ),
+    },
 ];
+
+// ── Route Map ──────────────────────────────────────────────────────────────
+const ROUTE_MAP: Record<TabKey, string> = {
+    job_types:     'master.job-types',
+    job_locations: 'master.job-locations',
+    cost_codes:    'master.cost-codes',
+    sites:         'master.sites',
+    classes:       'master.classes',
+    priorities:    'master.priorities',
+    statuses:      'master.statuses',
+    departments:   'master.departments',
+    categories:    'master.categories',
+    service_types: 'master.service-types',
+    work_forces:   'master.work-forces',
+    structures:    'master.structures',
+};
 
 // ── Modal ──────────────────────────────────────────────────────────────────
 function RecordModal({
@@ -64,16 +191,10 @@ function RecordModal({
     const [description, setDescription] = useState(item?.description ?? '');
     const [submitting,  setSubmitting]  = useState(false);
 
-    const routeMap: Record<TabKey, string> = {
-        job_types:     'master.job-types',
-        job_locations: 'master.job-locations',
-        cost_codes:    'master.cost-codes',
-    };
-
     const handleSubmit = () => {
         if (!name.trim()) return;
         setSubmitting(true);
-        const base = routeMap[tab];
+        const base = ROUTE_MAP[tab];
         const data = { name: name.trim(), description: description.trim() || null };
 
         if (isEdit) {
@@ -120,7 +241,7 @@ function RecordModal({
                             value={name}
                             onChange={e => setName(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-                            placeholder={`Enter ${tabLabel.toLowerCase().slice(0, -1)} name…`}
+                            placeholder={`Enter ${tabLabel.toLowerCase()} name…`}
                             autoFocus
                             style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s', color: '#0f172a' }}
                             onFocus={e => (e.target.style.borderColor = '#2563eb')}
@@ -171,15 +292,9 @@ function RecordModal({
 function DeleteModal({ tab, item, onClose }: { tab: TabKey; item: MasterItem; onClose: () => void }) {
     const [deleting, setDeleting] = useState(false);
 
-    const routeMap: Record<TabKey, string> = {
-        job_types:     'master.job-types',
-        job_locations: 'master.job-locations',
-        cost_codes:    'master.cost-codes',
-    };
-
     const handleDelete = () => {
         setDeleting(true);
-        router.delete(route(`${routeMap[tab]}.destroy`, item.id), {
+        router.delete(route(`${ROUTE_MAP[tab]}.destroy`, item.id), {
             onFinish: () => { setDeleting(false); onClose(); },
         });
     };
@@ -308,7 +423,20 @@ function TabTable({
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function MasterData({ jobTypes, jobLocations, costCodes }: Props) {
+export default function MasterData({
+    jobTypes      = [],
+    jobLocations  = [],
+    costCodes     = [],
+    sites         = [],
+    classes       = [],
+    priorities    = [],
+    statuses      = [],
+    departments   = [],
+    categories    = [],
+    serviceTypes  = [],
+    workForces    = [],
+    structures    = [],
+}: Props) {
     const [activeTab,    setActiveTab]    = useState<TabKey>('job_types');
     const [modalTab,     setModalTab]     = useState<TabKey>('job_types');
     const [editTarget,   setEditTarget]   = useState<MasterItem | null>(null);
@@ -319,6 +447,15 @@ export default function MasterData({ jobTypes, jobLocations, costCodes }: Props)
         job_types:     jobTypes,
         job_locations: jobLocations,
         cost_codes:    costCodes,
+        sites,
+        classes,
+        priorities,
+        statuses,
+        departments,
+        categories,
+        service_types: serviceTypes,
+        work_forces:   workForces,
+        structures,
     };
 
     const openAdd = (tab: TabKey) => {
@@ -333,7 +470,7 @@ export default function MasterData({ jobTypes, jobLocations, costCodes }: Props)
         setShowModal(true);
     };
 
-    const totalEntries = jobTypes.length + jobLocations.length + costCodes.length;
+    const totalEntries = Object.values(dataMap).reduce((sum, arr) => sum + arr.length, 0);
 
     return (
         <AuthenticatedLayout>
@@ -375,27 +512,29 @@ export default function MasterData({ jobTypes, jobLocations, costCodes }: Props)
             {/* Card */}
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
 
-                {/* Tabs */}
-                <div style={{ display: 'flex', borderBottom: '1px solid #f1f5f9', padding: '0 4px', gap: '2px' }}>
-                    {TAB_CONFIG.map(tab => {
-                        const isActive = activeTab === tab.key;
-                        const count = dataMap[tab.key].length;
-                        return (
-                            <button
-                                key={tab.key}
-                                onClick={() => setActiveTab(tab.key)}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: isActive ? 700 : 500, color: isActive ? '#2563eb' : '#64748b', borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent', transition: 'all 0.15s', fontFamily: 'inherit', marginBottom: '-1px' }}
-                                onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = '#334155'; }}
-                                onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = '#64748b'; }}
-                            >
-                                <span style={{ color: isActive ? '#2563eb' : '#94a3b8', display: 'flex' }}>{tab.icon}</span>
-                                {tab.label}
-                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '20px', height: '20px', borderRadius: '99px', background: isActive ? '#eff6ff' : '#f1f5f9', color: isActive ? '#2563eb' : '#94a3b8', fontSize: '10.5px', fontWeight: 700, padding: '0 5px' }}>
-                                    {count}
-                                </span>
-                            </button>
-                        );
-                    })}
+                {/* Tabs — scrollable row */}
+                <div style={{ overflowX: 'auto', borderBottom: '1px solid #f1f5f9' }}>
+                    <div style={{ display: 'flex', padding: '0 4px', gap: '2px', minWidth: 'max-content' }}>
+                        {TAB_CONFIG.map(tab => {
+                            const isActive = activeTab === tab.key;
+                            const count = dataMap[tab.key].length;
+                            return (
+                                <button
+                                    key={tab.key}
+                                    onClick={() => setActiveTab(tab.key)}
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: isActive ? 700 : 500, color: isActive ? '#2563eb' : '#64748b', borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent', transition: 'all 0.15s', fontFamily: 'inherit', marginBottom: '-1px', whiteSpace: 'nowrap' }}
+                                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = '#334155'; }}
+                                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = '#64748b'; }}
+                                >
+                                    <span style={{ color: isActive ? '#2563eb' : '#94a3b8', display: 'flex' }}>{tab.icon}</span>
+                                    {tab.label}
+                                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '20px', height: '20px', borderRadius: '99px', background: isActive ? '#eff6ff' : '#f1f5f9', color: isActive ? '#2563eb' : '#94a3b8', fontSize: '10.5px', fontWeight: 700, padding: '0 5px' }}>
+                                        {count}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 {/* Tab content */}
