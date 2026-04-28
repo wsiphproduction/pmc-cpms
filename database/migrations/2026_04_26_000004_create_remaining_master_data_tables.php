@@ -11,7 +11,7 @@ return new class extends Migration
         foreach ($this->tables() as $tableName) {
             Schema::create($tableName, function (Blueprint $table) {
                 $table->id();
-                $table->string('name')->unique();
+                $table->string('name', 191)->unique();
                 $table->string('description', 500)->nullable();
                 $table->timestamps();
             });
