@@ -34,6 +34,14 @@ interface ProjectRequestData {
 
 interface Props {
     projectRequest: ProjectRequestData;
+    jobTypes: MasterOption[];
+    jobLocations: MasterOption[];
+    costCodes: MasterOption[];
+}
+
+interface MasterOption {
+    id: number;
+    name: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -144,10 +152,9 @@ function ExistingAttachmentRow({ att, onDelete }: { att: ExistingAttachment; onD
 }
 
 // ── Edit Page ──────────────────────────────────────────────────────────────
-export default function Edit({ projectRequest }: Props) {
+export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes }: Props) {
     const [title,        setTitle]        = useState(projectRequest.title);
     const [jobType,      setJobType]      = useState(projectRequest.job_type);
-    const [jobTypeOther, setJobTypeOther] = useState('');
     const [description,  setDesc]         = useState(projectRequest.description);
     const [jobLocation,  setLocation]     = useState(projectRequest.job_location);
     const [costcode,     setCostcode]     = useState(projectRequest.costcode ?? '');
@@ -178,7 +185,7 @@ export default function Edit({ projectRequest }: Props) {
         const fd = new FormData();
         fd.append('_method',      'PUT');
         fd.append('title',        title);
-        fd.append('job_type',     jobType === 'OTHERS' ? (jobTypeOther || 'Others') : jobType);
+        fd.append('job_type',     jobType);
         fd.append('description',  description);
         fd.append('job_location', jobLocation);
         fd.append('costcode',     costcode);
@@ -221,7 +228,8 @@ export default function Edit({ projectRequest }: Props) {
         }
     };
 
-    const JOB_TYPES = ['Construction', 'Design', 'Installation', 'Study/Report', 'Modification', 'Estimate', 'Demolition/Removal', 'Retrofitting', 'Others'];
+    const hasOption = (options: MasterOption[], value: string) =>
+        value === '' || options.some(option => option.name === value);
 
     return (
         <AuthenticatedLayout>
@@ -251,15 +259,17 @@ export default function Edit({ projectRequest }: Props) {
                         <FormLabel required>Job Type</FormLabel>
                         <select value={jobType} onChange={e => setJobType(e.target.value)} onFocus={focus} onBlur={blur} required style={{ ...inputStyle, cursor: 'pointer' }}>
                             <option value="" disabled>Select Job Type…</option>
-                            {JOB_TYPES.map(t => <option key={t} value={t === 'Others' ? 'OTHERS' : t}>{t}</option>)}
+                            {!hasOption(jobTypes, jobType) && <option value={jobType}>{jobType}</option>}
+                            {jobTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                         </select>
-                        {jobType === 'OTHERS' && (
-                            <input type="text" value={jobTypeOther} onChange={e => setJobTypeOther(e.target.value)} onFocus={focus} onBlur={blur} placeholder="Please specify…" style={{ ...inputStyle, marginTop: '8px', borderColor: '#2563eb' }} />
-                        )}
                     </div>
                     <div>
                         <FormLabel required>Job Location</FormLabel>
-                        <input type="text" value={jobLocation} onChange={e => setLocation(e.target.value)} onFocus={focus} onBlur={blur} required style={inputStyle} />
+                        <select value={jobLocation} onChange={e => setLocation(e.target.value)} onFocus={focus} onBlur={blur} required style={{ ...inputStyle, cursor: 'pointer' }}>
+                            <option value="" disabled>Select Job Location…</option>
+                            {!hasOption(jobLocations, jobLocation) && <option value={jobLocation}>{jobLocation}</option>}
+                            {jobLocations.map(location => <option key={location.id} value={location.name}>{location.name}</option>)}
+                        </select>
                     </div>
                 </div>
 
@@ -272,7 +282,11 @@ export default function Edit({ projectRequest }: Props) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
                         <FormLabel>Cost Code</FormLabel>
-                        <input type="text" value={costcode} onChange={e => setCostcode(e.target.value)} onFocus={focus} onBlur={blur} placeholder="Enter assigned cost code" style={inputStyle} />
+                        <select value={costcode} onChange={e => setCostcode(e.target.value)} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer' }}>
+                            <option value="">Select Cost Code…</option>
+                            {!hasOption(costCodes, costcode) && <option value={costcode}>{costcode}</option>}
+                            {costCodes.map(code => <option key={code.id} value={code.name}>{code.name}</option>)}
+                        </select>
                     </div>
                     <div>
                         <FormLabel>Funding Classification</FormLabel>

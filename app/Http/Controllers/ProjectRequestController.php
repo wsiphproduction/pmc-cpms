@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Attachment;
+use App\Models\CostCode;
+use App\Models\JobLocation;
+use App\Models\JobType;
 use App\Models\ProjectRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -41,17 +44,21 @@ class ProjectRequestController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('requests/create');
+        return Inertia::render('requests/create', [
+            'jobTypes'     => JobType::orderBy('name')->get(['id', 'name']),
+            'jobLocations' => JobLocation::orderBy('name')->get(['id', 'name']),
+            'costCodes'    => CostCode::orderBy('name')->get(['id', 'name']),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
             'title'           => ['required', 'string', 'max:255'],
-            'job_type'        => ['required', 'string', 'max:100'],
+            'job_type'        => ['required', 'string', 'max:255'],
             'description'     => ['required', 'string'],
             'job_location'    => ['required', 'string', 'max:255'],
-            'costcode'        => ['nullable', 'string', 'max:100'],
+            'costcode'        => ['nullable', 'string', 'max:255'],
             'opex'            => ['boolean'],
             'capex'           => ['boolean'],
             'for_budgeting'   => ['boolean'],
@@ -92,6 +99,9 @@ class ProjectRequestController extends Controller
     {
         return Inertia::render('requests/edit', [
             'projectRequest' => $projectRequest->load('attachments'),
+            'jobTypes'       => JobType::orderBy('name')->get(['id', 'name']),
+            'jobLocations'   => JobLocation::orderBy('name')->get(['id', 'name']),
+            'costCodes'      => CostCode::orderBy('name')->get(['id', 'name']),
         ]);
     }
 
@@ -111,10 +121,10 @@ class ProjectRequestController extends Controller
         // Full update (from edit form)
         $request->validate([
             'title'           => ['required', 'string', 'max:255'],
-            'job_type'        => ['required', 'string', 'max:100'],
+            'job_type'        => ['required', 'string', 'max:255'],
             'description'     => ['required', 'string'],
             'job_location'    => ['required', 'string', 'max:255'],
-            'costcode'        => ['nullable', 'string', 'max:100'],
+            'costcode'        => ['nullable', 'string', 'max:255'],
             'opex'            => ['boolean'],
             'capex'           => ['boolean'],
             'for_budgeting'   => ['boolean'],

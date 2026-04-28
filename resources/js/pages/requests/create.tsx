@@ -13,13 +13,23 @@ interface UploadRow {
 interface FormData {
     title: string;
     job_type: string;
-    job_type_other: string;
     description: string;
     job_location: string;
     costcode: string;
     opex: boolean;
     capex: boolean;
     for_budgeting: boolean;
+}
+
+interface MasterOption {
+    id: number;
+    name: string;
+}
+
+interface Props {
+    jobTypes: MasterOption[];
+    jobLocations: MasterOption[];
+    costCodes: MasterOption[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -95,11 +105,10 @@ function UploadSection({ label, icon, accept, placeholder, rows, onAdd, onRemove
 }
 
 // ── Create Page ────────────────────────────────────────────────────────────
-export default function Create() {
+export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
     const [form, setForm] = useState<FormData>({
         title: '',
         job_type: '',
-        job_type_other: '',
         description: '',
         job_location: '',
         costcode: '',
@@ -131,7 +140,7 @@ export default function Create() {
 
         const fd = new FormData();
         fd.append('title',        form.title);
-        fd.append('job_type',     form.job_type === 'OTHERS' ? (form.job_type_other || 'Others') : form.job_type);
+        fd.append('job_type',     form.job_type);
         fd.append('description',  form.description);
         fd.append('job_location', form.job_location);
         fd.append('costcode',     form.costcode);
@@ -169,8 +178,6 @@ export default function Create() {
         }
     };
 
-    const JOB_TYPES = ['Construction', 'Design', 'Installation', 'Study/Report', 'Modification', 'Estimate', 'Demolition/Removal', 'Retrofitting', 'Others'];
-
     return (
         <AuthenticatedLayout>
             <Head title="New Project Request" />
@@ -197,15 +204,15 @@ export default function Create() {
                         <FormLabel required>Job Type</FormLabel>
                         <select value={form.job_type} onChange={e => set('job_type', e.target.value)} onFocus={focus} onBlur={blur} required style={{ ...inputStyle, cursor: 'pointer' }}>
                             <option value="" disabled>Select Job Type…</option>
-                            {JOB_TYPES.map(t => <option key={t} value={t === 'Others' ? 'OTHERS' : t}>{t}</option>)}
+                            {jobTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
                         </select>
-                        {form.job_type === 'OTHERS' && (
-                            <input type="text" value={form.job_type_other} onChange={e => set('job_type_other', e.target.value)} onFocus={focus} onBlur={blur} placeholder="Please specify…" style={{ ...inputStyle, marginTop: '8px', borderColor: '#2563eb' }} />
-                        )}
                     </div>
                     <div>
                         <FormLabel required>Job Location</FormLabel>
-                        <input type="text" value={form.job_location} onChange={e => set('job_location', e.target.value)} onFocus={focus} onBlur={blur} placeholder="Enter specific location/site area" required style={inputStyle} />
+                        <select value={form.job_location} onChange={e => set('job_location', e.target.value)} onFocus={focus} onBlur={blur} required style={{ ...inputStyle, cursor: 'pointer' }}>
+                            <option value="" disabled>Select Job Location…</option>
+                            {jobLocations.map(location => <option key={location.id} value={location.name}>{location.name}</option>)}
+                        </select>
                     </div>
                 </div>
 
@@ -218,7 +225,10 @@ export default function Create() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
                         <FormLabel>Cost Code</FormLabel>
-                        <input type="text" value={form.costcode} onChange={e => set('costcode', e.target.value)} onFocus={focus} onBlur={blur} placeholder="Enter assigned cost code" style={inputStyle} />
+                        <select value={form.costcode} onChange={e => set('costcode', e.target.value)} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer' }}>
+                            <option value="">Select Cost Code…</option>
+                            {costCodes.map(code => <option key={code.id} value={code.name}>{code.name}</option>)}
+                        </select>
                     </div>
                     <div>
                         <FormLabel>Funding Classification</FormLabel>
