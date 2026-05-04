@@ -34,8 +34,8 @@ const navItems: NavItem[] = [
         ),
         children: [
             { label: 'Requests', href: route('requests.index') },
-            { label: 'View All', href: '#' },
-            { label: 'Add New', href: '#' },
+            { label: 'View All', href: route('projects.index') },
+            { label: 'Add New', href: route('projects.create') },
         ],
     },
     {

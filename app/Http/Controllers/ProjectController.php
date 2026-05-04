@@ -1,0 +1,446 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Category;
+use App\Models\CostCode;
+use App\Models\Department;
+use App\Models\MasterClass;
+use App\Models\MasterStatus;
+use App\Models\Priority;
+use App\Models\Project;
+use App\Models\ServiceType;
+use App\Models\Site;
+use App\Models\Structure;
+use App\Models\User;
+use App\Models\WorkForce;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Inertia\Inertia;
+use Inertia\Response;
+
+class ProjectController extends Controller
+{
+    private const STATUS_LABELS = [
+        'PLANNING' => 'For Planning',
+        'RFQ_SUBMITTED' => 'RFQ/RFP Submitted',
+        'PROPOSAL_REVIEW' => 'Proposal Under Review',
+        'DESIGN_REVIEW' => 'Detailed Design Under Review',
+        'EXEC_ENDORSED' => 'Endorsed for Executive Approval',
+        'NTP_PROCESSING' => 'NTP & Contract Processing',
+        'SCHEDULING' => 'For Scheduling',
+        'ONGOING' => 'Ongoing',
+        'ON_HOLD' => 'On Hold',
+        'COMPLETED' => 'Completed',
+        'CLOSED' => 'Closed',
+        'CANCELED' => 'Canceled',
+    ];
+
+    public function index(Request $request): Response
+    {
+        $query = Project::with('manager')->latest();
+
+        if ($request->filled('search')) {
+            $search = $request->string('search')->toString();
+            $query->where(function ($q) use ($search) {
+                $q->where('project_no', 'like', "%{$search}%")
+                    ->orWhere('title', 'like', "%{$search}%")
+                    ->orWhere('project_manager_name', 'like', "%{$search}%")
+                    ->orWhere('dept_owner', 'like', "%{$search}%");
+            });
+        }
+
+        foreach ($this->filterableFields() as $field => $column) {
+            if ($request->filled($field)) {
+                $query->where($column, 'like', '%' . $request->input($field) . '%');
+            }
+        }
+
+        foreach (['jip', 'need_civil', 'need_electrical', 'need_mechanical'] as $field) {
+            if ($request->boolean($field)) {
+                $query->where($field, true);
+            }
+        }
+
+        $projects = $query->paginate(15)->withQueryString()
+            ->through(fn (Project $project) => $this->projectListData($project));
+
+        return Inertia::render('project-management/index', [
+            'projects' => $projects,
+            'filters' => $request->only([
+                'search',
+                ...array_keys($this->filterableFields()),
+                'jip',
+                'need_civil',
+                'need_electrical',
+                'need_mechanical',
+            ]),
+        ]);
+    }
+
+    public function create(): Response
+    {
+        return Inertia::render('project-management/create', [
+            'next_project_no' => $this->nextProjectNo(),
+            ...$this->masterDataOptions(),
+        ]);
+    }
+
+    public function store(Request $request): RedirectResponse
+    {
+        $data = $this->validatedProjectData($request);
+        $manager = User::find($data['project_manager']);
+
+        $project = Project::create([
+            'project_no' => $this->nextProjectNo(),
+            'title' => $data['title'],
+            'project_manager_id' => $manager?->id,
+            'project_manager_name' => $manager?->name,
+            'site' => $data['site'],
+            'asset_id' => $data['asset_id'],
+            'class_name' => $data['cls'],
+            'priority' => $data['priority'],
+            'status_key' => $data['status'],
+            'work_force' => $data['work_force'],
+            'wr_no' => $data['wr_no'],
+            'wr_date' => $data['wr_date'],
+            'dept_owner' => $data['dept_owner'],
+            'cost_code' => $data['cost_code'],
+            'category' => $data['category'],
+            'service_type' => $data['service_type'],
+            'deadline' => $data['deadline'],
+            'owner_email' => $data['owner_email'] ?? null,
+            'structure_type' => $data['structure_type'] ?? null,
+            'jip' => $request->boolean('jip'),
+            'need_civil' => $request->boolean('need_civil'),
+            'need_electrical' => $request->boolean('need_electrical'),
+            'need_mechanical' => $request->boolean('need_mechanical'),
+            'notes' => $data['notes'] ?? null,
+            'created_by' => auth()->id(),
+        ]);
+
+        $project->statusLogs()->create([
+            'user_id' => auth()->id(),
+            'status_key' => $project->status_key,
+            'status_label' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
+            'remarks' => 'Project registered.',
+        ]);
+
+        return redirect()->route('projects.show', $project)
+            ->with('success', 'Project registered successfully.');
+    }
+
+    public function show(Project $project): Response
+    {
+        return Inertia::render('project-management/show', [
+            'project' => $this->projectDetailData($project->load(['manager', 'statusLogs.user'])),
+        ]);
+    }
+
+    public function edit(Project $project): Response
+    {
+        return Inertia::render('project-management/edit', [
+            'next_project_no' => $project->project_no,
+            'project' => $this->projectFormData($project),
+            ...$this->masterDataOptions(),
+        ]);
+    }
+
+    public function update(Request $request, Project $project): RedirectResponse
+    {
+        $data = $this->validatedProjectData($request);
+        $manager = User::find($data['project_manager']);
+
+        $project->update([
+            'title' => $data['title'],
+            'project_manager_id' => $manager?->id,
+            'project_manager_name' => $manager?->name,
+            'site' => $data['site'],
+            'asset_id' => $data['asset_id'],
+            'class_name' => $data['cls'],
+            'priority' => $data['priority'],
+            'status_key' => $data['status'],
+            'work_force' => $data['work_force'],
+            'wr_no' => $data['wr_no'],
+            'wr_date' => $data['wr_date'],
+            'dept_owner' => $data['dept_owner'],
+            'cost_code' => $data['cost_code'],
+            'category' => $data['category'],
+            'service_type' => $data['service_type'],
+            'deadline' => $data['deadline'],
+            'owner_email' => $data['owner_email'] ?? null,
+            'structure_type' => $data['structure_type'] ?? null,
+            'jip' => $request->boolean('jip'),
+            'need_civil' => $request->boolean('need_civil'),
+            'need_electrical' => $request->boolean('need_electrical'),
+            'need_mechanical' => $request->boolean('need_mechanical'),
+            'notes' => $data['notes'] ?? null,
+        ]);
+
+        return redirect()->route('projects.show', $project)
+            ->with('success', 'Project updated successfully.');
+    }
+
+    public function destroy(Project $project): RedirectResponse
+    {
+        $project->delete();
+
+        return redirect()->route('projects.index')->with('success', 'Project deleted.');
+    }
+
+    public function status(Project $project): RedirectResponse
+    {
+        return redirect()->route('projects.show', $project);
+    }
+
+    public function updateStatus(Request $request, Project $project): RedirectResponse
+    {
+        $data = $request->validate([
+            'status_key' => ['required', 'string', 'max:80'],
+            'remarks' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $label = self::STATUS_LABELS[$data['status_key']] ?? $data['status_key'];
+
+        $project->update(['status_key' => $data['status_key']]);
+        $project->statusLogs()->create([
+            'user_id' => auth()->id(),
+            'status_key' => $data['status_key'],
+            'status_label' => $label,
+            'remarks' => $data['remarks'] ?? 'No remarks.',
+        ]);
+
+        return back()->with('success', 'Project status updated.');
+    }
+
+    public function hub(Project $project, string $section)
+    {
+        $labels = [
+            'rfq' => 'Request for Quotations',
+            'ntp' => 'Notice to Proceed',
+            'permits' => 'Permits',
+            'vof' => 'Variation Order Form',
+            'qpp' => 'Quality Plan & Procedures',
+            'mtr' => 'Materials Test Reports',
+            'rfp' => 'Request for Payment',
+            'ioc' => 'Input Other Cost',
+            'acr' => 'Actual Cost Report',
+            'psr' => 'Project Status Report',
+            'at' => 'Project Audit Trail',
+        ];
+
+        abort_unless(isset($labels[$section]), 404);
+
+        return response()->view('project-hub-placeholder', [
+            'project' => $project,
+            'title' => $labels[$section],
+        ]);
+    }
+
+    private function validatedProjectData(Request $request): array
+    {
+        return $request->validate([
+            'title' => ['required', 'string', 'max:255'],
+            'project_manager' => ['required', 'exists:users,id'],
+            'site' => ['required', 'string', 'max:255'],
+            'asset_id' => ['required', 'string', 'max:255'],
+            'cls' => ['required', 'string', 'max:255'],
+            'priority' => ['required', 'string', 'max:255'],
+            'status' => ['required', 'string', 'max:80'],
+            'work_force' => ['required', 'string', 'max:255'],
+            'wr_no' => ['required', 'string', 'max:255'],
+            'wr_date' => ['required', 'date'],
+            'dept_owner' => ['required', 'string', 'max:255'],
+            'cost_code' => ['required', 'string', 'max:255'],
+            'category' => ['required', 'string', 'max:255'],
+            'service_type' => ['required', 'string', 'max:255'],
+            'deadline' => ['required', 'date'],
+            'owner_email' => ['nullable', 'email', 'max:255'],
+            'structure_type' => ['nullable', 'string', 'max:255'],
+            'jip' => ['boolean'],
+            'need_civil' => ['boolean'],
+            'need_electrical' => ['boolean'],
+            'need_mechanical' => ['boolean'],
+            'notes' => ['nullable', 'string'],
+        ]);
+    }
+
+    private function masterDataOptions(): array
+    {
+        $option = fn ($row) => ['value' => (string) $row->name, 'label' => (string) $row->name];
+
+        return [
+            'managers' => User::orderBy('name')->get(['id', 'name'])
+                ->map(fn (User $user) => ['value' => (string) $user->id, 'label' => $user->name]),
+            'sites' => Site::orderBy('name')->get(['name'])->map($option),
+            'assets' => Structure::orderBy('name')->get(['name'])->map($option),
+            'departments' => Department::orderBy('name')->get(['name'])->map($option),
+            'classes' => MasterClass::orderBy('name')->get(['name'])->map($option),
+            'priorities' => Priority::orderBy('name')->get(['name'])->map($option),
+            'statuses' => MasterStatus::orderBy('name')->get(['name'])->map(fn ($row) => [
+                'value' => $this->statusKeyFromName($row->name),
+                'label' => $row->name,
+            ])->values(),
+            'workForces' => WorkForce::orderBy('name')->get(['name'])->map($option),
+            'costCodes' => CostCode::orderBy('name')->get(['name'])->map($option),
+            'categories' => Category::orderBy('name')->get(['name'])->map($option),
+            'serviceTypes' => ServiceType::orderBy('name')->get(['name'])->map($option),
+            'structures' => Structure::orderBy('name')->get(['name'])->map($option),
+        ];
+    }
+
+    private function filterableFields(): array
+    {
+        return [
+            'project_no' => 'project_no',
+            'project_manager' => 'project_manager_name',
+            'title' => 'title',
+            'project_type' => 'class_name',
+            'site' => 'site',
+            'asset_id' => 'asset_id',
+            'cls' => 'class_name',
+            'priority_no' => 'priority',
+            'status' => 'status_key',
+            'wr_no' => 'wr_no',
+            'wr_date_received' => 'wr_date',
+            'dept_owner' => 'dept_owner',
+            'cost_code' => 'cost_code',
+            'category' => 'category',
+            'service_type' => 'service_type',
+            'work_force' => 'work_force',
+            'structure_type' => 'structure_type',
+        ];
+    }
+
+    private function nextProjectNo(): string
+    {
+        $year = now()->format('Y');
+        $latest = Project::withTrashed()
+            ->where('project_no', 'like', "PRJ-{$year}-%")
+            ->orderByDesc('project_no')
+            ->value('project_no');
+
+        $next = $latest ? ((int) substr($latest, -4)) + 1 : 1;
+
+        return 'PRJ-' . $year . '-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function projectListData(Project $project): array
+    {
+        return [
+            'id' => $project->id,
+            'project_no' => $project->project_no,
+            'title' => $project->title,
+            'type' => $this->projectType($project->class_name),
+            'progress' => $project->completion_percent,
+            'project_manager' => $project->project_manager_name ?? $project->manager?->name ?? 'Unassigned',
+            'dept_owner' => $project->dept_owner,
+            'status' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
+        ];
+    }
+
+    private function projectDetailData(Project $project): array
+    {
+        $deadline = $project->deadline ? Carbon::parse($project->deadline) : now();
+        $daysElapsed = $project->created_at?->diffInDays(now()) ?? 0;
+        $daysRemaining = max(0, now()->startOfDay()->diffInDays($deadline->startOfDay(), false));
+
+        return [
+            'id' => $project->id,
+            'project_no' => $project->project_no,
+            'title' => $project->title,
+            'site' => $project->site,
+            'project_manager' => $project->project_manager_name ?? $project->manager?->name ?? 'Unassigned',
+            'status' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
+            'status_key' => $project->status_key,
+            'deadline' => optional($project->deadline)->format('M d, Y') ?? '-',
+            'days_elapsed' => $daysElapsed,
+            'days_remaining' => $daysRemaining,
+            'budget_total' => (float) $project->budget_total,
+            'budget_paid' => (float) $project->budget_paid,
+            'completion_percent' => $project->completion_percent,
+            'project_health' => $this->projectHealth($project, $daysRemaining),
+            'asset_id' => $project->asset_id,
+            'cost_code' => $project->cost_code,
+            'wr_no' => $project->wr_no,
+            'wr_date' => optional($project->wr_date)->format('M d, Y') ?? '-',
+            'priority' => $project->priority,
+            'dept_owner' => $project->dept_owner,
+            'owner_email' => $project->owner_email ?? '-',
+            'cls' => $project->class_name,
+            'category' => $project->category,
+            'service_type' => $project->service_type,
+            'work_force' => $project->work_force,
+            'jip' => $project->jip ? 'Yes' : 'No',
+            'structure_type' => $project->structure_type ?? '-',
+            'technical_plans' => [
+                'civil' => $project->need_civil,
+                'electrical' => $project->need_electrical,
+                'mechanical' => $project->need_mechanical,
+            ],
+            'admin_notes' => $project->notes ?? 'No notes recorded.',
+            'status_logs' => $project->statusLogs->map(fn ($log) => [
+                'id' => $log->id,
+                'date' => $log->created_at?->format('M d, Y') ?? '',
+                'time' => $log->created_at?->format('h:i A') ?? '',
+                'user' => $log->user?->name ?? 'System',
+                'status' => $log->status_label,
+                'status_key' => $log->status_key,
+                'remarks' => $log->remarks ?? '',
+            ]),
+        ];
+    }
+
+    private function projectFormData(Project $project): array
+    {
+        return [
+            'id' => $project->id,
+            'title' => $project->title,
+            'project_manager' => (string) $project->project_manager_id,
+            'site' => $project->site,
+            'asset_id' => $project->asset_id,
+            'cls' => $project->class_name,
+            'priority' => $project->priority,
+            'status' => $project->status_key,
+            'work_force' => $project->work_force,
+            'wr_no' => $project->wr_no,
+            'wr_date' => optional($project->wr_date)->format('Y-m-d'),
+            'dept_owner' => $project->dept_owner,
+            'cost_code' => $project->cost_code,
+            'category' => $project->category,
+            'service_type' => $project->service_type,
+            'deadline' => optional($project->deadline)->format('Y-m-d'),
+            'owner_email' => $project->owner_email ?? '',
+            'structure_type' => $project->structure_type ?? '',
+            'jip' => $project->jip,
+            'need_civil' => $project->need_civil,
+            'need_electrical' => $project->need_electrical,
+            'need_mechanical' => $project->need_mechanical,
+            'notes' => $project->notes ?? '',
+        ];
+    }
+
+    private function statusKeyFromName(string $name): string
+    {
+        $existing = array_search($name, self::STATUS_LABELS, true);
+
+        return $existing ?: strtoupper(str_replace([' ', '-', '/', '&'], ['_', '_', '_', 'AND'], $name));
+    }
+
+    private function projectType(string $className): string
+    {
+        return str_contains(strtolower($className), 'major') || str_contains(strtolower($className), 'tier 1')
+            ? 'Major'
+            : 'Minor';
+    }
+
+    private function projectHealth(Project $project, int $daysRemaining): string
+    {
+        if ($project->completion_percent >= 100) {
+            return 'Advanced';
+        }
+
+        return $daysRemaining === 0 ? 'Delayed' : 'On-Time';
+    }
+}

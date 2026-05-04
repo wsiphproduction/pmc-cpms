@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\MasterDataController;
+use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectRequestController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -27,6 +28,18 @@ Route::middleware(['auth'])->group(function () {
     Route::get('requests/{projectRequest}/comments',  [CommentController::class, 'index'])->name('comments.index');
     Route::post('requests/{projectRequest}/comments', [CommentController::class, 'store'])->name('comments.store');
     Route::delete('comments/{comment}',               [CommentController::class, 'destroy'])->name('comments.destroy');
+
+    // Project Management
+    Route::get('projects/{project}/status', [ProjectController::class, 'status'])->name('projects.status');
+    Route::patch('projects/{project}/status', [ProjectController::class, 'updateStatus'])->name('projects.update-status');
+
+    foreach (['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at'] as $section) {
+        Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])
+            ->defaults('section', $section)
+            ->name("projects.hub.{$section}");
+    }
+
+    Route::resource('projects', ProjectController::class);
 
     // ── Master Data ───────────────────────────────────────────────────────
     Route::get('master-data', [MasterDataController::class, 'index'])->name('master.index');
