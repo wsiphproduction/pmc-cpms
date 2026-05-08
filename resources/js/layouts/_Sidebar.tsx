@@ -13,6 +13,13 @@ interface NavItem {
     children?: NavChild[];
 }
 
+interface SidebarProps {
+    collapsed?: boolean;
+    mobileOpen?: boolean;
+    isMobile?: boolean;
+    onNavigate?: () => void;
+}
+
 const navItems: NavItem[] = [
     {
         label: 'Dashboard',
@@ -93,8 +100,15 @@ const navItems: NavItem[] = [
     },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({
+    collapsed = false,
+    mobileOpen = false,
+    isMobile = false,
+    onNavigate,
+}: SidebarProps) {
     const { url } = usePage();
+    const isCompact = collapsed && !isMobile;
+    const sidebarWidth = isMobile ? 250 : isCompact ? 72 : 205;
 
     const defaultOpen = navItems
         .filter(item => item.children && item.children.some(c => {
@@ -126,24 +140,28 @@ export default function Sidebar() {
     };
 
     const navLinkStyle = (active: boolean): React.CSSProperties => ({
-        display: 'flex', alignItems: 'center', gap: '9px',
-        padding: '8px 12px', borderRadius: '7px', marginBottom: '1px',
+        display: 'flex', alignItems: 'center', justifyContent: isCompact ? 'center' : 'flex-start', gap: '9px',
+        padding: isCompact ? '10px 0' : '8px 12px', borderRadius: '7px', marginBottom: '1px',
         fontSize: '13px', fontWeight: active ? 600 : 500, textDecoration: 'none',
         color: active ? '#2563eb' : '#374151',
         background: active ? '#eff6ff' : 'transparent',
         transition: 'all 0.12s',
+        minHeight: '34px',
     });
 
     return (
         <aside style={{
-            width: '205px', height: '100vh', position: 'fixed', top: 0, left: 0,
+            width: `${sidebarWidth}px`, height: '100vh', position: 'fixed', top: 0, left: 0,
             background: '#fff', borderRight: '1px solid #e5e7eb',
             display: 'flex', flexDirection: 'column', zIndex: 100,
             fontFamily: "'Inter', sans-serif",
+            transform: isMobile && !mobileOpen ? 'translateX(-100%)' : 'translateX(0)',
+            transition: 'width 0.18s ease, transform 0.18s ease',
+            boxShadow: isMobile && mobileOpen ? '0 20px 60px rgba(15,23,42,0.25)' : 'none',
         }}>
             {/* Logo */}
-            <div style={{ padding: '16px 14px 14px', borderBottom: '1px solid #f3f4f6' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ padding: isCompact ? '14px 12px' : '16px 14px 14px', borderBottom: '1px solid #f3f4f6' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCompact ? 'center' : 'flex-start', gap: '10px' }}>
                     <div style={{
                         width: '32px', height: '32px', borderRadius: '8px',
                         background: '#2563eb', display: 'flex', alignItems: 'center',
@@ -154,9 +172,11 @@ export default function Sidebar() {
                             <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
                         </svg>
                     </div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#111827', letterSpacing: '-0.2px' }}>
-                        CPMS - PMD
-                    </div>
+                    {!isCompact && (
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#111827', letterSpacing: '-0.2px' }}>
+                            CPMS - PMD
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -168,6 +188,7 @@ export default function Sidebar() {
                             <>
                                 <button
                                     onClick={() => toggle(item.label)}
+                                    title={isCompact ? item.label : undefined}
                                     style={{
                                         ...navLinkStyle(isActive(item.href)) as React.CSSProperties,
                                         border: 'none', width: '100%', textAlign: 'left',
@@ -177,25 +198,30 @@ export default function Sidebar() {
                                     <span style={{ color: isActive(item.href) ? '#2563eb' : '#9ca3af', flexShrink: 0 }}>
                                         {item.icon}
                                     </span>
-                                    <span style={{ flex: 1 }}>{item.label}</span>
-                                    <svg
-                                        width="12" height="12" viewBox="0 0 24 24" fill="none"
-                                        stroke="#9ca3af" strokeWidth="2"
-                                        style={{
-                                            transform: openMenus.includes(item.label) ? 'rotate(180deg)' : 'none',
-                                            transition: 'transform 0.2s',
-                                        }}
-                                    >
-                                        <polyline points="6 9 12 15 18 9"/>
-                                    </svg>
+                                    {!isCompact && (
+                                        <>
+                                            <span style={{ flex: 1 }}>{item.label}</span>
+                                            <svg
+                                                width="12" height="12" viewBox="0 0 24 24" fill="none"
+                                                stroke="#9ca3af" strokeWidth="2"
+                                                style={{
+                                                    transform: openMenus.includes(item.label) ? 'rotate(180deg)' : 'none',
+                                                    transition: 'transform 0.2s',
+                                                }}
+                                            >
+                                                <polyline points="6 9 12 15 18 9"/>
+                                            </svg>
+                                        </>
+                                    )}
                                 </button>
 
-                                {openMenus.includes(item.label) && (
+                                {!isCompact && openMenus.includes(item.label) && (
                                     <div style={{ paddingBottom: '4px' }}>
                                         {item.children.map(child => (
                                             <Link
                                                 key={child.href}
                                                 href={child.href}
+                                                onClick={onNavigate}
                                                 style={{
                                                     display: 'block',
                                                     padding: '7px 12px 7px 37px',
@@ -214,11 +240,11 @@ export default function Sidebar() {
                                 )}
                             </>
                         ) : (
-                            <Link href={item.href} style={navLinkStyle(isActive(item.href))}>
+                            <Link href={item.href} onClick={onNavigate} title={isCompact ? item.label : undefined} style={navLinkStyle(isActive(item.href))}>
                                 <span style={{ color: isActive(item.href) ? '#2563eb' : '#9ca3af', flexShrink: 0 }}>
                                     {item.icon}
                                 </span>
-                                {item.label}
+                                {!isCompact && item.label}
                             </Link>
                         )}
                     </div>
@@ -230,9 +256,10 @@ export default function Sidebar() {
                 href={route('logout')}
                 method="post"
                 as="button"
+                title={isCompact ? 'Logout' : undefined}
                 style={{
-                    display: 'flex', alignItems: 'center', gap: '9px',
-                    padding: '8px 12px', borderRadius: '7px', width: '100%',
+                    display: 'flex', alignItems: 'center', justifyContent: isCompact ? 'center' : 'flex-start', gap: '9px',
+                    padding: isCompact ? '10px 0' : '8px 12px', borderRadius: '7px', width: '100%',
                     fontSize: '13px', fontWeight: 500, color: '#dc2626',
                     background: 'none', border: 'none', cursor: 'pointer',
                     textAlign: 'left', fontFamily: 'inherit',
@@ -243,7 +270,7 @@ export default function Sidebar() {
                     <polyline points="16 17 21 12 16 7"/>
                     <line x1="21" y1="12" x2="9" y2="12"/>
                 </svg>
-                Logout
+                {!isCompact && 'Logout'}
             </Link>
         </aside>
     );

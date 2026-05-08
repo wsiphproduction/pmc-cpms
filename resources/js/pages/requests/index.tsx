@@ -52,6 +52,8 @@ interface Props {
     filters: Filters;
 }
 
+type RequestDecision = 'approved' | 'rejected';
+
 // ── Status Badge ───────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: ProjectRequest['status'] }) {
     const map: Record<ProjectRequest['status'], { bg: string; color: string }> = {
@@ -105,7 +107,7 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
             .then(data => setComments(data))
             .catch(console.error)
             .finally(() => setLoading(false));
-    }, [request?.id]);
+    }, [request]);
 
     // Scroll to bottom when comments load
     useEffect(() => {
@@ -315,6 +317,71 @@ function AdvancedSearchModal({ filters, onClose }: { filters: Filters; onClose: 
 }
 
 // ── Pagination ─────────────────────────────────────────────────────────────
+function DecisionModal({
+    request,
+    decision,
+    processing,
+    onClose,
+    onConfirm,
+}: {
+    request: ProjectRequest;
+    decision: RequestDecision;
+    processing: boolean;
+    onClose: () => void;
+    onConfirm: () => void;
+}) {
+    const isApprove = decision === 'approved';
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '18px' }}>
+            <div onClick={processing ? undefined : onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.42)' }} />
+            <div style={{ position: 'relative', width: '100%', maxWidth: '420px', background: '#fff', borderRadius: '12px', boxShadow: '0 24px 70px rgba(15,23,42,0.25)', overflow: 'hidden', zIndex: 221 }}>
+                <div style={{ padding: '18px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                        <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a' }}>
+                            {isApprove ? 'Approve Request' : 'Reject Request'}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                            #{request.id} · {request.title}
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        disabled={processing}
+                        style={{ width: '30px', height: '30px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.6 : 1 }}
+                    >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div style={{ padding: '20px' }}>
+                    <p style={{ margin: '0 0 16px', fontSize: '13px', lineHeight: 1.6, color: '#475569' }}>
+                        Are you sure you want to {isApprove ? 'approve' : 'reject'} this project request?
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={processing}
+                            style={{ padding: '8px 16px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', color: '#374151', fontSize: '12.5px', fontWeight: 600, cursor: processing ? 'not-allowed' : 'pointer' }}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={onConfirm}
+                            disabled={processing}
+                            style={{ padding: '8px 16px', borderRadius: '7px', border: 'none', background: isApprove ? '#16a34a' : '#dc2626', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: processing ? 'not-allowed' : 'pointer', opacity: processing ? 0.75 : 1 }}
+                        >
+                            {processing ? 'Saving...' : isApprove ? 'Approve' : 'Reject'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function Pagination({ data }: { data: Paginated<unknown> }) {
     if (data.last_page <= 1) return null;
     return (
@@ -344,10 +411,26 @@ export default function RequestsIndex({ requests, filters }: Props) {
     const [search,        setSearch]        = useState(filters.search ?? '');
     const [commentTarget, setCommentTarget] = useState<ProjectRequest | null>(null);
     const [showAdvSearch, setShowAdvSearch] = useState(false);
+    const [decisionTarget, setDecisionTarget] = useState<{ request: ProjectRequest; decision: RequestDecision } | null>(null);
+    const [decisionProcessing, setDecisionProcessing] = useState(false);
 
     const doSearch    = () => router.get(route('requests.index'), { search }, { preserveState: true });
     const clearFilters = () => router.get(route('requests.index'));
     const hasFilters  = Object.values(filters).some(v => v && (Array.isArray(v) ? v.length : true));
+    const confirmDecision = () => {
+        if (!decisionTarget) return;
+
+        setDecisionProcessing(true);
+        router.patch(
+            route('requests.update', decisionTarget.request.id),
+            { status: decisionTarget.decision },
+            {
+                preserveScroll: true,
+                onSuccess: () => setDecisionTarget(null),
+                onFinish: () => setDecisionProcessing(false),
+            },
+        );
+    };
 
     return (
         <AuthenticatedLayout>
@@ -357,6 +440,15 @@ export default function RequestsIndex({ requests, filters }: Props) {
 
             {commentTarget && <CommentModal request={commentTarget} onClose={() => setCommentTarget(null)} />}
             {showAdvSearch && <AdvancedSearchModal filters={filters} onClose={() => setShowAdvSearch(false)} />}
+            {decisionTarget && (
+                <DecisionModal
+                    request={decisionTarget.request}
+                    decision={decisionTarget.decision}
+                    processing={decisionProcessing}
+                    onClose={() => !decisionProcessing && setDecisionTarget(null)}
+                    onConfirm={confirmDecision}
+                />
+            )}
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.3px' }}>
@@ -450,10 +542,10 @@ export default function RequestsIndex({ requests, filters }: Props) {
 
                                             {req.status === 'pending' && (
                                                 <>
-                                                    <IconBtn title="Approve" color="#16a34a" onClick={() => router.patch(route('requests.update', req.id), { status: 'approved' })}>
+                                                    <IconBtn title="Approve" color="#16a34a" onClick={() => setDecisionTarget({ request: req, decision: 'approved' })}>
                                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                                                     </IconBtn>
-                                                    <IconBtn title="Reject" color="#dc2626" onClick={() => router.patch(route('requests.update', req.id), { status: 'rejected' })}>
+                                                    <IconBtn title="Reject" color="#dc2626" onClick={() => setDecisionTarget({ request: req, decision: 'rejected' })}>
                                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                                                     </IconBtn>
                                                 </>

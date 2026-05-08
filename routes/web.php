@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CommentController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectRequestController;
@@ -17,9 +18,7 @@ Route::get('/about', function () {
 
 Route::middleware(['auth'])->group(function () {
 
-    Route::get('dashboard', function () {
-        return Inertia::render('dashboard');
-    })->name('dashboard');
+    Route::get('dashboard', DashboardController::class)->name('dashboard');
 
     // ── Project Requests ──────────────────────────────────────────────────
     Route::resource('requests', ProjectRequestController::class)
