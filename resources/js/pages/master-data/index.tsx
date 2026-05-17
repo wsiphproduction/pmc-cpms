@@ -6,6 +6,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 interface MasterItem {
     id: number;
     name: string;
+    sequence_no?: number | null;
     description?: string | null;
     created_at?: string;
 }
@@ -38,6 +39,21 @@ type TabKey =
     | 'service_types'
     | 'work_forces'
     | 'structures';
+
+const formatDateTime = (value?: string | null) => {
+    if (!value) return 'â€”';
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return date.toLocaleString('en-US', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
 
 const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode; addLabel: string }[] = [
     {
@@ -188,14 +204,20 @@ function RecordModal({
 }) {
     const isEdit = !!item;
     const [name,        setName]        = useState(item?.name ?? '');
+    const [sequenceNo,  setSequenceNo]  = useState(item?.sequence_no?.toString() ?? '');
     const [description, setDescription] = useState(item?.description ?? '');
     const [submitting,  setSubmitting]  = useState(false);
+    const isPriority = tab === 'priorities';
 
     const handleSubmit = () => {
         if (!name.trim()) return;
         setSubmitting(true);
         const base = ROUTE_MAP[tab];
-        const data = { name: name.trim(), description: description.trim() || null };
+        const data = {
+            name: name.trim(),
+            description: description.trim() || null,
+            ...(isPriority ? { sequence_no: sequenceNo.trim() ? Number(sequenceNo) : null } : {}),
+        };
 
         if (isEdit) {
             router.put(route(`${base}.update`, item!.id), data, {
@@ -248,6 +270,23 @@ function RecordModal({
                             onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
                         />
                     </div>
+                    {isPriority && (
+                        <div style={{ marginBottom: '14px' }}>
+                            <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                Sequence No.
+                            </label>
+                            <input
+                                type="number"
+                                min="1"
+                                value={sequenceNo}
+                                onChange={e => setSequenceNo(e.target.value)}
+                                placeholder="e.g. 1"
+                                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s', color: '#0f172a' }}
+                                onFocus={e => (e.target.style.borderColor = '#2563eb')}
+                                onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
+                            />
+                        </div>
+                    )}
                     <div>
                         <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
                             Description <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none' }}>(optional)</span>
@@ -349,6 +388,8 @@ function TabTable({
     onDelete: (item: MasterItem) => void;
 }) {
     const config = TAB_CONFIG.find(t => t.key === tab)!;
+    const isPriority = tab === 'priorities';
+    const headers = isPriority ? ['#', 'Sequence', 'Name / Label', 'Description', 'Created At', 'Actions'] : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
 
     return (
         <div>
@@ -373,8 +414,8 @@ function TabTable({
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                     <thead>
                         <tr style={{ background: '#f8fafc' }}>
-                            {['#', 'Name / Label', 'Description', 'Actions'].map((h, i) => (
-                                <th key={h} style={{ padding: '10px 20px', textAlign: i === 3 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>
+                            {headers.map((h, i) => (
+                                <th key={h} style={{ padding: '10px 20px', textAlign: i === headers.length - 1 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>
                                     {h}
                                 </th>
                             ))}
@@ -383,7 +424,7 @@ function TabTable({
                     <tbody>
                         {items.length === 0 ? (
                             <tr>
-                                <td colSpan={4} style={{ padding: '48px', textAlign: 'center' }}>
+                                <td colSpan={headers.length} style={{ padding: '48px', textAlign: 'center' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
                                         <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             {config.icon}
@@ -399,9 +440,17 @@ function TabTable({
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                             >
                                 <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{idx + 1}</td>
+                                {isPriority && (
+                                    <td style={{ padding: '12px 20px', color: '#334155', fontSize: '12px', fontWeight: 700, width: '90px' }}>
+                                        {item.sequence_no ?? <span style={{ color: '#e2e8f0' }}>-</span>}
+                                    </td>
+                                )}
                                 <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a' }}>{item.name}</td>
                                 <td style={{ padding: '12px 20px', color: '#94a3b8', fontSize: '12.5px' }}>
                                     {item.description ?? <span style={{ color: '#e2e8f0' }}>—</span>}
+                                </td>
+                                <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                    {formatDateTime(item.created_at)}
                                 </td>
                                 <td style={{ padding: '12px 20px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>

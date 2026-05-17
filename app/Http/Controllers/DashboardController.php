@@ -84,7 +84,7 @@ class DashboardController extends Controller
             ->get()
             ->map(fn (ProjectRequest $request) => [
                 'id' => $request->id,
-                'ref' => 'REQ-' . str_pad((string) $request->id, 4, '0', STR_PAD_LEFT),
+                'ref' => $request->request_no ?? 'REQ-' . str_pad((string) $request->id, 4, '0', STR_PAD_LEFT),
                 'title' => $request->title,
                 'requested_by' => $request->requester?->name ?? 'Unknown requester',
                 'date' => $request->created_at?->format('M d, Y') ?? '-',

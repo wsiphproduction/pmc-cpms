@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -13,6 +14,7 @@ class ProjectRequest extends Model
     use SoftDeletes, HasFactory;
 
     protected $fillable = [
+        'request_no',
         'title',
         'job_type',
         'description',
@@ -36,6 +38,11 @@ class ProjectRequest extends Model
     public function requester(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requester_id');
+    }
+
+    public function project(): HasOne
+    {
+        return $this->hasOne(Project::class);
     }
 
     public function attachments(): MorphMany

@@ -1,4 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
+import { useEffect, useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -21,7 +22,7 @@ interface Props {
     categories: SelectOption[];
     serviceTypes: SelectOption[];
     structures: SelectOption[];
-    project?: Partial<ProjectFormData> & { id: number };
+    project?: Partial<ProjectFormData> & { id?: number };
 }
 
 // ── Form Data ──────────────────────────────────────────────────────────────
@@ -48,6 +49,7 @@ interface ProjectFormData {
     need_electrical: boolean;
     need_mechanical: boolean;
     notes: string;
+    project_request_id: string;
     [key: string]: string | boolean;
 }
 
@@ -105,30 +107,68 @@ function InputField({
 }
 
 function SelectField({
-    value, onChange, options, placeholder, required, error,
+    value, onChange, options, placeholder, required, error, id,
 }: {
     value: string; onChange: (v: string) => void;
-    options: SelectOption[]; placeholder?: string; required?: boolean; error?: string;
+    options: SelectOption[]; placeholder?: string; required?: boolean; error?: string; id: string;
 }) {
+    const [open, setOpen] = useState(false);
+    const selectedOption = options.find(option => option.value === value);
+    const [inputValue, setInputValue] = useState(selectedOption?.label ?? value);
+
+    useEffect(() => {
+        const selected = options.find(option => option.value === value);
+        setInputValue(selected?.label ?? value);
+    }, [options, value]);
+
+    const filtered = useMemo(() => {
+        const needle = inputValue.trim().toLowerCase();
+        return needle
+            ? options.filter(option => option.label.toLowerCase().includes(needle) || option.value.toLowerCase().includes(needle)).slice(0, 8)
+            : options.slice(0, 8);
+    }, [inputValue, options]);
+
     return (
-        <div>
-            <select
-                value={value}
-                onChange={e => onChange(e.target.value)}
+        <div style={{ position: 'relative' }}>
+            <input
+                value={inputValue}
+                onChange={e => { setInputValue(e.target.value); onChange(e.target.value); setOpen(true); }}
                 required={required}
+                placeholder={placeholder}
+                role="combobox"
+                aria-expanded={open}
+                aria-controls={id}
+                autoComplete="off"
                 style={{
                     width: '100%', padding: '9px 13px', borderRadius: '8px', fontSize: '13.5px',
                     border: `1px solid ${error ? '#fca5a5' : '#e2e8f0'}`,
-                    background: '#fff', color: value ? '#1e293b' : '#9ca3af',
+                    background: '#fff', color: inputValue ? '#1e293b' : '#9ca3af',
                     outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
-                    transition: 'border-color 0.15s', cursor: 'pointer',
+                    transition: 'border-color 0.15s', cursor: 'text', paddingRight: '34px',
                 }}
-                onFocus={e => { e.target.style.borderColor = '#2563eb'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; }}
-                onBlur={e => { e.target.style.borderColor = error ? '#fca5a5' : '#e2e8f0'; e.target.style.boxShadow = 'none'; }}
-            >
-                {placeholder && <option value="" disabled>{placeholder}</option>}
-                {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
+                onFocus={e => { e.target.style.borderColor = '#2563eb'; e.target.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; setOpen(true); }}
+                onBlur={e => { e.target.style.borderColor = error ? '#fca5a5' : '#e2e8f0'; e.target.style.boxShadow = 'none'; window.setTimeout(() => setOpen(false), 120); }}
+            />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: 'absolute', right: '11px', top: '18px', pointerEvents: 'none' }}>
+                <polyline points="6 9 12 15 18 9" />
+            </svg>
+            {open && (
+                <div id={id} role="listbox" style={{ position: 'absolute', top: 'calc(100% + 5px)', left: 0, right: 0, zIndex: 60, background: '#fff', border: '1px solid #dbe3ef', borderRadius: '8px', boxShadow: '0 14px 32px rgba(15,23,42,0.14)', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
+                    {filtered.length ? filtered.map(option => (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => { onChange(option.value); setInputValue(option.label); setOpen(false); }}
+                            style={{ width: '100%', border: 'none', background: option.value === value ? '#eff6ff' : '#fff', padding: '9px 12px', textAlign: 'left', fontSize: '13px', color: '#334155', cursor: 'pointer' }}
+                        >
+                            {option.label}
+                        </button>
+                    )) : (
+                        <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No results found</div>
+                    )}
+                </div>
+            )}
             {error && <div style={{ fontSize: '11.5px', color: '#ef4444', marginTop: '4px' }}>{error}</div>}
         </div>
     );
@@ -184,8 +224,9 @@ export default function ProjectCreate({
     structures,
     project,
 }: Props) {
-    const isEditing = !!project;
+    const isEditing = Boolean(project?.id);
     const { data, setData, post, put, processing, errors } = useForm<ProjectFormData>({
+        project_request_id: project?.project_request_id ?? '',
         title:           project?.title ?? '',
         project_manager: project?.project_manager ?? '',
         site:            project?.site ?? '',
@@ -215,7 +256,7 @@ export default function ProjectCreate({
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (isEditing) {
-            put(route('projects.update', project!.id));
+            put(route('projects.update', project!.id!));
             return;
         }
 
@@ -267,6 +308,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Project Manager</FormLabel>
                             <SelectField
+                                id="project-manager-options"
                                 value={data.project_manager}
                                 onChange={set('project_manager')}
                                 options={managers}
@@ -278,6 +320,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Site</FormLabel>
                             <SelectField
+                                id="site-options"
                                 value={data.site}
                                 onChange={set('site')}
                                 options={sites}
@@ -289,6 +332,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Asset ID</FormLabel>
                             <SelectField
+                                id="asset-options"
                                 value={data.asset_id}
                                 onChange={set('asset_id')}
                                 options={assets}
@@ -305,6 +349,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Class</FormLabel>
                             <SelectField
+                                id="class-options"
                                 value={data.cls}
                                 onChange={set('cls')}
                                 options={classes}
@@ -316,6 +361,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Priority No.</FormLabel>
                             <SelectField
+                                id="priority-options"
                                 value={data.priority}
                                 onChange={set('priority')}
                                 options={priorities}
@@ -327,6 +373,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Project Status</FormLabel>
                             <SelectField
+                                id="status-options"
                                 value={data.status}
                                 onChange={set('status')}
                                 options={statuses}
@@ -338,6 +385,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Work Force</FormLabel>
                             <SelectField
+                                id="work-force-options"
                                 value={data.work_force}
                                 onChange={set('work_force')}
                                 options={workForces}
@@ -351,7 +399,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>WR No.</FormLabel>
                             <InputField
-                                type="number"
+                                type="text"
                                 value={data.wr_no}
                                 onChange={set('wr_no')}
                                 placeholder="0000"
@@ -372,6 +420,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Department Owner</FormLabel>
                             <SelectField
+                                id="department-options"
                                 value={data.dept_owner}
                                 onChange={set('dept_owner')}
                                 options={departments}
@@ -383,6 +432,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Cost Code</FormLabel>
                             <SelectField
+                                id="cost-code-options"
                                 value={data.cost_code}
                                 onChange={set('cost_code')}
                                 options={costCodes}
@@ -399,6 +449,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Category</FormLabel>
                             <SelectField
+                                id="category-options"
                                 value={data.category}
                                 onChange={set('category')}
                                 options={categories}
@@ -410,6 +461,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel required>Service Type</FormLabel>
                             <SelectField
+                                id="service-type-options"
                                 value={data.service_type}
                                 onChange={set('service_type')}
                                 options={serviceTypes}
@@ -443,6 +495,7 @@ export default function ProjectCreate({
                         <div>
                             <FormLabel>Structure Type</FormLabel>
                             <SelectField
+                                id="structure-options"
                                 value={data.structure_type}
                                 onChange={set('structure_type')}
                                 options={structures}

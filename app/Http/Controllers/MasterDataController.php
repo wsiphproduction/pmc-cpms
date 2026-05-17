@@ -23,18 +23,20 @@ class MasterDataController extends Controller
     public function index()
     {
         return Inertia::render('master-data/index', [
-            'jobTypes'     => JobType::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'jobLocations' => JobLocation::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'costCodes'    => CostCode::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'sites'        => Site::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'classes'      => MasterClass::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'priorities'   => Priority::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'statuses'     => MasterStatus::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'departments'  => Department::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'categories'   => Category::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'serviceTypes' => ServiceType::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'workForces'   => WorkForce::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
-            'structures'   => Structure::orderBy('name')->get(['id', 'name', 'description', 'created_at']),
+            'jobTypes'     => JobType::latest()->get(['id', 'name', 'description', 'created_at']),
+            'jobLocations' => JobLocation::latest()->get(['id', 'name', 'description', 'created_at']),
+            'costCodes'    => CostCode::latest()->get(['id', 'name', 'description', 'created_at']),
+            'sites'        => Site::latest()->get(['id', 'name', 'description', 'created_at']),
+            'classes'      => MasterClass::latest()->get(['id', 'name', 'description', 'created_at']),
+            'priorities'   => Priority::orderByRaw('sequence_no IS NULL, sequence_no ASC')
+                ->orderBy('name')
+                ->get(['id', 'name', 'sequence_no', 'description', 'created_at']),
+            'statuses'     => MasterStatus::latest()->get(['id', 'name', 'description', 'created_at']),
+            'departments'  => Department::latest()->get(['id', 'name', 'description', 'created_at']),
+            'categories'   => Category::latest()->get(['id', 'name', 'description', 'created_at']),
+            'serviceTypes' => ServiceType::latest()->get(['id', 'name', 'description', 'created_at']),
+            'workForces'   => WorkForce::latest()->get(['id', 'name', 'description', 'created_at']),
+            'structures'   => Structure::latest()->get(['id', 'name', 'description', 'created_at']),
         ]);
     }
 
@@ -189,7 +191,7 @@ class MasterDataController extends Controller
     // Priorities
     public function storePriority(Request $request)
     {
-        $data = $this->validateMasterData($request, 'priorities');
+        $data = $this->validatePriority($request);
 
         Priority::create($data);
 
@@ -198,7 +200,7 @@ class MasterDataController extends Controller
 
     public function updatePriority(Request $request, Priority $priority)
     {
-        $data = $this->validateMasterData($request, 'priorities', $priority->id);
+        $data = $this->validatePriority($request, $priority->id);
 
         $priority->update($data);
 
@@ -372,6 +374,15 @@ class MasterDataController extends Controller
     {
         return $request->validate([
             'name'        => 'required|string|max:255|unique:' . $table . ',name' . ($ignoreId ? ',' . $ignoreId : ''),
+            'description' => 'nullable|string|max:500',
+        ]);
+    }
+
+    private function validatePriority(Request $request, ?int $ignoreId = null): array
+    {
+        return $request->validate([
+            'name'        => 'required|string|max:255|unique:priorities,name' . ($ignoreId ? ',' . $ignoreId : ''),
+            'sequence_no' => 'nullable|integer|min:1|max:999999',
             'description' => 'nullable|string|max:500',
         ]);
     }

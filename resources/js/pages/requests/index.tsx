@@ -12,12 +12,15 @@ interface Comment {
 
 interface ProjectRequest {
     id: number;
+    request_no: string | null;
     title: string;
     job_type: string;
     job_location: string;
     status: 'approved' | 'pending' | 'ongoing' | 'rejected' | 'completed';
     costcode: string | null;
+    created_at: string | null;
     requester?: { name: string };
+    project?: { id: number; project_no: string } | null;
     unread_comments?: number;
     comments?: Comment[];
 }
@@ -342,7 +345,7 @@ function DecisionModal({
                             {isApprove ? 'Approve Request' : 'Reject Request'}
                         </div>
                         <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
-                            #{request.id} · {request.title}
+                            {request.request_no ?? `#${request.id}`} · {request.title}
                         </div>
                     </div>
                     <button
@@ -465,7 +468,7 @@ export default function RequestsIndex({ requests, filters }: Props) {
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '7px 12px', flex: '1', maxWidth: '320px' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Search title, job type, location…" style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '13px', color: '#374151', width: '100%', fontFamily: 'inherit' }} />
+                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Search request, project, title…" style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '13px', color: '#374151', width: '100%', fontFamily: 'inherit' }} />
                         {search && (
                             <button onClick={() => { setSearch(''); clearFilters(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', padding: 0 }}>
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -495,8 +498,8 @@ export default function RequestsIndex({ requests, filters }: Props) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['#', 'Title', 'Job Type', 'Location', 'Requester', 'Cost Code', 'Status', 'Actions'].map((h, i) => (
-                                    <th key={h} style={{ padding: '10px 16px', textAlign: i === 7 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                {['Request ID', 'Title', 'Job Type', 'Location', 'Requester', 'Cost Code', 'Created At', 'Status', 'Project No', 'Actions'].map((h, i) => (
+                                    <th key={h} style={{ padding: '10px 16px', textAlign: i === 9 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
                                         {h}
                                     </th>
                                 ))}
@@ -505,7 +508,7 @@ export default function RequestsIndex({ requests, filters }: Props) {
                         <tbody>
                             {requests.data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} style={{ padding: '48px', textAlign: 'center' }}>
+                                    <td colSpan={10} style={{ padding: '48px', textAlign: 'center' }}>
                                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 10px' }}>
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                                         </svg>
@@ -517,7 +520,7 @@ export default function RequestsIndex({ requests, filters }: Props) {
                                     onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    <td style={{ padding: '12px 16px', color: '#9ca3af', fontSize: '11.5px' }}>#{req.id}</td>
+                                    <td style={{ padding: '12px 16px', color: '#9ca3af', fontSize: '11.5px', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{req.request_no ?? `#${req.id}`}</td>
                                     <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0f172a', maxWidth: '220px' }}>{req.title}</td>
                                     <td style={{ padding: '12px 16px', color: '#6b7280' }}>{req.job_type}</td>
                                     <td style={{ padding: '12px 16px', color: '#6b7280', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.job_location}</td>
@@ -528,9 +531,21 @@ export default function RequestsIndex({ requests, filters }: Props) {
                                             : <span style={{ color: '#d1d5db', fontSize: '12px' }}>—</span>
                                         }
                                     </td>
+                                    <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{req.created_at ?? 'â€”'}</td>
                                     <td style={{ padding: '12px 16px' }}><StatusBadge status={req.status} /></td>
                                     <td style={{ padding: '12px 16px' }}>
+                                        {req.project?.project_no
+                                            ? <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#374151' }}>{req.project.project_no}</span>
+                                            : <span style={{ color: '#d1d5db', fontSize: '12px' }}>—</span>
+                                        }
+                                    </td>
+                                    <td style={{ padding: '12px 16px' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                            {req.status === 'approved' && !req.project && (
+                                                <IconBtn title="Create Project" color="#2563eb" onClick={() => router.visit(`${route('projects.create')}?request_id=${req.id}`)}>
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                </IconBtn>
+                                            )}
 
                                             <IconBtn title="View" onClick={() => router.visit(route('requests.show', req.id))}>
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>

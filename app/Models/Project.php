@@ -14,6 +14,7 @@ class Project extends Model
 
     protected $fillable = [
         'project_no',
+        'project_request_id',
         'title',
         'project_manager_id',
         'project_manager_name',
@@ -58,6 +59,11 @@ class Project extends Model
     public function manager(): BelongsTo
     {
         return $this->belongsTo(User::class, 'project_manager_id');
+    }
+
+    public function projectRequest(): BelongsTo
+    {
+        return $this->belongsTo(ProjectRequest::class);
     }
 
     public function creator(): BelongsTo

@@ -9,6 +9,7 @@ use App\Models\MasterClass;
 use App\Models\MasterStatus;
 use App\Models\Priority;
 use App\Models\Project;
+use App\Models\ProjectRequest;
 use App\Models\ServiceType;
 use App\Models\Site;
 use App\Models\Structure;
@@ -79,10 +80,17 @@ class ProjectController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
+        $projectRequest = $request->filled('request_id')
+            ? ProjectRequest::with(['project', 'requester'])->findOrFail($request->integer('request_id'))
+            : null;
+
+        abort_if($projectRequest?->project, 409, 'This project request already has a project.');
+
         return Inertia::render('project-management/create', [
             'next_project_no' => $this->nextProjectNo(),
+            'project' => $projectRequest ? $this->projectFormDataFromRequest($projectRequest) : null,
             ...$this->masterDataOptions(),
         ]);
     }
@@ -91,8 +99,15 @@ class ProjectController extends Controller
     {
         $data = $this->validatedProjectData($request);
         $manager = User::find($data['project_manager']);
+        $sourceRequest = !empty($data['project_request_id'])
+            ? ProjectRequest::with('project')->findOrFail($data['project_request_id'])
+            : null;
+
+        abort_if($sourceRequest && $sourceRequest->status !== 'approved', 422, 'Only approved requests can be converted to projects.');
+        abort_if($sourceRequest?->project, 409, 'This project request already has a project.');
 
         $project = Project::create([
+            'project_request_id' => $data['project_request_id'] ?? null,
             'project_no' => $this->nextProjectNo(),
             'title' => $data['title'],
             'project_manager_id' => $manager?->id,
@@ -263,6 +278,7 @@ class ProjectController extends Controller
             'need_electrical' => ['boolean'],
             'need_mechanical' => ['boolean'],
             'notes' => ['nullable', 'string'],
+            'project_request_id' => ['nullable', 'exists:project_requests,id', 'unique:projects,project_request_id'],
         ]);
     }
 
@@ -277,7 +293,10 @@ class ProjectController extends Controller
             'assets' => Structure::orderBy('name')->get(['name'])->map($option),
             'departments' => Department::orderBy('name')->get(['name'])->map($option),
             'classes' => MasterClass::orderBy('name')->get(['name'])->map($option),
-            'priorities' => Priority::orderBy('name')->get(['name'])->map($option),
+            'priorities' => Priority::orderByRaw('sequence_no IS NULL, sequence_no ASC')
+                ->orderBy('name')
+                ->get(['name'])
+                ->map($option),
             'statuses' => MasterStatus::orderBy('name')->get(['name'])->map(fn ($row) => [
                 'value' => $this->statusKeyFromName($row->name),
                 'label' => $row->name,
@@ -337,6 +356,7 @@ class ProjectController extends Controller
             'project_manager' => $project->project_manager_name ?? $project->manager?->name ?? 'Unassigned',
             'dept_owner' => $project->dept_owner,
             'status' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
+            'created_at' => $project->created_at?->format('M d, Y h:i A'),
         ];
     }
 
@@ -418,6 +438,35 @@ class ProjectController extends Controller
             'need_electrical' => $project->need_electrical,
             'need_mechanical' => $project->need_mechanical,
             'notes' => $project->notes ?? '',
+        ];
+    }
+
+    private function projectFormDataFromRequest(ProjectRequest $request): array
+    {
+        return [
+            'project_request_id' => (string) $request->id,
+            'title' => $request->title,
+            'project_manager' => '',
+            'site' => '',
+            'asset_id' => '',
+            'cls' => '',
+            'priority' => '',
+            'status' => '',
+            'work_force' => '',
+            'wr_no' => $request->request_no ?? '',
+            'wr_date' => now()->format('Y-m-d'),
+            'dept_owner' => '',
+            'cost_code' => '',
+            'category' => '',
+            'service_type' => '',
+            'deadline' => now()->addDays(30)->format('Y-m-d'),
+            'owner_email' => $request->requester?->email ?? '',
+            'structure_type' => '',
+            'jip' => false,
+            'need_civil' => false,
+            'need_electrical' => false,
+            'need_mechanical' => false,
+            'notes' => '',
         ];
     }
 

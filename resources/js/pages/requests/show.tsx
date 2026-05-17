@@ -18,6 +18,7 @@ interface User {
 
 interface ProjectRequestData {
     id: number;
+    request_no: string | null;
     title: string;
     job_type: string;
     description: string;
@@ -28,6 +29,7 @@ interface ProjectRequestData {
     for_budgeting: boolean;
     status: 'pending' | 'approved' | 'ongoing' | 'rejected' | 'completed';
     requester: User | null;
+    project: { id: number; project_no: string } | null;
     attachments: Attachment[];
     created_at: string | null;
 }
@@ -243,7 +245,7 @@ export default function Show({ projectRequest }: Props) {
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
                     <span style={{ color: '#374151', fontWeight: 600 }}>View</span>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-                    <span style={{ color: '#0f172a', fontWeight: 700 }}>#{projectRequest.id}</span>
+                    <span style={{ color: '#0f172a', fontWeight: 700 }}>{projectRequest.request_no ?? `#${projectRequest.id}`}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', fontWeight: 500, color: '#374151', cursor: 'pointer' }}>
@@ -254,6 +256,12 @@ export default function Show({ projectRequest }: Props) {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                         Add Feedback
                     </button>
+                    {projectRequest.status === 'approved' && !projectRequest.project && (
+                        <Link href={`${route('projects.create')}?request_id=${projectRequest.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#16a34a', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            Create Project
+                        </Link>
+                    )}
                     <Link href={route('requests.edit', projectRequest.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         Edit Request
@@ -300,6 +308,15 @@ export default function Show({ projectRequest }: Props) {
                                     {projectRequest.costcode
                                         ? <span style={{ fontFamily: 'monospace', fontSize: '13.5px' }}>{projectRequest.costcode}</span>
                                         : <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Not specified</span>
+                                    }
+                                </InfoValue>
+                            </div>
+                            <div>
+                                <InfoLabel>Project No</InfoLabel>
+                                <InfoValue>
+                                    {projectRequest.project?.project_no
+                                        ? <span style={{ fontFamily: 'monospace', fontSize: '13.5px' }}>{projectRequest.project.project_no}</span>
+                                        : <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Not created yet</span>
                                     }
                                 </InfoValue>
                             </div>

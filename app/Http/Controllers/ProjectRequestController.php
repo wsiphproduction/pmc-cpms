@@ -10,6 +10,7 @@ use App\Models\ProjectRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -17,15 +18,17 @@ class ProjectRequestController extends Controller
 {
     public function index(Request $request): Response
     {
-        $query = ProjectRequest::with(['requester'])->latest();
+        $query = ProjectRequest::with(['requester', 'project'])->latest();
 
         if ($request->filled('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('title', 'like', "%{$search}%")
+                $q->where('request_no', 'like', "%{$search}%")
+                  ->orWhere('title', 'like', "%{$search}%")
                   ->orWhere('job_type', 'like', "%{$search}%")
                   ->orWhere('job_location', 'like', "%{$search}%")
-                  ->orWhere('costcode', 'like', "%{$search}%");
+                  ->orWhere('costcode', 'like', "%{$search}%")
+                  ->orWhereHas('project', fn ($project) => $project->where('project_no', 'like', "%{$search}%"));
             });
         }
 
@@ -37,7 +40,8 @@ class ProjectRequestController extends Controller
         }
 
         return Inertia::render('requests/index', [
-            'requests' => $query->paginate(15)->withQueryString(),
+            'requests' => $query->paginate(15)->withQueryString()
+                ->through(fn (ProjectRequest $projectRequest) => $this->requestListData($projectRequest)),
             'filters'  => $request->only(['search', 'job_type', 'job_location', 'costcode', 'status']),
         ]);
     }
@@ -58,7 +62,7 @@ class ProjectRequestController extends Controller
             'job_type'        => ['required', 'string', 'max:255'],
             'description'     => ['required', 'string'],
             'job_location'    => ['required', 'string', 'max:255'],
-            'costcode'        => ['nullable', 'string', 'max:255'],
+            'costcode'        => [Rule::requiredIf(fn () => $request->boolean('opex') && $request->boolean('capex')), 'nullable', 'string', 'max:255'],
             'opex'            => ['boolean'],
             'capex'           => ['boolean'],
             'for_budgeting'   => ['boolean'],
@@ -70,6 +74,7 @@ class ProjectRequestController extends Controller
         ]);
 
         $projectRequest = ProjectRequest::create([
+            'request_no'    => $this->nextRequestNo(),
             'title'         => $request->title,
             'job_type'      => $request->job_type,
             'description'   => $request->description,
@@ -91,7 +96,7 @@ class ProjectRequestController extends Controller
     public function show(ProjectRequest $projectRequest): Response
     {
         return Inertia::render('requests/show', [
-            'projectRequest' => $projectRequest->load(['requester', 'attachments']),
+            'projectRequest' => $projectRequest->load(['requester', 'attachments', 'project']),
         ]);
     }
 
@@ -124,7 +129,7 @@ class ProjectRequestController extends Controller
             'job_type'        => ['required', 'string', 'max:255'],
             'description'     => ['required', 'string'],
             'job_location'    => ['required', 'string', 'max:255'],
-            'costcode'        => ['nullable', 'string', 'max:255'],
+            'costcode'        => [Rule::requiredIf(fn () => $request->boolean('opex') && $request->boolean('capex')), 'nullable', 'string', 'max:255'],
             'opex'            => ['boolean'],
             'capex'           => ['boolean'],
             'for_budgeting'   => ['boolean'],
@@ -204,4 +209,39 @@ class ProjectRequestController extends Controller
             ]);
         }
     }
+
+    private function requestListData(ProjectRequest $projectRequest): array
+    {
+        return [
+            'id' => $projectRequest->id,
+            'request_no' => $projectRequest->request_no,
+            'title' => $projectRequest->title,
+            'job_type' => $projectRequest->job_type,
+            'job_location' => $projectRequest->job_location,
+            'status' => $projectRequest->status,
+            'costcode' => $projectRequest->costcode,
+            'created_at' => $projectRequest->created_at?->format('M d, Y h:i A'),
+            'requester' => $projectRequest->requester ? [
+                'name' => $projectRequest->requester->name,
+            ] : null,
+            'project' => $projectRequest->project ? [
+                'id' => $projectRequest->project->id,
+                'project_no' => $projectRequest->project->project_no,
+            ] : null,
+        ];
+    }
+
+    private function nextRequestNo(): string
+    {
+        $year = now()->format('Y');
+        $latest = ProjectRequest::withTrashed()
+            ->where('request_no', 'like', "REQ-{$year}-%")
+            ->orderByDesc('request_no')
+            ->value('request_no');
+
+        $next = $latest ? ((int) substr($latest, -4)) + 1 : 1;
+
+        return 'REQ-' . $year . '-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
 }

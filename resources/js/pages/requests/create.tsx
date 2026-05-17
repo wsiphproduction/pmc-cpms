@@ -1,5 +1,5 @@
 import { Head } from '@inertiajs/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -58,6 +58,63 @@ const inputStyle: React.CSSProperties = {
 
 const focus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => (e.target.style.borderColor = '#2563eb');
 const blur  = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => (e.target.style.borderColor = '#e5e7eb');
+
+function SearchableSelect({
+    value, onChange, options, placeholder, required, listId,
+}: {
+    value: string;
+    onChange: (value: string) => void;
+    options: MasterOption[];
+    placeholder: string;
+    required?: boolean;
+    listId: string;
+}) {
+    const [open, setOpen] = useState(false);
+    const filtered = useMemo(() => {
+        const needle = value.trim().toLowerCase();
+        return needle
+            ? options.filter(option => option.name.toLowerCase().includes(needle)).slice(0, 8)
+            : options.slice(0, 8);
+    }, [options, value]);
+
+    return (
+        <div style={{ position: 'relative' }}>
+            <input
+                value={value}
+                onChange={e => { onChange(e.target.value); setOpen(true); }}
+                onFocus={e => { focus(e); setOpen(true); }}
+                onBlur={e => { blur(e); window.setTimeout(() => setOpen(false), 120); }}
+                required={required}
+                placeholder={placeholder}
+                role="combobox"
+                aria-expanded={open}
+                aria-controls={listId}
+                autoComplete="off"
+                style={{ ...inputStyle, paddingRight: '34px' }}
+            />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: 'absolute', right: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                <polyline points="6 9 12 15 18 9" />
+            </svg>
+            {open && (
+                <div id={listId} role="listbox" style={{ position: 'absolute', top: 'calc(100% + 5px)', left: 0, right: 0, zIndex: 50, background: '#fff', border: '1px solid #dbe3ef', borderRadius: '8px', boxShadow: '0 14px 32px rgba(15,23,42,0.14)', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
+                    {filtered.length ? filtered.map(option => (
+                        <button
+                            key={option.id}
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => { onChange(option.name); setOpen(false); }}
+                            style={{ width: '100%', border: 'none', background: option.name === value ? '#eff6ff' : '#fff', padding: '9px 12px', textAlign: 'left', fontSize: '13px', color: '#334155', cursor: 'pointer' }}
+                        >
+                            {option.name}
+                        </button>
+                    )) : (
+                        <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No results found</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 // ── Upload Section ─────────────────────────────────────────────────────────
 function UploadSection({ label, icon, accept, placeholder, rows, onAdd, onRemove, onFileChange, onDescChange }: {
@@ -134,6 +191,14 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
     const set = (field: keyof FormData, value: string | boolean) =>
         setForm(p => ({ ...p, [field]: value }));
 
+    const setFunding = (field: 'opex' | 'capex' | 'for_budgeting', value: boolean) =>
+        setForm(p => {
+            const next = { ...p, [field]: value };
+            return next.opex && next.capex ? next : { ...next, costcode: '' };
+        });
+
+    const requiresCostCode = form.opex && form.capex;
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setProcessing(true);
@@ -202,17 +267,11 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '18px' }}>
                     <div>
                         <FormLabel required>Job Type</FormLabel>
-                        <select value={form.job_type} onChange={e => set('job_type', e.target.value)} onFocus={focus} onBlur={blur} required style={{ ...inputStyle, cursor: 'pointer' }}>
-                            <option value="" disabled>Select Job Type…</option>
-                            {jobTypes.map(t => <option key={t.id} value={t.name}>{t.name}</option>)}
-                        </select>
+                        <SearchableSelect value={form.job_type} onChange={value => set('job_type', value)} options={jobTypes} placeholder="Type or select job type..." required listId="job-type-options" />
                     </div>
                     <div>
                         <FormLabel required>Job Location</FormLabel>
-                        <select value={form.job_location} onChange={e => set('job_location', e.target.value)} onFocus={focus} onBlur={blur} required style={{ ...inputStyle, cursor: 'pointer' }}>
-                            <option value="" disabled>Select Job Location…</option>
-                            {jobLocations.map(location => <option key={location.id} value={location.name}>{location.name}</option>)}
-                        </select>
+                        <SearchableSelect value={form.job_location} onChange={value => set('job_location', value)} options={jobLocations} placeholder="Type or select job location..." required listId="job-location-options" />
                     </div>
                 </div>
 
@@ -224,28 +283,29 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                 <SectionTitle>Financials &amp; Budgeting</SectionTitle>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
-                        <FormLabel>Cost Code</FormLabel>
-                        <select value={form.costcode} onChange={e => set('costcode', e.target.value)} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer' }}>
-                            <option value="">Select Cost Code…</option>
-                            {costCodes.map(code => <option key={code.id} value={code.name}>{code.name}</option>)}
-                        </select>
-                    </div>
-                    <div>
                         <FormLabel>Funding Classification</FormLabel>
                         <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-around', height: 'calc(100% - 22px)' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                                <input type="checkbox" checked={form.opex} onChange={e => set('opex', e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
+                                <input type="checkbox" checked={form.opex} onChange={e => setFunding('opex', e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
                                 OPEX
                             </label>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                                <input type="checkbox" checked={form.capex} onChange={e => set('capex', e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
+                                <input type="checkbox" checked={form.capex} onChange={e => setFunding('capex', e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
                                 CAPEX
                             </label>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                                <input type="checkbox" checked={form.for_budgeting} onChange={e => set('for_budgeting', e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
+                                <input type="checkbox" checked={form.for_budgeting} onChange={e => setFunding('for_budgeting', e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
                                 For Budgeting
                             </label>
                         </div>
+                    </div>
+                    <div>
+                        {requiresCostCode && (
+                            <>
+                                <FormLabel required>Cost Code</FormLabel>
+                                <SearchableSelect value={form.costcode} onChange={value => set('costcode', value)} options={costCodes} placeholder="Type or select cost code..." required listId="cost-code-options" />
+                            </>
+                        )}
                     </div>
                 </div>
 

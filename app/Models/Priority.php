@@ -11,6 +11,7 @@ class Priority extends Model
 
     protected $fillable = [
         'name',
+        'sequence_no',
         'description',
     ];
 }

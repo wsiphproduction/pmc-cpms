@@ -1,6 +1,17 @@
 import { Head, router } from '@inertiajs/react';
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import AcrHub from './hub/AcrHub';
+import AuditTrailHub from './hub/AuditTrailHub';
+import IocHub from './hub/IocHub';
+import MtrHub from './hub/MtrHub';
+import NtpHub from './hub/NtpHub';
+import PermitsHub from './hub/PermitsHub';
+import PsrHub from './hub/PsrHub';
+import QppHub from './hub/QppHub';
+import RfpHub from './hub/RfpHub';
+import RfqHub from './hub/RfqHub';
+import VofHub from './hub/VofHub';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface StatusLog {
@@ -89,18 +100,32 @@ const STATUS_HINTS: Record<string, string> = {
 };
 
 const OPS_MENU = [
-    { key: 'rfq',     label: 'Request for Quotations',  route: 'rfq' },
-    { key: 'ntp',     label: 'Notice to Proceed',        route: 'ntp' },
-    { key: 'permits', label: 'Permits',                  route: 'permits' },
-    { key: 'vof',     label: 'Variation Order Form',     route: 'vof' },
-    { key: 'qpp',     label: 'Quality Plan & Procedures',route: 'qpp' },
-    { key: 'mtr',     label: 'Materials Test Reports',   route: 'mtr' },
-    { key: 'rfp',     label: 'Request for Payment',      route: 'rfp' },
-    { key: 'ioc',     label: 'Input Other Cost',         route: 'ioc' },
-    { key: 'acr',     label: 'Actual Cost Report',       route: 'acr' },
-    { key: 'psr',     label: 'Project Status Report',    route: 'psr' },
-    { key: 'at',      label: 'Project Audit Trail',      route: 'at' },
+    { key: 'rfq', label: 'Request for Quotations', short: 'RFQ', action: 'Create RFQ Package', summary: 'Prepare quotation requests, contractor scopes, and bid comparison notes.' },
+    { key: 'ntp', label: 'Notice to Proceed', short: 'NTP', action: 'Prepare NTP', summary: 'Track approval readiness, signatures, and notice issuance details.' },
+    { key: 'permits', label: 'Permits', short: 'PER', action: 'Add Permit', summary: 'Monitor required permits, filing dates, and release status.' },
+    { key: 'vof', label: 'Variation Order Form', short: 'VOF', action: 'Create Variation', summary: 'Log scope changes, cost movement, and approval remarks.' },
+    { key: 'qpp', label: 'Quality Plan & Procedures', short: 'QPP', action: 'Add Quality Plan', summary: 'Maintain quality procedures, inspection points, and acceptance criteria.' },
+    { key: 'mtr', label: 'Materials Test Reports', short: 'MTR', action: 'Add Test Report', summary: 'Track material submissions, test results, and compliance records.' },
+    { key: 'rfp', label: 'Request for Payment', short: 'RFP', action: 'Create Payment Request', summary: 'Prepare payment requests, billing references, and payable amounts.' },
+    { key: 'ioc', label: 'Input Other Cost', short: 'IOC', action: 'Add Other Cost', summary: 'Capture miscellaneous project costs outside the main budget line.' },
+    { key: 'acr', label: 'Actual Cost Report', short: 'ACR', action: 'Generate Cost Report', summary: 'Review paid, committed, and actual project cost movement.' },
+    { key: 'psr', label: 'Project Status Report', short: 'PSR', action: 'Create Status Report', summary: 'Summarize progress, blockers, photos, milestones, and next actions.' },
+    { key: 'at', label: 'Project Audit Trail', short: 'AT', action: 'View Audit Trail', summary: 'Review project events, status changes, and user activity history.' },
 ];
+
+const HUB_COMPONENTS = {
+    rfq: RfqHub,
+    ntp: NtpHub,
+    permits: PermitsHub,
+    vof: VofHub,
+    qpp: QppHub,
+    mtr: MtrHub,
+    rfp: RfpHub,
+    ioc: IocHub,
+    acr: AcrHub,
+    psr: PsrHub,
+    at: AuditTrailHub,
+};
 
 // ── Mini Doughnut (SVG-based, no Chart.js dep) ─────────────────────────────
 function DonutChart({ percent, color, size = 120 }: { percent: number; color: string; size?: number }) {
@@ -346,10 +371,10 @@ export default function ProjectShow({ project }: Props) {
     const [currentStatusKey, setCurrentStatusKey] = useState(project.status_key);
     const [logs, setLogs] = useState<StatusLog[]>(project.status_logs ?? []);
     const [activeMenu, setActiveMenu] = useState('rfq');
-    const iframeRef = useRef<HTMLIFrameElement>(null);
 
     const currentMeta = STATUS_META[currentStatusKey] ?? STATUS_META['PLANNING'];
     const budgetPct   = project.budget_total > 0 ? Math.round((project.budget_paid / project.budget_total) * 100) : 0;
+    const ActiveHub = HUB_COMPONENTS[activeMenu as keyof typeof HUB_COMPONENTS] ?? RfqHub;
 
     const handleStatusUpdate = (key: string, text: string, remarks: string) => {
         const now = new Date();
@@ -565,12 +590,7 @@ export default function ProjectShow({ project }: Props) {
                             return (
                                 <button
                                     key={item.key}
-                                    onClick={() => {
-                                        setActiveMenu(item.key);
-                                        if (iframeRef.current) {
-                                            iframeRef.current.src = route(`projects.hub.${item.route}`, project.id);
-                                        }
-                                    }}
+                                    onClick={() => setActiveMenu(item.key)}
                                     style={{
                                         width: '100%', padding: '13px 18px',
                                         display: 'flex', alignItems: 'center', gap: '10px',
@@ -597,22 +617,9 @@ export default function ProjectShow({ project }: Props) {
                             <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                 {OPS_MENU.find(m => m.key === activeMenu)?.label}
                             </span>
-                            <button
-                                onClick={() => iframeRef.current?.contentWindow?.location.reload()}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '11.5px', cursor: 'pointer', color: '#374151' }}
-                            >
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-                                Refresh
-                            </button>
+                            <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>Workspace</span>
                         </div>
-                        <div style={{ flex: 1 }}>
-                            <iframe
-                                ref={iframeRef}
-                                src={route(`projects.hub.rfq`, project.id)}
-                                style={{ width: '100%', height: '100%', border: 'none', minHeight: '550px' }}
-                                title="Project Operations"
-                            />
-                        </div>
+                        <ActiveHub project={project} />
                     </div>
                 </div>
             </div>

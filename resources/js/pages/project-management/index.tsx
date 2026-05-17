@@ -12,6 +12,7 @@ interface Project {
     project_manager: string;
     dept_owner: string;
     status: 'Ongoing' | 'For Planning' | 'On Hold' | 'Proposal Under Review';
+    created_at: string | null;
 }
 
 interface PaginationLink {
@@ -484,10 +485,10 @@ export default function ProjectsIndex({ projects, filters }: Props) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['Project #', 'Project Title', 'Completion (%)', 'Project Manager', 'Dept Owner', 'Status', 'Actions'].map((h, i) => (
+                                {['Project #', 'Project Title', 'Completion (%)', 'Project Manager', 'Dept Owner', 'Created At', 'Status', 'Actions'].map((h, i) => (
                                     <th key={h} style={{
                                         padding: '10px 16px',
-                                        textAlign: i === 6 ? 'center' : 'left',
+                                        textAlign: i === 7 ? 'center' : 'left',
                                         fontSize: '10.5px', fontWeight: 700,
                                         color: '#9ca3af', textTransform: 'uppercase',
                                         letterSpacing: '0.5px',
@@ -502,7 +503,7 @@ export default function ProjectsIndex({ projects, filters }: Props) {
                         <tbody>
                             {projects.data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} style={{ padding: '48px', textAlign: 'center' }}>
+                                    <td colSpan={8} style={{ padding: '48px', textAlign: 'center' }}>
                                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 10px' }}>
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                             <polyline points="14 2 14 8 20 8"/>
@@ -532,6 +533,9 @@ export default function ProjectsIndex({ projects, filters }: Props) {
                                     </td>
                                     <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: '12.5px' }}>
                                         {proj.dept_owner}
+                                    </td>
+                                    <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                        {proj.created_at ?? 'â€”'}
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
                                         <StatusBadge status={proj.status} />
