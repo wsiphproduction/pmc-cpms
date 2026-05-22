@@ -17,6 +17,7 @@ class AuditTrail extends Model
         'reference_id',
         'reference_type',
         'changes',
+        'ip_address',
     ];
 
     protected $casts = [
@@ -37,14 +38,15 @@ class AuditTrail extends Model
 
     // ── Static helper ──────────────────────────────────────────────────────
 
-    public static function log(string $action, Model $model, array $changes = []): self
+    public static function log(string $action, Model $model, array $context = []): self
     {
         return self::create([
             'user_id'        => auth()->id(),
             'action'         => $action,
             'reference_id'   => $model->getKey(),
             'reference_type' => get_class($model),
-            'changes'        => $changes ?: null,
+            'changes'        => array_merge(['ip' => request()->ip()], $context) ?: null,
+            'ip_address'     => request()->ip(),
         ]);
     }
 }

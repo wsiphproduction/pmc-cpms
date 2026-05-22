@@ -75,4 +75,51 @@ class Project extends Model
     {
         return $this->hasMany(ProjectStatusLog::class)->latest();
     }
+
+    // ── Hub relations ─────────────────────────────────────────────────────
+
+    public function rfqs(): HasMany
+    {
+        return $this->hasMany(ProjectRfq::class)->latest();
+    }
+
+    public function ntps(): HasMany
+    {
+        return $this->hasMany(ProjectNtp::class)->latest();
+    }
+
+    public function permits(): HasMany
+    {
+        return $this->hasMany(ProjectPermit::class)->latest();
+    }
+
+    public function variationOrders(): HasMany
+    {
+        return $this->hasMany(ProjectVariationOrder::class)->latest();
+    }
+
+    public function qualityDocs(): HasMany
+    {
+        return $this->hasMany(ProjectQualityDoc::class)->latest();
+    }
+
+    public function mtrDocs(): HasMany
+    {
+        return $this->hasMany(ProjectMtrDoc::class)->latest();
+    }
+
+    public function billings(): HasMany
+    {
+        return $this->hasMany(ProjectBilling::class)->latest();
+    }
+
+    public function iocItems(): HasMany
+    {
+        return $this->hasMany(ProjectIocItem::class)->latest();
+    }
+
+    public function weeklyReports(): HasMany
+    {
+        return $this->hasMany(ProjectWeeklyReport::class)->latest('submitted_date');
+    }
 }

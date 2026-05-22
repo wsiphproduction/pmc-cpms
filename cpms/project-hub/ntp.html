@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notice to Proceed | CPMS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <style>
+        html{
+            font-size:0.75rem;
+        }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #ffffff; 
+            padding: 30px; 
+            color: #1e293b;
+        }
+        .ntp-header { border-bottom: 2px solid #059669; padding-bottom: 15px; margin-bottom: 30px; }
+        .section-title { 
+            background: #f1f5f9; 
+            padding: 8px 15px; 
+            font-weight: 700; 
+            font-size: 0.85rem; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #059669;
+        }
+        .info-label { font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
+        .info-value { font-size: 0.95rem; font-weight: 500; margin-bottom: 15px; }
+        
+        .table-ntp thead th { 
+            background: #f8fafc; 
+            font-size: 0.75rem; 
+            font-weight: 700; 
+            color: #475569;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .table-ntp td { padding: 12px 8px; font-size: 0.875rem; vertical-align: middle; }
+        .vacant-row { height: 40px; }
+        
+        .terms-table { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+        .terms-header { background: #f8fafc; font-weight: 700; border-bottom: 1px solid #e2e8f0; padding: 10px; }
+        .terms-body { padding: 15px; line-height: 1.6; font-size: 0.9rem; }
+
+        @media print {
+            .btn-print { display: none; }
+            body { padding: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="ntp-header d-flex justify-content-between align-items-center">
+        <div>
+            <h4 class="fw-bold text-success mb-1">NOTICE TO PROCEED</h4>
+            <span class="text-muted small">Official Authorization for Project Commencement</span>
+        </div>
+        <div class="text-end">
+            <div class="h5 fw-bold mb-0">NTP#: PMC-NTP-001</div>
+            <button class="btn btn-outline-dark btn-sm mt-2 btn-print" onclick="window.print()">
+                <i class="bi bi-printer me-2"></i>Print Document
+            </button>
+        </div>
+    </div>
+
+    <div class="section-title">I. Project Information</div>
+    <div class="row px-2">
+        <div class="col-md-3">
+            <div class="info-label">Project Number</div>
+            <div class="info-value">PRJ-2026-0882</div>
+        </div>
+        <div class="col-md-6">
+            <div class="info-label">Project Title</div>
+            <div class="info-value text-dark fw-bold">Modernization of Main Control Room</div>
+        </div>
+        <div class="col-md-3">
+            <div class="info-label">Date Needed</div>
+            <div class="info-value text-danger fw-bold">Oct 15, 2026</div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="info-label">Service Contractor</div>
+            <div class="info-value">BuildRight Solutions</div>
+        </div>
+        <div class="col-md-6">
+            <div class="info-label">Job Site / Location</div>
+            <div class="info-value">North Sector - Level 4, Main Plant Area</div>
+        </div>
+        <div class="col-md-3">
+            <div class="info-label">Cost Code</div>
+            <div class="info-value">7740-CAPEX-2026</div>
+        </div>
+        
+        <div class="col-md-3">
+            <div class="info-label">Project Owner</div>
+            <div class="info-value">Engr. Alex Rivera</div>
+        </div>
+    </div>
+
+    <div class="section-title mt-4">II. Scope of Work</div>
+    <div class="table-responsive">
+        <table class="table table-bordered table-ntp mb-0">
+            <thead>
+                <tr>
+                    <th width="80" class="text-center">Seq No.</th>
+                    <th>Scope of Work / Description</th>
+                    <th width="120" class="text-center">Quantity</th>
+                    <th width="150" class="text-center">Unit of Measurement</th>
+                </tr>
+            </thead>
+            <tbody>
+                <script>
+                    for (let i = 1; i <= 10; i++) {
+                        document.write(`
+                            <tr class="vacant-row">
+                                <td class="text-center text-muted small">${i}</td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                            </tr>
+                        `);
+                    }
+                </script>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section-title mt-5">III. Terms and Conditions</div>
+    <div class="terms-table">
+        <table class="table table-bordered mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th width="30%">Provision Category</th>
+                    <th>Details & Obligations</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="fw-bold">1. Project Commencement</td>
+                    <td>The contractor is formally authorized to mobilize and begin work on the specified Baseline Start Date.</td>
+                </tr>
+                <tr>
+                    <td class="fw-bold">2. Compliance & Safety</td>
+                    <td>All work must adhere to the site-specific safety protocols and ISO 45001 standards. Personnel must wear appropriate PPE at all times.</td>
+                </tr>
+                <tr>
+                    <td class="fw-bold">3. Payment Milestone</td>
+                    <td>Payments shall be released based on the approved progress billing cycle as stipulated in the primary contract.</td>
+                </tr>
+                <tr>
+                    <td class="fw-bold">4. Delays & Penalties</td>
+                    <td>Any unexcused delay beyond the Baseline End Date may subject the contractor to liquidated damages of 0.1% per day.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="row mt-5 pt-4 text-center">
+        <div class="col-4">
+            <div class="border-top pt-2 small fw-bold">Prepared By: Project Manager</div>
+        </div>
+        <div class="col-4 offset-4">
+            <div class="border-top pt-2 small fw-bold">Approved By: Operations Director</div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+</body>
+</html>

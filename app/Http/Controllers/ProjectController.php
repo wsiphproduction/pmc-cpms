@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditTrail;
 use App\Models\Category;
 use App\Models\CostCode;
 use App\Models\Department;
@@ -18,6 +19,7 @@ use App\Models\WorkForce;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -226,31 +228,186 @@ class ProjectController extends Controller
             'remarks' => $data['remarks'] ?? 'No remarks.',
         ]);
 
+        \App\Models\AuditTrail::log("Project status changed to: {$label}", $project, ['module' => 'Project', 'type' => 'update']);
+
         return back()->with('success', 'Project status updated.');
     }
 
-    public function hub(Project $project, string $section)
+    public function hub(Project $project, string $section): Response
     {
-        $labels = [
-            'rfq' => 'Request for Quotations',
-            'ntp' => 'Notice to Proceed',
-            'permits' => 'Permits',
-            'vof' => 'Variation Order Form',
-            'qpp' => 'Quality Plan & Procedures',
-            'mtr' => 'Materials Test Reports',
-            'rfp' => 'Request for Payment',
-            'ioc' => 'Input Other Cost',
-            'acr' => 'Actual Cost Report',
-            'psr' => 'Project Status Report',
-            'at' => 'Project Audit Trail',
-        ];
+        $validSections = ['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at'];
+        abort_unless(in_array($section, $validSections, true), 404);
 
-        abort_unless(isset($labels[$section]), 404);
+        $project->load(['manager', 'statusLogs.user']);
 
-        return response()->view('project-hub-placeholder', [
-            'project' => $project,
-            'title' => $labels[$section],
+        return Inertia::render('project-management/show', [
+            'project'        => $this->projectDetailData($project),
+            'active_section' => $section,
+            'hub_data'       => $this->hubSectionData($project, $section),
         ]);
+    }
+
+    private function hubSectionData(Project $project, string $section): array
+    {
+        return match ($section) {
+            'rfq' => [
+                'rfqs' => $project->rfqs()->with('items')->get()->map(fn ($rfq) => [
+                    'id'              => $rfq->id,
+                    'contractor'      => $rfq->contractor_name,
+                    'sent'            => optional($rfq->sent_date)->format('M d, Y') ?? '-',
+                    'due'             => optional($rfq->due_date)->format('M d, Y') ?? '-',
+                    'status'          => ucfirst($rfq->status),
+                    'scope_of_work'   => $rfq->scope_of_work,
+                    'duration_days'   => $rfq->duration_days,
+                    'terms'           => $rfq->terms_conditions,
+                    'inclusions'      => $rfq->inclusions,
+                    'exclusions'      => $rfq->exclusions,
+                    'items'           => $rfq->items->map(fn ($item) => [
+                        'seq'        => $item->seq,
+                        'description'=> $item->description,
+                        'qty'        => $item->qty,
+                        'unit'       => $item->unit,
+                        'unit_cost'  => $item->unit_cost,
+                        'total_cost' => $item->total_cost,
+                    ]),
+                ])->values(),
+            ],
+
+            'ntp' => [
+                'ntps' => $project->ntps()->with('rfq.items')->latest()->get()->map(fn ($ntp) => [
+                    'id'             => $ntp->id,
+                    'ntp_no'         => $ntp->ntp_no,
+                    'contractor'     => $ntp->contractor_name,
+                    'baseline_start' => optional($ntp->baseline_start)->format('M d, Y') ?? '-',
+                    'baseline_end'   => optional($ntp->baseline_end)->format('M d, Y') ?? '-',
+                    'approved_cost'  => (float) $ntp->approved_cost,
+                    'issued_date'    => optional($ntp->issued_date)->format('M d, Y') ?? '-',
+                    'scope_items'    => $ntp->rfq
+                        ? $ntp->rfq->items->map(fn ($item) => [
+                            'seq'         => $item->seq,
+                            'description' => $item->description,
+                            'qty'         => $item->qty,
+                            'unit'        => $item->unit,
+                        ])->values()->all()
+                        : [],
+                ])->values(),
+            ],
+
+            'permits' => [
+                'permits' => $project->permits()->with('files')->get()->map(fn ($permit) => [
+                    'id'       => $permit->id,
+                    'label'    => $permit->label,
+                    'doc_type' => $permit->doc_type,
+                    'files'    => $permit->files->map(fn ($f) => [
+                        'id'       => $f->id,
+                        'filename' => $f->filename,
+                        'url'      => Storage::disk('public')->url($f->path),
+                        'mime'     => $f->mime_type,
+                    ]),
+                ])->values(),
+            ],
+
+            'vof' => [
+                'vofs' => $project->variationOrders()->get()->map(fn ($vo) => [
+                    'id'             => $vo->id,
+                    'vo_no'          => $vo->vo_no,
+                    'title'          => $vo->title,
+                    'description'    => $vo->description,
+                    'amount'         => (float) $vo->amount,
+                    'status'         => ucfirst($vo->status),
+                    'submitted_date' => optional($vo->submitted_date)->format('M d, Y') ?? '-',
+                    'approved_date'  => optional($vo->approved_date)->format('M d, Y') ?? '-',
+                ])->values(),
+            ],
+
+            'qpp' => [
+                'qpps' => $project->qualityDocs()->get()->map(fn ($doc) => [
+                    'id'       => $doc->id,
+                    'label'    => $doc->label,
+                    'doc_type' => $doc->doc_type,
+                    'filename' => $doc->filename,
+                    'url'      => Storage::disk('public')->url($doc->file_path),
+                    'remarks'  => $doc->remarks,
+                    'created'  => $doc->created_at?->format('M d, Y') ?? '-',
+                ])->values(),
+            ],
+
+            'mtr' => [
+                'mtrs' => $project->mtrDocs()->get()->map(fn ($doc) => [
+                    'id'            => $doc->id,
+                    'label'         => $doc->label,
+                    'material_type' => $doc->material_type,
+                    'test_date'     => optional($doc->test_date)->format('M d, Y') ?? '-',
+                    'filename'      => $doc->filename,
+                    'url'           => Storage::disk('public')->url($doc->file_path),
+                    'remarks'       => $doc->remarks,
+                ])->values(),
+            ],
+
+            'rfp' => [
+                'billings' => $project->billings()->get()->map(fn ($b) => [
+                    'id'              => $b->id,
+                    'stmt_no'         => $b->stmt_no,
+                    'billing_type'    => $b->billing_type,
+                    'period_from'     => optional($b->period_from)->format('M d, Y') ?? '-',
+                    'period_to'       => optional($b->period_to)->format('M d, Y') ?? '-',
+                    'period_from_raw' => optional($b->period_from)->format('Y-m-d'),
+                    'period_to_raw'   => optional($b->period_to)->format('Y-m-d'),
+                    'amount'          => (float) $b->amount,
+                    'progress_pct'    => $b->progress_pct,
+                    'summary'         => $b->summary,
+                    'remarks'         => $b->remarks,
+                    'status'          => ucfirst($b->status),
+                    'status_raw'      => $b->status,
+                    'filename'        => $b->filename,
+                    'url'             => $b->file_path ? Storage::disk('public')->url($b->file_path) : null,
+                ])->values(),
+            ],
+
+            'ioc', 'acr' => [
+                'iocs' => $project->iocItems()->get()->map(fn ($item) => [
+                    'id'          => $item->id,
+                    'description' => $item->description,
+                    'amount'      => (float) $item->amount,
+                    'filename'    => $item->filename,
+                    'url'         => $item->file_path ? Storage::disk('public')->url($item->file_path) : null,
+                    'created'     => $item->created_at?->format('M d, Y') ?? '-',
+                ])->values(),
+            ],
+
+            'psr' => [
+                'reports' => $project->weeklyReports()->get()->map(fn ($r) => [
+                    'id'                => $r->id,
+                    'week_code'         => $r->week_code,
+                    'completion_pct'    => $r->completion_pct,
+                    'identified_issues' => $r->identified_issues,
+                    'progress_updates'  => $r->progress_updates,
+                    'submitted_date'    => optional($r->submitted_date)->format('M d, Y') ?? '-',
+                    'filename'          => $r->filename,
+                    'url'               => $r->file_path ? Storage::disk('public')->url($r->file_path) : null,
+                ])->values(),
+            ],
+
+            'at' => [
+                'logs' => AuditTrail::where('reference_type', Project::class)
+                    ->where('reference_id', $project->id)
+                    ->with('user')
+                    ->latest()
+                    ->limit(200)
+                    ->get()
+                    ->map(fn ($log) => [
+                        'date'   => $log->created_at?->format('M d, Y') ?? '-',
+                        'time'   => $log->created_at?->format('h:i A') ?? '-',
+                        'user'   => $log->user?->name ?? 'System',
+                        'action' => $log->action,
+                        'module' => $log->changes['module'] ?? 'Project',
+                        'ip'     => $log->ip_address ?? ($log->changes['ip'] ?? '—'),
+                        'type'   => $log->changes['type'] ?? 'update',
+                    ])->values(),
+            ],
+
+            default => [],
+        };
     }
 
     private function validatedProjectData(Request $request): array

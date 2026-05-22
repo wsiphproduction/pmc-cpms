@@ -1,6 +1,7 @@
 import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import type { HubProject } from './hub/Common';
 import AcrHub from './hub/AcrHub';
 import AuditTrailHub from './hub/AuditTrailHub';
 import IocHub from './hub/IocHub';
@@ -66,6 +67,8 @@ interface Project {
 
 interface Props {
     project: Project;
+    active_section?: string;
+    hub_data?: Record<string, any>;
 }
 
 // ── Status Meta ────────────────────────────────────────────────────────────
@@ -113,19 +116,26 @@ const OPS_MENU = [
     { key: 'at', label: 'Project Audit Trail', short: 'AT', action: 'View Audit Trail', summary: 'Review project events, status changes, and user activity history.' },
 ];
 
-const HUB_COMPONENTS = {
-    rfq: RfqHub,
-    ntp: NtpHub,
-    permits: PermitsHub,
-    vof: VofHub,
-    qpp: QppHub,
-    mtr: MtrHub,
-    rfp: RfpHub,
-    ioc: IocHub,
-    acr: AcrHub,
-    psr: PsrHub,
-    at: AuditTrailHub,
-};
+function renderHubSection(
+    section: string,
+    hubProject: import('./hub/Common').HubProject,
+    hubData: Record<string, any>,
+) {
+    switch (section) {
+        case 'rfq':     return <RfqHub     project={hubProject} rfqs={hubData.rfqs ?? []} />;
+        case 'ntp':     return <NtpHub     project={hubProject} ntps={hubData.ntps ?? []} />;
+        case 'permits': return <PermitsHub project={hubProject} permits={hubData.permits ?? []} />;
+        case 'vof':     return <VofHub     project={hubProject} vofs={hubData.vofs ?? []} />;
+        case 'qpp':     return <QppHub     project={hubProject} qpps={hubData.qpps ?? []} />;
+        case 'mtr':     return <MtrHub     project={hubProject} mtrs={hubData.mtrs ?? []} />;
+        case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} />;
+        case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} />;
+        case 'acr':     return <AcrHub     project={hubProject} iocs={hubData.iocs ?? []} />;
+        case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} />;
+        case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
+        default:        return <RfqHub     project={hubProject} rfqs={[]} />;
+    }
+}
 
 // ── Mini Doughnut (SVG-based, no Chart.js dep) ─────────────────────────────
 function DonutChart({ percent, color, size = 120 }: { percent: number; color: string; size?: number }) {
@@ -366,15 +376,29 @@ function StatusUpdateModal({
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function ProjectShow({ project }: Props) {
+export default function ProjectShow({ project, active_section, hub_data = {} }: Props) {
     const [showStatusModal, setShowStatusModal] = useState(false);
     const [currentStatusKey, setCurrentStatusKey] = useState(project.status_key);
     const [logs, setLogs] = useState<StatusLog[]>(project.status_logs ?? []);
-    const [activeMenu, setActiveMenu] = useState('rfq');
+
+    const activeMenu = active_section ?? null;
 
     const currentMeta = STATUS_META[currentStatusKey] ?? STATUS_META['PLANNING'];
     const budgetPct   = project.budget_total > 0 ? Math.round((project.budget_paid / project.budget_total) * 100) : 0;
-    const ActiveHub = HUB_COMPONENTS[activeMenu as keyof typeof HUB_COMPONENTS] ?? RfqHub;
+
+    const hubProject: import('./hub/Common').HubProject = {
+        id:                 project.id,
+        project_no:         project.project_no,
+        title:              project.title,
+        project_manager:    project.project_manager,
+        site:               project.site,
+        budget_total:       project.budget_total,
+        budget_paid:        project.budget_paid,
+        completion_percent: project.completion_percent,
+        deadline:           project.deadline,
+        cost_code:          project.cost_code,
+        owner_email:        project.owner_email,
+    };
 
     const handleStatusUpdate = (key: string, text: string, remarks: string) => {
         const now = new Date();
@@ -590,7 +614,7 @@ export default function ProjectShow({ project }: Props) {
                             return (
                                 <button
                                     key={item.key}
-                                    onClick={() => setActiveMenu(item.key)}
+                                    onClick={() => router.visit(route('projects.hub.' + item.key, project.id), { preserveScroll: true })}
                                     style={{
                                         width: '100%', padding: '13px 18px',
                                         display: 'flex', alignItems: 'center', gap: '10px',
@@ -615,11 +639,20 @@ export default function ProjectShow({ project }: Props) {
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                {OPS_MENU.find(m => m.key === activeMenu)?.label}
+                                {OPS_MENU.find(m => m.key === activeMenu)?.label ?? 'Select an action'}
                             </span>
                             <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>Workspace</span>
                         </div>
-                        <ActiveHub project={project} />
+                        {activeMenu
+                            ? renderHubSection(activeMenu, hubProject, hub_data)
+                            : (
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 32px', color: '#94a3b8', textAlign: 'center', gap: '12px' }}>
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#64748b' }}>Select an action from the menu</div>
+                                    <div style={{ fontSize: '12.5px', color: '#94a3b8' }}>Choose an item on the left to load its workspace.</div>
+                                </div>
+                            )
+                        }
                     </div>
                 </div>
             </div>

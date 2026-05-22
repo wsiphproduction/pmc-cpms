@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Request for Payment | CPMS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        html{
+            font-size:0.75rem;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; padding: 25px; color: #1e293b; }
+        
+        .summary-card {
+            background: #ffffff;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            padding: 20px;
+            margin-bottom: 25px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .cost-display {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #0f172a;
+            letter-spacing: -1px;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 180px;
+            width: 180px;
+        }
+
+        /* Existing Table/Badge Styles */
+        .badge-paid { background-color: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+        .badge-approved { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .badge-pending { background-color: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
+
+        /* Modal Form Styling (Matching Image) */
+        .billing-header { background: #ffff00; font-weight: 800; text-align: center; border: 1px solid #000; padding: 5px; text-transform: uppercase; }
+        .form-table { width: 100%; border-collapse: collapse; border: 1px solid #000; }
+        .form-table td { border: 1px solid #000; padding: 8px; vertical-align: top; }
+        .label-cell { background: #f8fafc; font-weight: 600; width: 25%; font-size: 0.85rem; }
+        .check-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 0.85rem; }
+        
+        /* Attachment Section Specifics */
+        .attachment-grid { font-size: 0.75rem; }
+        .attachment-sub { background: #ffff00; text-align: center; font-weight: 700; border: 1px solid #000; padding: 3px; }
+        .attachment-col { border: 1px solid #000; padding: 5px; }
+
+        .form-control-billing { border: 1px solid #cbd5e1; width: 100%; padding: 4px 8px; font-size: 0.9rem; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4" style="display:none;">
+        <h5 class="fw-bold m-0 text-primary"><i class="bi bi-cash-coin me-2"></i>Payment Requests & Billing Tracking</h5>
+       
+    </div>
+
+    <div class="summary-card">
+        <div class="row align-items-center">
+            <div class="col-md-4 border-end">
+                <div class="info-label text-muted small fw-bold text-uppercase mb-1">Total Project Cost</div>
+                <div class="cost-display">PhP 5,000,000.00</div>
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between small mb-1">
+                        <span>Total Paid</span>
+                        <span class="fw-bold">PhP 450,000.00</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-primary" style="width: 9%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 d-flex justify-content-center border-end">
+                <div class="chart-container">
+                    <canvas id="paymentPieChart"></canvas>
+                </div>
+            </div>
+            <div class="col-md-4 ps-4">
+                <h6 class="fw-bold mb-3">Quick Actions</h6>
+                <button class="btn btn-dark w-100 mb-2 fw-bold" data-bs-toggle="modal" data-bs-target="#billingModal">
+                    <i class="bi bi-plus-lg me-2"></i>Add New Billing
+                </button>
+                <button class="btn btn-outline-secondary w-100 fw-bold">
+                    <i class="bi bi-file-earmark-pdf me-2"></i>Statement of Account
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive border rounded bg-white shadow-sm">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr class="small text-uppercase fw-bold text-muted">
+                    <th class="text-center">Seq#</th>
+                    <th>Control#</th>
+                    <th>Billed Amount</th>
+                    <th>Req. Date</th>
+                    <th>Progress %</th>
+                    <th>Status</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-center">1</td>
+                    <td class="fw-bold">BLG-2026-001</td>
+                    <td>PhP 450,000.00</td>
+                    <td>Feb 10, 2026</td>
+                    <td>30%</td>
+                    <td><span class="badge badge-paid px-3">Paid</span></td>
+                    <td class="text-end">
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-secondary" title="View"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary" title="Print"><i class="bi bi-printer"></i></button>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="text-center">2</td>
+                    <td class="fw-bold">BLG-2026-002</td>
+                    <td>PhP 300,000.00</td>
+                    <td>Mar 01, 2026</td>
+                    <td>50%</td>
+                    <td><span class="badge badge-approved px-3">Approved</span></td>
+                    <td class="text-end">
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i></button>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td class="text-center">3</td>
+                    <td class="fw-bold">BLG-2026-003</td>
+                    <td>PhP 150,000.00</td>
+                    <td>Mar 11, 2026</td>
+                    <td>65%</td>
+                    <td><span class="badge badge-pending px-3">Pending</span></td>
+                    <td class="text-end">
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-outline-secondary"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil-square"></i></button>
+                            <button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-circle"></i></button>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="billingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-dark text-white">
+                <h6 class="modal-title fw-bold">New Payment Request Form</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <form id="billingForm">
+                    
+                    <div class="billing-header">Billing Details</div>
+                    <table class="form-table mb-4">
+                        <tr>
+                            <td class="label-cell">Type of Billing</td>
+                            <td>
+                                <div class="check-grid">
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Down Payment</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Retention</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input" checked><label class="ms-1">Milestone (Progress)</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Variation</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Final / Full Payment</label></div>
+                                    <div class="d-flex align-items-center">
+                                        <div class="form-check me-2"><input type="checkbox" class="form-check-input"><label class="ms-1">Others:</label></div>
+                                        <input type="text" class="form-control-billing border-0 border-bottom" style="width: 80px">
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Billing Statement No.</td>
+                            <td><input type="text" class="form-control-billing"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Billing Period/Date</td>
+                            <td><input type="date" class="form-control-billing"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Billed Amount</td>
+                            <td>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text border-0 bg-transparent">PhP</span>
+                                    <input type="number" step="0.01" class="form-control border-0 border-bottom">
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Project Progress (% Completed)</td>
+                            <td><input type="text" class="form-control-billing" placeholder="e.g. 50%"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Summary of Work Done</td>
+                            <td><textarea class="form-control-billing" rows="3"></textarea></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Remarks</td>
+                            <td><input type="text" class="form-control-billing"></td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">Recommendation</td>
+                            <td>
+                                <div class="d-flex gap-4 small fw-bold">
+                                    <div class="form-check"><input type="radio" name="rec" class="form-check-input" checked><label class="ms-1">For Payment</label></div>
+                                    <div class="form-check"><input type="radio" name="rec" class="form-check-input"><label class="ms-1">Withhold (Pending Clarification)</label></div>
+                                    <div class="d-flex align-items-center">
+                                        <div class="form-check me-1"><input type="radio" name="rec" class="form-check-input"><label class="ms-1">Others:</label></div>
+                                        <input type="text" class="form-control-billing border-0 border-bottom" style="width: 100px">
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <div class="billing-header">Attachments</div>
+                    <div class="attachment-grid d-flex">
+                        <div class="flex-grow-1 border border-dark">
+                            <div class="attachment-sub border-bottom border-dark">Major Projects</div>
+                            <div class="d-flex">
+                                <div class="attachment-col flex-fill">
+                                    <div class="fw-bold border-bottom mb-1">Down Payment</div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Billing Cover Letter</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Billing Statement</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Billing Summary</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Testing Documents</label></div>
+                                </div>
+                                <div class="attachment-col flex-fill">
+                                    <div class="fw-bold border-bottom mb-1">Milestone/Retention</div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Approved NTP</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Progress Report</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Pictures</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Signed Contract</label></div>
+                                </div>
+                                <div class="attachment-col flex-fill">
+                                    <div class="fw-bold border-bottom mb-1">Final/Variation</div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Weather Chart</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">As-Built (for Final)</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">BLMC (for Variation)</label></div>
+                                    <div class="d-flex align-items-center mt-1">
+                                        <span class="me-1">Others:</span><input type="text" class="border-0 border-bottom" style="width: 50px">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="border border-dark border-start-0" style="width: 40%;">
+                            <div class="attachment-sub border-bottom border-dark">Minor Projects</div>
+                            <div class="d-flex">
+                                <div class="attachment-col flex-fill">
+                                    <div class="fw-bold border-bottom mb-1">Partial/Final</div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Billing Cover Letter</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Billing Summary</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Actual BLMC</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Pictures</label></div>
+                                </div>
+                                <div class="attachment-col flex-fill">
+                                    <div class="fw-bold border-bottom mb-1">Retention/Others</div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Billing Reconciliation</label></div>
+                                    <div class="form-check"><input type="checkbox" class="form-check-input"><label class="ms-1">Approved NTP</label></div>
+                                    <div class="d-flex align-items-center mt-1">
+                                        <span class="me-1">Others:</span><input type="text" class="border-0 border-bottom" style="width: 50px">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-dark btn-sm px-4">Save & Submit Request</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Initialize Pie Chart
+    const ctx = document.getElementById('paymentPieChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Paid Amount', 'Remaining Balance'],
+            datasets: [{
+                data: [450000, 4550000], // Based on 5M total
+                backgroundColor: ['#0d6efd', '#e2e8f0'],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: false } // Hidden to keep it clean inside the card
+            },
+            maintainAspectRatio: false
+        }
+    });
+</script>
+
+
+</body>
+</html>

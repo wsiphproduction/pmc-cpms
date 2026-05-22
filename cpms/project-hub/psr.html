@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weekly Project Status Report | CPMS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        html{
+            font-size:0.75rem;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; padding: 25px; color: #1e293b; }
+        
+        /* Dashboard Summary */
+        .summary-card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; padding: 24px; margin-bottom: 25px; }
+        .chart-container { position: relative; height: 160px; width: 160px; }
+        .latest-status { font-size: 2.75rem; font-weight: 800; color: #1e293b; letter-spacing: -1.5px; }
+
+        /* General Table styling */
+        .table thead th { background-color: #f8fafc; font-size: 0.75rem; text-transform: uppercase; color: #64748b; }
+
+        /* MODAL STYLING (Matching Image Structure) */
+        .modal-report-form table { width: 100%; border-collapse: collapse; border: 1px solid #000; font-size: 0.8rem; }
+        .modal-report-form th, .modal-report-form td { border: 1px solid #000; padding: 5px; vertical-align: top; }
+        
+        /* Checklist Section Specifics */
+        .checklist-main-header { background: #ffff00; font-weight: 800; text-align: center; border: 2px solid #000; }
+        .legend-row { background: #fefce8; font-weight: 600; font-size: 0.75rem; text-align: center; }
+        .legend-icon { font-weight: 700; color: #15803d; }
+        .section-header { background: #dbeafe; font-weight: 700; color: #1e40af; }
+        .col-seq { width: 40px; text-align: center; font-weight: 600; background: #f8fafc; }
+        .col-status { width: 70px; text-align: center; font-weight: 700; }
+        .col-remarks { width: 35%; }
+        
+        /* Input Overrides inside Checklist */
+        .checklist-input { border: none; background: transparent; width: 100%; }
+        .checklist-input:focus { outline: none; background: #fff; }
+        select.checklist-status-select { text-align: center; font-weight: 700; color: #1e293b; }
+        select.checklist-status-select option { text-align: left; }
+
+        /* Yellow Sub-headers */
+        .yellow-sub { background: #ffff00; text-align: center; font-weight: 700; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    
+    <div class="summary-card shadow-sm">
+        <div class="row align-items-center">
+            <div class="col-md-3 text-center border-end">
+                <div class="info-label text-muted small fw-bold text-uppercase mb-1">Latest Overall Progress</div>
+                <div class="latest-status">72%</div>
+                <div class="small fw-bold text-success"><i class="bi bi-graph-up-arrow me-1"></i>On Track</div>
+            </div>
+            <div class="col-md-3 d-flex justify-content-center border-end">
+                <div class="chart-container">
+                    <canvas id="progressPieChart"></canvas>
+                </div>
+            </div>
+            <div class="col-md-6 ps-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="fw-bold m-0 text-primary">Monthly Execution Phase (SEP 2026)</h6>
+                    <button class="btn btn-dark fw-bold btn-sm" data-bs-toggle="modal" data-bs-target="#newReportModal">
+                        <i class="bi bi-file-earmark-plus me-2"></i>Add New Weekly Report
+                    </button>
+                </div>
+                <div class="alert alert-info py-2 small border-0 mb-0">
+                    <i class="bi bi-info-circle-fill me-2"></i>A total of <strong>27 critical site checklists</strong> must be verified weekly by the site supervisor and approved by the QA/QC manager.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive border rounded bg-white shadow-sm">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr class="small text-uppercase fw-bold text-muted">
+                    <th width="80" class="text-center">Week#</th>
+                    <th>% Completion</th>
+                    <th>Identified Issues</th>
+                    <th>Submitted Date</th>
+                    <th>Attachment</th>
+                    <th width="120" class="text-center px-4">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-center fw-bold text-primary">W4-SEP</td>
+                    <td><div class="d-flex align-items-center"><span class="fw-bold me-2">72%</span> <div class="progress" style="height: 6px; width: 60px;"><div class="progress-bar bg-success" style="width: 72%"></div></div></div></td>
+                    <td>No major issues. Handover preparation began for Phase 1.</td>
+                    <td class="small text-muted">Sep 28, 2026</td>
+                    <td><a href="#" class="small text-decoration-none"><i class="bi bi-file-pdf text-danger me-1"></i>Report_W4_Sep.pdf</a></td>
+                    <td class="text-center px-4"><button class="btn btn-sm btn-outline-secondary me-1"><i class="bi bi-eye"></i></button><button class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></button></td>
+                </tr>
+                <tr>
+                    <td class="text-center fw-bold text-primary">W3-SEP</td>
+                    <td><div class="d-flex align-items-center"><span class="fw-bold me-2">65%</span> <div class="progress" style="height: 6px; width: 60px;"><div class="progress-bar bg-success" style="width: 65%"></div></div></div></td>
+                    <td>Minor material delivery delay (Steel beams). Recovered.</td>
+                    <td class="small text-muted">Sep 21, 2026</td>
+                    <td><a href="#" class="small text-decoration-none"><i class="bi bi-file-pdf text-danger me-1"></i>Report_W3_Sep.pdf</a></td>
+                    <td class="text-center px-4"><button class="btn btn-sm btn-outline-secondary me-1"><i class="bi bi-eye"></i></button><button class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></button></td>
+                </tr>
+                <tr>
+                    <td class="text-center fw-bold text-primary">W2-SEP</td>
+                    <td><div class="d-flex align-items-center"><span class="fw-bold me-2">58%</span> <div class="progress" style="height: 6px; width: 60px;"><div class="progress-bar bg-success" style="width: 58%"></div></div></div></td>
+                    <td>2 site laborers noted with improper PPE during safety audit.</td>
+                    <td class="small text-muted">Sep 14, 2026</td>
+                    <td><a href="#" class="small text-decoration-none"><i class="bi bi-file-pdf text-danger me-1"></i>Report_W2_Sep.pdf</a></td>
+                    <td class="text-center px-4"><button class="btn btn-sm btn-outline-secondary me-1"><i class="bi bi-eye"></i></button><button class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></button></td>
+                </tr>
+                <tr>
+                    <td class="text-center fw-bold text-primary">W1-SEP</td>
+                    <td><div class="d-flex align-items-center"><span class="fw-bold me-2">51%</span> <div class="progress" style="height: 6px; width: 60px;"><div class="progress-bar bg-success" style="width: 51%"></div></div></div></td>
+                    <td>Variation order VO-001 approved, increasing scope slightly.</td>
+                    <td class="small text-muted">Sep 07, 2026</td>
+                    <td><a href="#" class="small text-decoration-none"><i class="bi bi-file-pdf text-danger me-1"></i>Report_W1_Sep.pdf</a></td>
+                    <td class="text-center px-4"><button class="btn btn-sm btn-outline-secondary me-1"><i class="bi bi-eye"></i></button><button class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></button></td>
+                </tr>
+                <tr>
+                    <td class="text-center fw-bold text-primary">W4-AUG</td>
+                    <td><div class="d-flex align-items-center"><span class="fw-bold me-2">44%</span> <div class="progress" style="height: 6px; width: 60px;"><div class="progress-bar bg-success" style="width: 44%"></div></div></div></td>
+                    <td>Piping installation milestone accomplished on time.</td>
+                    <td class="small text-muted">Aug 31, 2026</td>
+                    <td><a href="#" class="small text-decoration-none"><i class="bi bi-file-pdf text-danger me-1"></i>Report_W4_Aug.pdf</a></td>
+                    <td class="text-center px-4"><button class="btn btn-sm btn-outline-secondary me-1"><i class="bi bi-eye"></i></button><button class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></button></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="newReportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-dark text-white p-2">
+                <h6 class="modal-title fw-bold">W1-OCT | Project Progress Report Submission</h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body modal-report-form p-4">
+                <form id="progressForm">
+                    
+                    <div class="checklist-main-header py-1">CHECKLIST</div>
+                    <table class="mb-4">
+                        <tr class="legend-row">
+                            <td colspan="2">Legend:</td>
+                            <td class="border-end"><i class="bi bi-check2 legend-icon"></i> - Completed</td>
+                            <td class="border-end"><i class="bi bi-x legend-icon" style="color:#b91c1c;"></i> - Not Completed</td>
+                            <td><i class="bi bi-record-circle legend-icon" style="color:#a1a1aa;"></i> - Not Applicable</td>
+                        </tr>
+                        <thead>
+                            <tr class="table-light small text-muted text-uppercase fw-bold text-center">
+                                <th class="col-seq">Seq#</th>
+                                <th>Item / Requirement Description</th>
+                                <th class="col-status">Status</th>
+                                <th class="col-remarks">Remarks / Comments</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr class="section-header">
+                                <td class="col-seq">1.0</td>
+                                <td colspan="3">General Site Conditions</td>
+                            </tr>
+                            <tr><td class="col-seq">1.1</td><td>Site access is clear, secure, and signposted</td>
+                                <td class="col-status"><select class="form-select form-select-sm checklist-status-select p-1 border-0"><option>--</option><option>√</option><option>X</option><option>Ø</option></select></td>
+                                <td class="col-remarks"><input type="text" class="checklist-input"></td></tr>
+                            <tr><td class="col-seq">1.2</td><td>Appropriate signage (directional, hazard, information) is posted</td>
+                                <td class="col-status"><select class="form-select form-select-sm checklist-status-select p-1 border-0"><option>--</option><option>√</option><option>X</option><option>Ø</option></select></td>
+                                <td class="col-remarks"><input type="text" class="checklist-input"></td></tr>
+                            <tr class="section-header">
+                                <td class="col-seq">2.0</td>
+                                <td colspan="3">Quality Assurance and Control</td>
+                            </tr>
+                            <tr><td class="col-seq">2.1</td><td>Approved updated drawings and specifications available on-site</td>
+                                <td class="col-status"><select class="form-select form-select-sm checklist-status-select p-1 border-0"><option>--</option><option>√</option><option>X</option><option>Ø</option></select></td>
+                                <td class="col-remarks"><input type="text" class="checklist-input"></td></tr>
+                            <tr><td class="col-seq">2.2</td><td>Workmanship (Civil, Electrical, Mechanical) meets standards</td>
+                                <td class="col-status"><select class="form-select form-select-sm checklist-status-select p-1 border-0"><option>--</option><option>√</option><option>X</option><option>Ø</option></select></td>
+                                <td class="col-remarks"><input type="text" class="checklist-input"></td></tr>
+                            </tbody>
+                    </table>
+
+                    <div class="yellow-sub py-1 border-top border-dark mt-4">WEEKLY ISSUES AND ACTION PLAN</div>
+                    <table class="mb-4">
+                        <thead>
+                            <tr class="table-light small text-muted text-uppercase fw-bold text-center">
+                                <th width="60">No.</th>
+                                <th>Key Issues identified this week</th>
+                                <th>Corrective Actions</th>
+                                <th width="150">Commitment Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td class="text-center">1</td><td><textarea class="checklist-input" rows="2"></textarea></td><td><textarea class="checklist-input" rows="2"></textarea></td><td><input type="date" class="checklist-input"></td></tr>
+                            <tr><td class="text-center">2</td><td><textarea class="checklist-input" rows="2"></textarea></td><td><textarea class="checklist-input" rows="2"></textarea></td><td><input type="date" class="checklist-input"></td></tr>
+                            <tr><td class="text-center">3</td><td><textarea class="checklist-input" rows="2"></textarea></td><td><textarea class="checklist-input" rows="2"></textarea></td><td><input type="date" class="checklist-input"></td></tr>
+                        </tbody>
+                    </table>
+
+                    <div class="yellow-sub py-1 border-top border-dark mt-4">PROJECT PROGRESS UPDATES</div>
+                    <textarea class="form-control border border-dark rounded-0 p-3" rows="6" placeholder="Provide general updates on overall project progress, accomplished milestones, and next week's outlook..."></textarea>
+                    
+                    <div class="mt-4 row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Overall Project % Completion</label>
+                            <input type="number" class="form-control" placeholder="e.g. 75" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold">Attach Supporting PDF (e.g. signed copy)</label>
+                            <input type="file" class="form-control" accept=".pdf">
+                        </div>
+                    </div>
+
+                </form>
+            </div>
+            <div class="modal-footer bg-light p-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-dark btn-sm px-4">Submit Weekly Report</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Initialize Pie Chart
+    const ctx = document.getElementById('progressPieChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'pie',
+        data: {
+            labels: ['Progress Accomplished', 'Remaining Work'],
+            datasets: [{
+                data: [72, 28], // Latest 72% based on latest sample
+                backgroundColor: ['#16a34a', '#e2e8f0'],
+                borderWidth: 0,
+                hoverOffset: 4
+            }]
+        },
+        options: {
+            plugins: {
+                legend: { display: false } // Hidden inside the summary card for a cleaner look
+            },
+            maintainAspectRatio: false
+        }
+    });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

@@ -4,6 +4,7 @@ use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProjectHubController;
 use App\Http\Controllers\ProjectRequestController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -37,6 +38,43 @@ Route::middleware(['auth'])->group(function () {
             ->defaults('section', $section)
             ->name("projects.hub.{$section}");
     }
+
+    // Hub CRUD routes
+    Route::prefix('projects/{project}/hub')->group(function () {
+        // RFQ
+        Route::post('rfq',                     [ProjectHubController::class, 'storeRfq'])->name('hub.rfq.store');
+        Route::patch('rfq/{rfq}',              [ProjectHubController::class, 'updateRfq'])->name('hub.rfq.update');
+        Route::patch('rfq/{rfq}/status',       [ProjectHubController::class, 'updateRfqStatus'])->name('hub.rfq.update-status');
+        Route::delete('rfq/{rfq}',             [ProjectHubController::class, 'destroyRfq'])->name('hub.rfq.destroy');
+        // NTP
+        Route::post('ntp',                     [ProjectHubController::class, 'storeNtp'])->name('hub.ntp.store');
+        Route::delete('ntp/{ntp}',             [ProjectHubController::class, 'destroyNtp'])->name('hub.ntp.destroy');
+        // Permits
+        Route::post('permits',                 [ProjectHubController::class, 'storePermit'])->name('hub.permits.store');
+        Route::delete('permits/{permit}',      [ProjectHubController::class, 'destroyPermit'])->name('hub.permits.destroy');
+        // Variation Orders
+        Route::post('vof',                     [ProjectHubController::class, 'storeVof'])->name('hub.vof.store');
+        Route::patch('vof/{vof}',              [ProjectHubController::class, 'updateVof'])->name('hub.vof.update');
+        Route::delete('vof/{vof}',             [ProjectHubController::class, 'destroyVof'])->name('hub.vof.destroy');
+        // Quality Docs
+        Route::post('qpp',                     [ProjectHubController::class, 'storeQpp'])->name('hub.qpp.store');
+        Route::delete('qpp/{qpp}',             [ProjectHubController::class, 'destroyQpp'])->name('hub.qpp.destroy');
+        // MTR
+        Route::post('mtr',                     [ProjectHubController::class, 'storeMtr'])->name('hub.mtr.store');
+        Route::delete('mtr/{mtr}',             [ProjectHubController::class, 'destroyMtr'])->name('hub.mtr.destroy');
+        // Billing (RFP)
+        Route::post('rfp',                     [ProjectHubController::class, 'storeBilling'])->name('hub.rfp.store');
+        Route::patch('rfp/{billing}',          [ProjectHubController::class, 'updateBilling'])->name('hub.rfp.update');
+        Route::patch('rfp/{billing}/status',   [ProjectHubController::class, 'updateBillingStatus'])->name('hub.rfp.update-status');
+        Route::delete('rfp/{billing}',         [ProjectHubController::class, 'destroyBilling'])->name('hub.rfp.destroy');
+        // IOC / ACR
+        Route::post('ioc',                     [ProjectHubController::class, 'storeIoc'])->name('hub.ioc.store');
+        Route::patch('ioc/{ioc}',              [ProjectHubController::class, 'updateIoc'])->name('hub.ioc.update');
+        Route::delete('ioc/{ioc}',             [ProjectHubController::class, 'destroyIoc'])->name('hub.ioc.destroy');
+        // PSR
+        Route::post('psr',                     [ProjectHubController::class, 'storePsr'])->name('hub.psr.store');
+        Route::delete('psr/{psr}',             [ProjectHubController::class, 'destroyPsr'])->name('hub.psr.destroy');
+    });
 
     Route::resource('projects', ProjectController::class);
 

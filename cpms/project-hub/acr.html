@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Actual Cost Report | CPMS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <style>
+        html{
+            font-size:0.75rem;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; padding: 25px; color: #1e293b; }
+        
+        /* Dashboard Comparison Styling */
+        .comparison-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 25px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        .metric-box { padding: 10px; }
+        .metric-label { font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .metric-value { font-size: 1.75rem; font-weight: 800; line-height: 1.2; }
+        .vs-divider { 
+            font-style: italic; 
+            color: #cbd5e1; 
+            font-weight: 700; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            height: 100%;
+        }
+
+        /* Form & Table Styling */
+        .content-section { background: white; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; }
+        .table thead th { background-color: #f8fafc; font-size: 0.75rem; color: #475569; border-bottom: 2px solid #edf2f7; }
+        
+        .progress-micro { height: 6px; border-radius: 10px; background-color: #f1f5f9; margin-top: 8px; }
+        
+        .btn-action { width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    
+    <div class="comparison-card">
+        <div class="row align-items-center">
+            <div class="col-md-4 metric-box">
+                <div class="metric-label">Projected Budget</div>
+                <div class="metric-value text-dark" id="projectedCost">&#8369; 5,000,000.00</div>
+                <div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Approved CAPEX</div>
+            </div>
+            
+            <div class="col-md-1 vs-divider">vs</div>
+            
+            <div class="col-md-4 metric-box">
+                <div class="metric-label text-primary">Actual Cost to Date</div>
+                <div class="metric-value text-primary" id="actualTotal">&#8369; 2,342,000.00</div>
+                <div class="progress-micro">
+                    <div class="progress-bar bg-primary" id="budgetProgress" style="width: 46.8%"></div>
+                </div>
+            </div>
+            
+            <div class="col-md-3 metric-box text-end">
+                <div class="metric-label">Remaining Variance</div>
+                <div class="metric-value text-success" id="varianceValue">&#8369; 2,658,000.00</div>
+                <div class="small fw-bold text-success">Under Budget (53.2%)</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="content-section mb-4 shadow-sm">
+        <h6 class="fw-bold mb-3"><i class="bi bi-file-earmark-plus me-2 text-primary"></i>Log New Actual Expenditure</h6>
+        <form id="actualCostForm" class="row g-2 align-items-end">
+            <div class="col-md-5">
+                <label class="form-label small fw-bold">Cost Description</label>
+                <input type="text" id="costDesc" class="form-control form-control-sm" placeholder="e.g. Milestone 1 Progress Payment" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold">Amount (PhP)</label>
+                <input type="number" id="costAmount" class="form-control form-control-sm" placeholder="0.00" required>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold">Evidence Attachment</label>
+                <input type="file" id="costFile" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">Add to Report</button>
+            </div>
+        </form>
+    </div>
+
+    <div class="content-section shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0" id="actualTable">
+                <thead>
+                    <tr>
+                        <th width="60" class="text-center">Seq#</th>
+                        <th>Description</th>
+                        <th>Actual Cost (PhP)</th>
+                        <th>Attachment</th>
+                        <th width="140" class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-center">1</td>
+                        <td>Initial Mobilization & Site Setup</td>
+                        <td class="fw-bold">450,000.00</td>
+                        <td><a href="#" class="text-decoration-none small"><i class="bi bi-file-pdf text-danger me-1"></i>NTP-MOB-01.pdf</a></td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-secondary btn-action me-1"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-outline-primary btn-action me-1"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-outline-danger btn-action btn-delete"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">2</td>
+                        <td>Material Test: Structural Steel Phase 1</td>
+                        <td class="fw-bold">85,000.00</td>
+                        <td><a href="#" class="text-decoration-none small"><i class="bi bi-file-image text-primary me-1"></i>Lab-Result.jpg</a></td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-secondary btn-action me-1"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-outline-primary btn-action me-1"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-outline-danger btn-action btn-delete"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">3</td>
+                        <td>Variation Order #1: Additional Piping</td>
+                        <td class="fw-bold">1,200,000.00</td>
+                        <td><a href="#" class="text-decoration-none small"><i class="bi bi-file-pdf text-danger me-1"></i>VO-001-Signed.pdf</a></td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-secondary btn-action me-1"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-outline-primary btn-action me-1"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-outline-danger btn-action btn-delete"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">4</td>
+                        <td>Environmental Compliance Permit Fees</td>
+                        <td class="fw-bold">12,000.00</td>
+                        <td><a href="#" class="text-decoration-none small"><i class="bi bi-file-earmark-check text-success me-1"></i>ECC-Permit.pdf</a></td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-secondary btn-action me-1"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-outline-primary btn-action me-1"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-outline-danger btn-action btn-delete"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-center">5</td>
+                        <td>Milestone 2: Foundation Works</td>
+                        <td class="fw-bold">595,000.00</td>
+                        <td><a href="#" class="text-decoration-none small"><i class="bi bi-file-pdf text-danger me-1"></i>Billing-M2.pdf</a></td>
+                        <td class="text-center">
+                            <button class="btn btn-outline-secondary btn-action me-1"><i class="bi bi-eye"></i></button>
+                            <button class="btn btn-outline-primary btn-action me-1"><i class="bi bi-pencil"></i></button>
+                            <button class="btn btn-outline-danger btn-action btn-delete"><i class="bi bi-trash"></i></button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script>
+    $(document).ready(function() {
+        const PROJECTED = 5000000;
+
+        function updateReportDashboard() {
+            let totalActual = 0;
+            $('#actualTable tbody tr td:nth-child(3)').each(function() {
+                totalActual += parseFloat($(this).text().replace(/,/g, ''));
+            });
+
+            const variance = PROJECTED - totalActual;
+            const percentage = (totalActual / PROJECTED) * 100;
+
+            $('#actualTotal').text('PhP ' + totalActual.toLocaleString(undefined, {minimumFractionDigits: 2}));
+            $('#varianceValue').text('PhP ' + variance.toLocaleString(undefined, {minimumFractionDigits: 2}));
+            $('#budgetProgress').css('width', percentage + '%');
+            
+            // Toggle variance color if over budget
+            if(variance < 0) {
+                $('#varianceValue').removeClass('text-success').addClass('text-danger');
+            } else {
+                $('#varianceValue').removeClass('text-danger').addClass('text-success');
+            }
+        }
+
+        $('#actualCostForm').on('submit', function(e) {
+            e.preventDefault();
+            const desc = $('#costDesc').val();
+            const amt = parseFloat($('#costAmount').val());
+            const fileName = $('#costFile')[0].files[0].name;
+            const seq = $('#actualTable tbody tr').length + 1;
+
+            const newRow = `
+                <tr>
+                    <td class="text-center">${seq}</td>
+                    <td>${desc}</td>
+                    <td class="fw-bold">${amt.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                    <td><a href="#" class="text-decoration-none small"><i class="bi bi-file-earmark-check text-primary me-1"></i>${fileName}</a></td>
+                    <td class="text-center">
+                        <button class="btn btn-outline-secondary btn-action me-1"><i class="bi bi-eye"></i></button>
+                        <button class="btn btn-outline-primary btn-action me-1"><i class="bi bi-pencil"></i></button>
+                        <button class="btn btn-outline-danger btn-action btn-delete"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>
+            `;
+
+            $('#actualTable tbody').append(newRow);
+            updateReportDashboard();
+            this.reset();
+        });
+
+        $(document).on('click', '.btn-delete', function() {
+            if(confirm('Delete this actual cost entry? This will affect the dashboard variance.')) {
+                $(this).closest('tr').remove();
+                updateReportDashboard();
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

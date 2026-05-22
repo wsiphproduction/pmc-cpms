@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Permits Management | CPMS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <style>
+        html{
+            font-size:0.75rem;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: #ffffff; padding: 25px; color: #1e293b; }
+        .upload-card { background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 30px; }
+        .table thead th { background-color: #f1f5f9; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; }
+        .file-badge { font-size: 0.75rem; background: #e2e8f0; color: #475569; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 5px; margin-top: 4px; }
+        .other-type-container { display: none; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="fw-bold m-0"><i class="bi bi-shield-check me-2 text-primary"></i>Project Permits & Compliance</h5>
+    </div>
+
+    <div class="upload-card shadow-sm">
+        <form id="permitUploadForm">
+            <div class="row g-3 align-items-start">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Document Label</label>
+                    <input type="text" id="docLabel" class="form-control form-control-sm" placeholder="e.g. Site Clearance" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Type of Document</label>
+                    <select id="docType" class="form-select form-select-sm" required>
+                        <option value="" selected disabled>Select type...</option>
+                        <option value="Building Permit">Building Permit</option>
+                        <option value="Safety Permit">Safety Permit</option>
+                        <option value="Environmental Permit">Environmental Permit</option>
+                        <option value="OTHERS">Others (Specify...)</option>
+                    </select>
+                    <div class="other-type-container" id="otherTypeBox">
+                        <input type="text" id="customType" class="form-control form-control-sm border-primary" placeholder="Enter custom document type">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-bold">Upload Files (Select one or more)</label>
+                    <input type="file" id="docFiles" class="form-control form-control-sm" multiple required>
+                    <div class="form-text extra-small">You can select multiple PDFs or images.</div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label d-block">&nbsp;</label>
+                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                        <i class="bi bi-plus-circle me-1"></i> Add Record
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="table-responsive border rounded bg-white">
+        <table class="table table-hover align-middle mb-0" id="permitsTable">
+            <thead>
+                <tr>
+                    <th width="60" class="text-center">Seq#</th>
+                    <th>Label & Attached Files</th>
+                    <th width="200">Type</th>
+                    <th width="120" class="text-center">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="text-center text-muted">1</td>
+                    <td>
+                        <div class="fw-bold">Excavation Clearance Package</div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="file-badge"><i class="bi bi-file-earmark-pdf text-danger"></i> drawings.pdf</span>
+                            <span class="file-badge"><i class="bi bi-file-earmark-image text-primary"></i> site_photo.jpg</span>
+                        </div>
+                    </td>
+                    <td><span class="badge bg-light text-dark border">Safety Permit</span></td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-outline-primary" title="Download Zip"><i class="bi bi-download"></i></button>
+                        <button class="btn btn-sm btn-outline-danger btn-delete"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script>
+    $(document).ready(function() {
+        let seqCount = 1;
+
+        // Toggle "Others" input box
+        $('#docType').on('change', function() {
+            if ($(this).val() === 'OTHERS') {
+                $('#otherTypeBox').slideDown();
+                $('#customType').attr('required', true);
+            } else {
+                $('#otherTypeBox').slideUp();
+                $('#customType').attr('required', false);
+            }
+        });
+
+        // Form Submit Logic
+        $('#permitUploadForm').on('submit', function(e) {
+            e.preventDefault();
+            
+            seqCount++;
+            const label = $('#docLabel').val();
+            let type = $('#docType').val();
+            if (type === 'OTHERS') type = $('#customType').val();
+
+            // Handle Multiple Files
+            const files = $('#docFiles')[0].files;
+            let fileBadges = "";
+            for (let i = 0; i < files.length; i++) {
+                const icon = files[i].type.includes('pdf') ? 'bi-file-earmark-pdf text-danger' : 'bi-file-earmark-image text-primary';
+                fileBadges += `<span class="file-badge"><i class="bi ${icon}"></i> ${files[i].name}</span> `;
+            }
+
+            const newRow = `
+                <tr>
+                    <td class="text-center text-muted">${seqCount}</td>
+                    <td>
+                        <div class="fw-bold">${label}</div>
+                        <div class="d-flex flex-wrap gap-2">${fileBadges}</div>
+                    </td>
+                    <td><span class="badge bg-light text-dark border">${type}</span></td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-outline-primary"><i class="bi bi-download"></i></button>
+                        <button class="btn btn-sm btn-outline-danger btn-delete"><i class="bi bi-trash"></i></button>
+                    </td>
+                </tr>
+            `;
+
+            $('#permitsTable tbody').prepend(newRow);
+            this.reset();
+            $('#otherTypeBox').hide();
+            alert('Permit record with ' + files.length + ' file(s) created.');
+        });
+
+        $(document).on('click', '.btn-delete', function() {
+            if(confirm('Delete this entire record and all attached files?')) {
+                $(this).closest('tr').remove();
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
