@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import { ActionBtns, DataTable, Field, HubProject, HubShell, Modal, inputStyle, money } from './Common';
+import { useConfirm } from '@/components/useConfirm';
 
 interface IocRow { id: number; description: string; amount: number; filename: string | null; url: string | null; created: string }
 
@@ -135,13 +136,17 @@ export default function AcrHub({ project, iocs }: { project: HubProject; iocs: I
         });
     };
 
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete = (item: IocRow) => {
-        if (!confirm(`Delete "${item.description}"?`)) return;
-        router.delete(route('hub.ioc.destroy', [project.id, item.id]), { preserveScroll: true });
+        showConfirm(`Delete "${item.description}"?`, () => {
+            router.delete(route('hub.ioc.destroy', [project.id, item.id]), { preserveScroll: true });
+        }, { title: 'Delete Record', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     return (
         <HubShell>
+            {confirmDialog}
             {viewing && !editing && (
                 <ViewModal item={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} />
             )}

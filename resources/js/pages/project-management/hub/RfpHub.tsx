@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { Badge, Button, DataTable, HubProject, HubShell, Modal, inputStyle, money } from './Common';
+import { useConfirm } from '@/components/useConfirm';
 
 interface BillingRow {
     id: number;
@@ -355,9 +356,12 @@ export default function RfpHub({ project, billings }: { project: HubProject; bil
     const budgetPaid = project.budget_paid ?? 0;
     const paidPct    = project.budget_total > 0 ? Math.round((budgetPaid / project.budget_total) * 100) : 0;
 
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete = (b: BillingRow) => {
-        if (!confirm(`Delete billing ${b.stmt_no}?`)) return;
-        router.delete(route('hub.rfp.destroy', [project.id, b.id]), { preserveScroll: true });
+        showConfirm(`Delete billing ${b.stmt_no}?`, () => {
+            router.delete(route('hub.rfp.destroy', [project.id, b.id]), { preserveScroll: true });
+        }, { title: 'Delete Billing', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     const actionCell = (b: BillingRow) => {
@@ -386,6 +390,7 @@ export default function RfpHub({ project, billings }: { project: HubProject; bil
 
     return (
         <HubShell>
+            {confirmDialog}
             {showNew  && <NewBillingModal project={project} onClose={() => setShowNew(false)} />}
             {viewing  && !editing && (
                 <ViewBillingModal

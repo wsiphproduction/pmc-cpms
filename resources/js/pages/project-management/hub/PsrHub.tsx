@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { Button, DataTable, Field, HubProject, HubShell, Modal, inputStyle } from './Common';
+import { useConfirm } from '@/components/useConfirm';
 
 interface PsrRow { id: number; week_code: string; completion_pct: number; identified_issues: string | null; progress_updates: string | null; submitted_date: string; filename: string | null; url: string | null }
 
@@ -219,13 +220,17 @@ export default function PsrHub({ project, reports }: { project: HubProject; repo
     const [viewing, setViewing]     = useState<PsrRow | null>(null);
     const progress = reports[0]?.completion_pct ?? project.completion_percent ?? 0;
 
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete = (r: PsrRow) => {
-        if (!confirm(`Delete report ${r.week_code}?`)) return;
-        router.delete(route('hub.psr.destroy', [project.id, r.id]), { preserveScroll: true });
+        showConfirm(`Delete report ${r.week_code}?`, () => {
+            router.delete(route('hub.psr.destroy', [project.id, r.id]), { preserveScroll: true });
+        }, { title: 'Delete Report', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     return (
         <HubShell>
+            {confirmDialog}
             {showModal && <ReportModal project={project} onClose={() => setShowModal(false)} />}
             {viewing   && <ViewReportModal report={viewing} onClose={() => setViewing(null)} />}
 

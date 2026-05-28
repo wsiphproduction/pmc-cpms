@@ -1,6 +1,8 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, inputStyle } from './Common';
+import { CONTRACTORS } from './contractors';
+import { useConfirm } from '@/components/useConfirm';
 
 type RfqStatus = 'Awarded' | 'Submitted' | 'Pending' | 'Expired';
 
@@ -10,6 +12,7 @@ interface RfqRow {
     contractor: string;
     sent: string;
     due: string;
+    due_raw: string | null;
     status: RfqStatus;
     scope_of_work?: string;
     duration_days?: number | null;
@@ -72,6 +75,7 @@ function QuotationRows({ rows, onRowChange }: {
 // ── RFQ View Modal ─────────────────────────────────────────────────────────
 function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProject; onClose: () => void }) {
     const [scope, setScope]           = useState(row.scope_of_work ?? '');
+    const [due, setDue]               = useState(row.due_raw ?? '');
     const [duration, setDuration]     = useState(row.duration_days?.toString() ?? '');
     const [terms, setTerms]           = useState(row.terms ?? '');
     const [inclusions, setInclusions] = useState(row.inclusions ?? '');
@@ -114,6 +118,7 @@ function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProj
         setSaving(true);
         router.patch(route('hub.rfq.update', [project.id, row.id]), {
             scope_of_work:    scope,
+            due_date:         due || null,
             duration_days:    duration || null,
             terms_conditions: terms,
             inclusions,
@@ -138,7 +143,6 @@ function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProj
                 {[
                     ['Service Contractor', row.contractor],
                     ['Date Sent',          row.sent],
-                    ['Date Needed',        row.due],
                     ['Project Number',     project.project_no],
                     ['Project Title',      project.title],
                     ['Project Owner',      project.project_manager],
@@ -148,6 +152,10 @@ function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProj
                         <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{value}</div>
                     </div>
                 ))}
+                <div>
+                    <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>Date Needed</div>
+                    <input type="date" value={due} onChange={e => setDue(e.target.value)} style={{ ...inputStyle, fontSize: '13px', fontWeight: 700 }} />
+                </div>
                 <div style={{ gridColumn: '1/-1' }}>
                     <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>Job Site / Location</div>
                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{project.site}</div>
@@ -274,6 +282,7 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
     const [dispatchContractor, setDispatchContractor] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [showSuccess, setShowSuccess] = useState(false);
+    const [sentContractor, setSentContractor] = useState('');
     const [viewRow, setViewRow]         = useState<RfqRow | null>(null);
     const [ntpRow, setNtpRow]           = useState<RfqRow | null>(null);
     const [sending, setSending]         = useState(false);
@@ -288,19 +297,23 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
             due_date: dueDate || null,
         }, {
             preserveScroll: true,
-            onSuccess: () => { setShowSuccess(true); setDispatchContractor(''); setDueDate(''); },
+            onSuccess: () => { setSentContractor(dispatchContractor); setShowSuccess(true); setDispatchContractor(''); setDueDate(''); },
             onFinish: () => setSending(false),
         });
     };
 
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete = (rfq: RfqRow) => {
-        if (!confirm(`Delete RFQ for ${rfq.contractor}?`)) return;
-        router.delete(route('hub.rfq.destroy', [project.id, rfq.id]), { preserveScroll: true });
+        showConfirm(`Delete RFQ for ${rfq.contractor}?`, () => {
+            router.delete(route('hub.rfq.destroy', [project.id, rfq.id]), { preserveScroll: true });
+        }, { title: 'Delete RFQ', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     const handleStatus = (rfq: RfqRow, status: string, label: string) => {
-        if (!confirm(`Mark RFQ for "${rfq.contractor}" as ${label}?`)) return;
-        router.patch(route('hub.rfq.update-status', [project.id, rfq.id]), { status }, { preserveScroll: true });
+        showConfirm(`Mark RFQ for "${rfq.contractor}" as ${label}?`, () => {
+            router.patch(route('hub.rfq.update-status', [project.id, rfq.id]), { status }, { preserveScroll: true });
+        }, { title: 'Update Status', confirmLabel: 'Confirm', variant: 'warning' });
     };
 
     const actionCell = (row: RfqRow) => {
@@ -316,6 +329,7 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
                 <ActionBtns view onView={() => setViewRow(row)} />
                 <ActionBtns print />
                 <ActionBtns trophy onTrophy={() => handleStatus(row, 'awarded', 'Awarded')} />
+                <ActionBtns del onDelete={() => handleDelete(row)} />
             </div>
         );
         if (row.status === 'Pending') return (
@@ -337,6 +351,7 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
                 >
                     Expired
                 </button>
+                <ActionBtns del onDelete={() => handleDelete(row)} />
             </div>
         );
         return (
@@ -349,7 +364,8 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
 
     return (
         <HubShell>
-            {showSuccess   && <SuccessModal contractor={dispatchContractor || '—'} onClose={() => setShowSuccess(false)} />}
+            {confirmDialog}
+            {showSuccess   && <SuccessModal contractor={sentContractor} onClose={() => setShowSuccess(false)} />}
             {viewRow       && <RfqViewModal row={viewRow} project={project} onClose={() => setViewRow(null)} />}
             {ntpRow        && <NtpModal row={ntpRow} project={project} onClose={() => setNtpRow(null)} />}
 
@@ -360,7 +376,7 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
                     <Field label="Select Contractor">
                         <select style={inputStyle} value={dispatchContractor} onChange={e => setDispatchContractor(e.target.value)}>
                             <option value="" disabled>Choose from registered contractors...</option>
-                            {['BuildRight Solutions', 'Apex Engineering Group', 'Global Infra Systems', 'Precision Mechanical Ltd', 'Titan Gel Construction', 'Discaya Construction'].map(name => (
+                            {CONTRACTORS.map(name => (
                                 <option key={name}>{name}</option>
                             ))}
                         </select>

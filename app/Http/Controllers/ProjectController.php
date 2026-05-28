@@ -256,6 +256,7 @@ class ProjectController extends Controller
                     'contractor'      => $rfq->contractor_name,
                     'sent'            => optional($rfq->sent_date)->format('M d, Y') ?? '-',
                     'due'             => optional($rfq->due_date)->format('M d, Y') ?? '-',
+                    'due_raw'         => optional($rfq->due_date)->format('Y-m-d'),
                     'status'          => ucfirst($rfq->status),
                     'scope_of_work'   => $rfq->scope_of_work,
                     'duration_days'   => $rfq->duration_days,

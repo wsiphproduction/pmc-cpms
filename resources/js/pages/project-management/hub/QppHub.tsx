@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, InfoStrip, inputStyle } from './Common';
+import { useConfirm } from '@/components/useConfirm';
 
 interface QppRow { id: number; label: string; doc_type: string; filename: string; url: string; created: string }
 
@@ -29,13 +30,17 @@ export default function QppHub({ project, qpps }: { project: HubProject; qpps: Q
         });
     };
 
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete = (qpp: QppRow) => {
-        if (!confirm(`Delete "${qpp.label}"?`)) return;
-        router.delete(route('hub.qpp.destroy', [project.id, qpp.id]), { preserveScroll: true });
+        showConfirm(`Delete "${qpp.label}"?`, () => {
+            router.delete(route('hub.qpp.destroy', [project.id, qpp.id]), { preserveScroll: true });
+        }, { title: 'Delete Document', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     return (
         <HubShell>
+            {confirmDialog}
             <InfoStrip project={project} accent="#0ea5e9" />
             <div style={{ background: '#f0f9ff', border: '2px dashed #bae6fd', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 150px', gap: '12px', alignItems: 'end' }}>

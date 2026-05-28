@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState, useEffect, useRef } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import { useConfirm } from '@/components/useConfirm';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Comment {
@@ -142,23 +143,27 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
         }
     };
 
-    const deleteComment = async (id: number) => {
-        if (!confirm('Delete this comment?')) return;
-        try {
-            await fetch(route('comments.destroy', id), {
-                method: 'DELETE',
-                headers: { 'X-CSRF-TOKEN': csrfToken(), 'Accept': 'application/json' },
-            });
-            setComments(prev => prev.filter(c => c.id !== id));
-        } catch (err) {
-            console.error(err);
-        }
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
+    const deleteComment = (id: number) => {
+        showConfirm('Delete this comment?', async () => {
+            try {
+                await fetch(route('comments.destroy', id), {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': csrfToken(), 'Accept': 'application/json' },
+                });
+                setComments(prev => prev.filter(c => c.id !== id));
+            } catch (err) {
+                console.error(err);
+            }
+        }, { title: 'Delete Comment', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     if (!request) return null;
 
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {confirmDialog}
             <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.35)' }} />
             <div style={{ position: 'relative', background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', zIndex: 201, overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '85vh' }}>
 

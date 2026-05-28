@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, inputStyle } from './Common';
+import { useConfirm } from '@/components/useConfirm';
 
 interface PermitFile { id: number; filename: string; url: string; mime: string }
 interface PermitRow  { id: number; label: string; doc_type: string; files: PermitFile[] }
@@ -33,9 +34,12 @@ export default function PermitsHub({ project, permits }: { project: HubProject; 
         });
     };
 
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete = (permit: PermitRow) => {
-        if (!confirm(`Delete "${permit.label}"?`)) return;
-        router.delete(route('hub.permits.destroy', [project.id, permit.id]), { preserveScroll: true });
+        showConfirm(`Delete "${permit.label}"?`, () => {
+            router.delete(route('hub.permits.destroy', [project.id, permit.id]), { preserveScroll: true });
+        }, { title: 'Delete Permit', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     const handleDownload = (permit: PermitRow) => {
@@ -53,6 +57,7 @@ export default function PermitsHub({ project, permits }: { project: HubProject; 
 
     return (
         <HubShell>
+            {confirmDialog}
             <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
                 Project Permits & Compliance

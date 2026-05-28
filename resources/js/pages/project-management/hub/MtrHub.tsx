@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, InfoStrip, inputStyle } from './Common';
+import { useConfirm } from '@/components/useConfirm';
 
 interface MtrRow { id: number; label: string; material_type: string; test_date: string; filename: string; url: string }
 
@@ -29,13 +30,17 @@ export default function MtrHub({ project, mtrs }: { project: HubProject; mtrs: M
         });
     };
 
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete = (mtr: MtrRow) => {
-        if (!confirm(`Delete "${mtr.label}"?`)) return;
-        router.delete(route('hub.mtr.destroy', [project.id, mtr.id]), { preserveScroll: true });
+        showConfirm(`Delete "${mtr.label}"?`, () => {
+            router.delete(route('hub.mtr.destroy', [project.id, mtr.id]), { preserveScroll: true });
+        }, { title: 'Delete Test Report', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     return (
         <HubShell>
+            {confirmDialog}
             <InfoStrip project={project} accent="#eab308" />
             <div style={{ background: '#fefce8', border: '2px dashed #fef08a', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 150px', gap: '12px', alignItems: 'end' }}>

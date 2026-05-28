@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, InfoStrip, SectionTitle, inputStyle } from './Common';
+import { useConfirm } from '@/components/useConfirm';
 
 interface VofRow { id: number; vo_no: string; title: string; description: string | null; amount: number; status: string; submitted_date: string; approved_date: string }
 
@@ -29,13 +30,17 @@ export default function VofHub({ project, vofs }: { project: HubProject; vofs: V
         });
     };
 
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete = (vof: VofRow) => {
-        if (!confirm(`Delete variation order ${vof.vo_no}?`)) return;
-        router.delete(route('hub.vof.destroy', [project.id, vof.id]), { preserveScroll: true });
+        showConfirm(`Delete variation order ${vof.vo_no}?`, () => {
+            router.delete(route('hub.vof.destroy', [project.id, vof.id]), { preserveScroll: true });
+        }, { title: 'Delete Variation Order', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     return (
         <HubShell>
+            {confirmDialog}
             <InfoStrip project={project} accent="#f59e0b" />
 
             {vofs.length > 0 && (

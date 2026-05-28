@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import { useConfirm } from '@/components/useConfirm';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Attachment {
@@ -226,16 +227,19 @@ export default function Show({ projectRequest }: Props) {
 
     const handleApprove = () => router.patch(route('requests.update', projectRequest.id), { status: 'approved' });
     const handleReject  = () => router.patch(route('requests.update', projectRequest.id), { status: 'rejected' });
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
     const handleDelete  = () => {
-        if (confirm('Are you sure you want to cancel this request?')) {
+        showConfirm('Are you sure you want to cancel this request?', () => {
             router.delete(route('requests.destroy', projectRequest.id));
-        }
+        }, { title: 'Cancel Request', confirmLabel: 'Yes, Cancel', variant: 'warning' });
     };
 
     return (
         <AuthenticatedLayout>
             <Head title={`View Request — ${projectRequest.title}`} />
 
+            {confirmDialog}
             {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
 
             {/* Breadcrumb + actions */}

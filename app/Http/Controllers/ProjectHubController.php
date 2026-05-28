@@ -46,6 +46,7 @@ class ProjectHubController extends Controller
 
         $data = $request->validate([
             'scope_of_work'       => ['nullable', 'string'],
+            'due_date'            => ['nullable', 'date'],
             'duration_days'       => ['nullable', 'integer', 'min:1'],
             'terms_conditions'    => ['nullable', 'string'],
             'inclusions'          => ['nullable', 'string'],
