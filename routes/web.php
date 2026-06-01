@@ -6,6 +6,7 @@ use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectHubController;
 use App\Http\Controllers\ProjectRequestController;
+use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -77,6 +78,15 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::resource('projects', ProjectController::class);
+
+    // ── Users ─────────────────────────────────────────────────────────────
+    Route::get('users', [UserController::class, 'index'])->name('users.index');
+    Route::post('users', [UserController::class, 'store'])->name('users.store');
+    Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+    Route::patch('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+    Route::patch('users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
+    Route::delete('users/{id}/force-delete', [UserController::class, 'forceDelete'])->name('users.force-delete');
 
     // ── Master Data ───────────────────────────────────────────────────────
     Route::get('master-data', [MasterDataController::class, 'index'])->name('master.index');
