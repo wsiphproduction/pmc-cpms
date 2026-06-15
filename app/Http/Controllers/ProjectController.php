@@ -275,7 +275,7 @@ class ProjectController extends Controller
             ],
 
             'ntp' => [
-                'ntps' => $project->ntps()->with('rfq.items')->latest()->get()->map(fn ($ntp) => [
+                'ntps' => $project->ntps()->with('rfq.items')->get()->map(fn ($ntp) => [
                     'id'             => $ntp->id,
                     'ntp_no'         => $ntp->ntp_no,
                     'contractor'     => $ntp->contractor_name,
