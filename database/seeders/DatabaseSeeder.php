@@ -15,20 +15,24 @@ class DatabaseSeeder extends Seeder
     {
        
         // Admin user
-        User::create([
-            'name'              => 'Admin User',
-            'email'             => 'admin@cpms.com',
-            'password'          => Hash::make('password'),
-            'email_verified_at' => now(),
-        ]);
+        User::firstOrCreate(
+            ['email' => 'admin@cpms.com'],
+            [
+                'name'              => 'Admin User',
+                'password'          => Hash::make('password'),
+                'email_verified_at' => now(),
+            ]
+        );
 
         // Test user
-        User::create([
-            'name'              => 'Test User',
-            'email'             => 'test@cpms.com',
-            'password'          => Hash::make('password'),
-            'email_verified_at' => now(),
-        ]);
+        User::firstOrCreate(
+            ['email' => 'test@cpms.com'],
+            [
+                'name'              => 'Test User',
+                'password'          => Hash::make('password'),
+                'email_verified_at' => now(),
+            ]
+        );
 
         // Extra fake users
         User::factory(10)->create();
