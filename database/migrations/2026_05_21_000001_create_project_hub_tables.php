@@ -47,13 +47,13 @@ return new class extends Migration
             $table->foreignId('project_id')->constrained()->cascadeOnDelete();
             $table->string('ntp_no', 40)->unique();
             $table->string('contractor_name');
-            $table->foreignId('project_rfq_id')->nullable()->constrained('project_rfqs')->restrictOnDelete();
+            $table->foreignId('project_rfq_id')->nullable()->constrained('project_rfqs');
             $table->date('baseline_start');
             $table->date('baseline_end');
             $table->decimal('approved_cost', 15, 2)->default(0);
             $table->date('issued_date');
             $table->foreignId('issued_by')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignId('created_by')->nullable()->constrained('users')->restrictOnDelete();
+            $table->foreignId('created_by')->nullable()->constrained('users');
             $table->softDeletes();
             $table->timestamps();
 
