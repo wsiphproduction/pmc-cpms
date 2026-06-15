@@ -66,8 +66,10 @@ class DashboardController extends Controller
 
     private function statusDistribution()
     {
-        $statusCounts = Project::selectRaw('status_key, COUNT(*) as total')
+        $statusCounts = Project::select('status_key')
+            ->selectRaw('COUNT(*) as total')
             ->groupBy('status_key')
+            ->get()
             ->pluck('total', 'status_key');
 
         return collect(self::STATUS_LABELS)->map(fn ($label, $key) => [
