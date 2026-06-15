@@ -37,7 +37,7 @@ return new class extends Migration
             $table->decimal('budget_total', 15, 2)->default(0);
             $table->decimal('budget_paid', 15, 2)->default(0);
             $table->unsignedTinyInteger('completion_percent')->default(0);
-            $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('created_by')->nullable()->constrained('users')->restrictOnDelete();
             $table->softDeletes();
             $table->timestamps();
 
