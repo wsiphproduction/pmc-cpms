@@ -451,7 +451,7 @@ class ProjectController extends Controller
             'assets' => Structure::orderBy('name')->get(['name'])->map($option),
             'departments' => Department::orderBy('name')->get(['name'])->map($option),
             'classes' => MasterClass::orderBy('name')->get(['name'])->map($option),
-            'priorities' => Priority::orderByRaw('sequence_no IS NULL, sequence_no ASC')
+            'priorities' => Priority::orderByRaw('CASE WHEN sequence_no IS NULL THEN 1 ELSE 0 END, sequence_no ASC')
                 ->orderBy('name')
                 ->get(['name'])
                 ->map($option),

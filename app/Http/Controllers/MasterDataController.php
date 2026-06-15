@@ -28,7 +28,7 @@ class MasterDataController extends Controller
             'costCodes'    => CostCode::latest()->get(['id', 'name', 'description', 'created_at']),
             'sites'        => Site::latest()->get(['id', 'name', 'description', 'created_at']),
             'classes'      => MasterClass::latest()->get(['id', 'name', 'description', 'created_at']),
-            'priorities'   => Priority::orderByRaw('sequence_no IS NULL, sequence_no ASC')
+            'priorities'   => Priority::orderByRaw('CASE WHEN sequence_no IS NULL THEN 1 ELSE 0 END, sequence_no ASC')
                 ->orderBy('name')
                 ->get(['id', 'name', 'sequence_no', 'description', 'created_at']),
             'statuses'     => MasterStatus::latest()->get(['id', 'name', 'description', 'created_at']),
