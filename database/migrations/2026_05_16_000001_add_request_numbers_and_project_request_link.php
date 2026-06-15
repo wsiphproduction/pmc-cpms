@@ -10,7 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('project_requests', function (Blueprint $table) {
-            $table->string('request_no', 40)->nullable()->unique()->after('id');
+            $table->string('request_no', 40)->nullable()->unique();
         });
 
         Schema::table('projects', function (Blueprint $table) {

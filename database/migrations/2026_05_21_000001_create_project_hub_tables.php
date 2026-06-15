@@ -15,7 +15,7 @@ return new class extends Migration
             $table->string('contractor_name');
             $table->date('sent_date');
             $table->date('due_date')->nullable();
-            $table->enum('status', ['pending', 'submitted', 'awarded', 'expired'])->default('pending');
+            $table->string('status', 20)->default('pending');
             $table->text('scope_of_work')->nullable();
             $table->text('terms_conditions')->nullable();
             $table->text('inclusions')->nullable();
@@ -91,7 +91,7 @@ return new class extends Migration
             $table->string('title');
             $table->text('description')->nullable();
             $table->decimal('amount', 15, 2)->default(0);
-            $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending');
+            $table->string('status', 20)->default('pending');
             $table->date('submitted_date');
             $table->date('approved_date')->nullable();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();
@@ -146,8 +146,8 @@ return new class extends Migration
             $table->unsignedTinyInteger('progress_pct')->default(0);
             $table->text('summary')->nullable();
             $table->text('remarks')->nullable();
-            $table->enum('recommendation', ['approve', 'hold'])->nullable();
-            $table->enum('status', ['pending', 'approved', 'paid'])->default('pending');
+            $table->string('recommendation', 20)->nullable();
+            $table->string('status', 20)->default('pending');
             $table->string('file_path', 500)->nullable();
             $table->string('filename', 255)->nullable();
             $table->foreignId('created_by')->nullable()->constrained('users')->nullOnDelete();

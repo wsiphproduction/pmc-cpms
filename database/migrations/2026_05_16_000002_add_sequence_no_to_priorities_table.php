@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('priorities', function (Blueprint $table) {
-            $table->unsignedInteger('sequence_no')->nullable()->after('name');
+            $table->unsignedInteger('sequence_no')->nullable();
         });
     }
 

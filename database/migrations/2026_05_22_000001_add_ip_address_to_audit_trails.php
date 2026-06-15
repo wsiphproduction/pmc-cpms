@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('audit_trails', function (Blueprint $table) {
-            $table->string('ip_address', 45)->nullable()->after('changes');
+            $table->string('ip_address', 45)->nullable();
         });
     }
 
