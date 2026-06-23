@@ -173,8 +173,9 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
         capex: false,
         for_budgeting: false,
     });
-    const [processing, setProcessing] = useState(false);
-    const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
+    const [processing,      setProcessing]      = useState(false);
+    const [errors,          setErrors]          = useState<Partial<Record<keyof FormData, string>>>({});
+    const [attachmentError, setAttachmentError] = useState('');
 
     let _nextId = 1;
     const makeRow = (type: UploadRow['type']): UploadRow => ({ id: _nextId++, file: null, description: '', type });
@@ -201,6 +202,19 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (requiresCostCode && !form.costcode) {
+            setErrors(p => ({ ...p, costcode: 'Cost code is required when both OPEX and CAPEX are selected.' }));
+            return;
+        }
+        setErrors({});
+
+        const totalFiles = [...pictureRows, ...drawingRows, ...reportRows].filter(r => r.file).length;
+        if (totalFiles === 0) {
+            setAttachmentError('At least one attachment is required.');
+            return;
+        }
+        setAttachmentError('');
         setProcessing(true);
 
         const fd = new FormData();
@@ -303,13 +317,25 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                         {requiresCostCode && (
                             <>
                                 <FormLabel required>Cost Code</FormLabel>
-                                <SearchableSelect value={form.costcode} onChange={value => set('costcode', value)} options={costCodes} placeholder="Type or select cost code..." required listId="cost-code-options" />
+                                <SearchableSelect value={form.costcode} onChange={value => { set('costcode', value); setErrors(p => ({ ...p, costcode: '' })); }} options={costCodes} placeholder="Type or select cost code..." required listId="cost-code-options" />
+                                {errors.costcode && (
+                                    <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '5px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                        {errors.costcode}
+                                    </p>
+                                )}
                             </>
                         )}
                     </div>
                 </div>
 
                 <SectionTitle>Supporting Documents &amp; Media</SectionTitle>
+                {attachmentError && (
+                    <p style={{ fontSize: '12px', color: '#dc2626', margin: '-12px 0 16px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        {attachmentError}
+                    </p>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '32px' }}>
                     <UploadSection
                         label="Picture Attachments" accept="image/*" placeholder="Image description" rows={pictureRows}

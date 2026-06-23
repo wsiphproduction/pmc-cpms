@@ -1,8 +1,13 @@
-export const CONTRACTORS: string[] = [
-    'Apex Engineering Group',
-    'BuildRight Solutions',
-    'Discaya Construction',
-    'Global Infra Systems',
-    'Precision Mechanical Ltd',
-    'Titan Gel Construction',
+export interface Contractor {
+    name: string;
+    email: string;
+}
+
+export const CONTRACTORS: Contractor[] = [
+    { name: 'Apex Engineering Group',   email: 'rfq@apexengineering.com' },
+    { name: 'BuildRight Solutions',     email: 'rfq@buildright.com' },
+    { name: 'Discaya Construction',     email: 'rfq@discaya.com' },
+    { name: 'Global Infra Systems',     email: 'rfq@globalinfra.com' },
+    { name: 'Precision Mechanical Ltd', email: 'rfq@precisionmech.com' },
+    { name: 'Titan Gel Construction',   email: 'rfq@titangelconstruction.com' },
 ];

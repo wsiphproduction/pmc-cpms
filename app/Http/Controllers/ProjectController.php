@@ -108,6 +108,10 @@ class ProjectController extends Controller
         abort_if($sourceRequest && $sourceRequest->status !== 'approved', 422, 'Only approved requests can be converted to projects.');
         abort_if($sourceRequest?->project, 409, 'This project request already has a project.');
 
+        if ($data['project_type'] === 'major' && !$request->hasFile('proposal_document')) {
+            return back()->withErrors(['proposal_document' => 'Approved proposal document is required for major projects.'])->withInput();
+        }
+
         $project = Project::create([
             'project_request_id' => $data['project_request_id'] ?? null,
             'project_no' => $this->nextProjectNo(),
@@ -134,8 +138,14 @@ class ProjectController extends Controller
             'need_electrical' => $request->boolean('need_electrical'),
             'need_mechanical' => $request->boolean('need_mechanical'),
             'notes' => $data['notes'] ?? null,
+            'project_type' => $data['project_type'],
             'created_by' => auth()->id(),
         ]);
+
+        if ($request->hasFile('proposal_document')) {
+            $path = $request->file('proposal_document')->store('proposals', 'public');
+            $project->update(['proposal_document' => $path]);
+        }
 
         $project->statusLogs()->create([
             'user_id' => auth()->id(),
@@ -169,6 +179,10 @@ class ProjectController extends Controller
         $data = $this->validatedProjectData($request);
         $manager = User::find($data['project_manager']);
 
+        if ($data['project_type'] === 'major' && !$project->proposal_document && !$request->hasFile('proposal_document')) {
+            return back()->withErrors(['proposal_document' => 'Approved proposal document is required for major projects.'])->withInput();
+        }
+
         $project->update([
             'title' => $data['title'],
             'project_manager_id' => $manager?->id,
@@ -193,7 +207,16 @@ class ProjectController extends Controller
             'need_electrical' => $request->boolean('need_electrical'),
             'need_mechanical' => $request->boolean('need_mechanical'),
             'notes' => $data['notes'] ?? null,
+            'project_type' => $data['project_type'],
         ]);
+
+        if ($request->hasFile('proposal_document')) {
+            if ($project->proposal_document) {
+                Storage::disk('public')->delete($project->proposal_document);
+            }
+            $path = $request->file('proposal_document')->store('proposals', 'public');
+            $project->update(['proposal_document' => $path]);
+        }
 
         return redirect()->route('projects.show', $project)
             ->with('success', 'Project updated successfully.');
@@ -235,7 +258,7 @@ class ProjectController extends Controller
 
     public function hub(Project $project, string $section): Response
     {
-        $validSections = ['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at'];
+        $validSections = ['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
         $project->load(['manager', 'statusLogs.user']);
@@ -263,6 +286,9 @@ class ProjectController extends Controller
                     'terms'           => $rfq->terms_conditions,
                     'inclusions'      => $rfq->inclusions,
                     'exclusions'      => $rfq->exclusions,
+                    'quotation_file'  => $rfq->quotation_file ? Storage::disk('public')->url($rfq->quotation_file) : null,
+                    'recipient_email' => $rfq->recipient_email,
+                    'has_ntp'         => $project->ntps()->where('project_rfq_id', $rfq->id)->exists(),
                     'items'           => $rfq->items->map(fn ($item) => [
                         'seq'        => $item->seq,
                         'description'=> $item->description,
@@ -310,14 +336,27 @@ class ProjectController extends Controller
 
             'vof' => [
                 'vofs' => $project->variationOrders()->get()->map(fn ($vo) => [
-                    'id'             => $vo->id,
-                    'vo_no'          => $vo->vo_no,
-                    'title'          => $vo->title,
-                    'description'    => $vo->description,
-                    'amount'         => (float) $vo->amount,
-                    'status'         => ucfirst($vo->status),
-                    'submitted_date' => optional($vo->submitted_date)->format('M d, Y') ?? '-',
-                    'approved_date'  => optional($vo->approved_date)->format('M d, Y') ?? '-',
+                    'id'                => $vo->id,
+                    'vo_no'             => $vo->vo_no,
+                    'title'             => $vo->title,
+                    'description'       => $vo->description,
+                    'amount'            => (float) $vo->amount,
+                    'status'            => ucfirst($vo->status),
+                    'submitted_date'    => optional($vo->submitted_date)->format('M d, Y') ?? '-',
+                    'approved_date'     => optional($vo->approved_date)->format('Y-m-d'),
+                    'requestor'         => $vo->requestor,
+                    'date_of_request'   => optional($vo->date_of_request)->format('Y-m-d'),
+                    'priority'          => $vo->priority,
+                    'attachment_url'    => $vo->attachment ? Storage::disk('public')->url($vo->attachment) : null,
+                    'scope_original'    => $vo->scope_original,
+                    'scope_proposed'    => $vo->scope_proposed,
+                    'scope_remark'      => $vo->scope_remark,
+                    'schedule_original' => $vo->schedule_original,
+                    'schedule_proposed' => $vo->schedule_proposed,
+                    'schedule_remark'   => $vo->schedule_remark,
+                    'cost_original'     => $vo->cost_original,
+                    'cost_proposed'     => $vo->cost_proposed,
+                    'cost_remark'       => $vo->cost_remark,
                 ])->values(),
             ],
 
@@ -346,7 +385,13 @@ class ProjectController extends Controller
             ],
 
             'rfp' => [
-                'billings' => $project->billings()->get()->map(fn ($b) => [
+                'ntps'     => $project->ntps()->get()->map(fn ($n) => [
+                    'id'            => $n->id,
+                    'ntp_no'        => $n->ntp_no,
+                    'contractor'    => $n->contractor_name,
+                    'approved_cost' => (float) $n->approved_cost,
+                ])->values(),
+                'billings' => $project->billings()->with('ntp')->get()->map(fn ($b) => [
                     'id'              => $b->id,
                     'stmt_no'         => $b->stmt_no,
                     'billing_type'    => $b->billing_type,
@@ -355,13 +400,18 @@ class ProjectController extends Controller
                     'period_from_raw' => optional($b->period_from)->format('Y-m-d'),
                     'period_to_raw'   => optional($b->period_to)->format('Y-m-d'),
                     'amount'          => (float) $b->amount,
-                    'progress_pct'    => $b->progress_pct,
+                    'progress_pct'    => $b->progress_pct !== null ? (float) $b->progress_pct : null,
                     'summary'         => $b->summary,
                     'remarks'         => $b->remarks,
                     'status'          => ucfirst($b->status),
                     'status_raw'      => $b->status,
                     'filename'        => $b->filename,
                     'url'             => $b->file_path ? Storage::disk('public')->url($b->file_path) : null,
+                    'attachments'         => $b->attachments ?? [],
+                    'ntp_id'              => $b->project_ntp_id,
+                    'ntp_no'              => $b->ntp?->ntp_no,
+                    'ntp_contractor'      => $b->ntp?->contractor_name,
+                    'ntp_approved_cost'   => $b->ntp ? (float) $b->ntp->approved_cost : null,
                 ])->values(),
             ],
 
@@ -407,6 +457,15 @@ class ProjectController extends Controller
                     ])->values(),
             ],
 
+            'todo' => [
+                'tasks' => $project->tasks()->get()->map(fn ($t) => [
+                    'id'          => $t->id,
+                    'task_name'   => $t->task_name,
+                    'target_date' => $t->target_date,
+                    'status'      => $t->status,
+                ])->values(),
+            ],
+
             default => [],
         };
     }
@@ -414,6 +473,7 @@ class ProjectController extends Controller
     private function validatedProjectData(Request $request): array
     {
         return $request->validate([
+            'project_type' => ['required', 'in:major,minor'],
             'title' => ['required', 'string', 'max:255'],
             'project_manager' => ['required', 'exists:users,id'],
             'site' => ['required', 'string', 'max:255'],
@@ -437,6 +497,7 @@ class ProjectController extends Controller
             'need_mechanical' => ['boolean'],
             'notes' => ['nullable', 'string'],
             'project_request_id' => ['nullable', 'exists:project_requests,id', 'unique:projects,project_request_id'],
+            'proposal_document' => ['nullable', 'file', 'max:20480', 'mimes:pdf,doc,docx'],
         ]);
     }
 
@@ -557,7 +618,11 @@ class ProjectController extends Controller
                 'electrical' => $project->need_electrical,
                 'mechanical' => $project->need_mechanical,
             ],
-            'admin_notes' => $project->notes ?? 'No notes recorded.',
+            'admin_notes'          => $project->notes ?? 'No notes recorded.',
+            'project_type'         => $project->project_type ?? 'minor',
+            'proposal_document_url'=> $project->proposal_document
+                ? Storage::disk('public')->url($project->proposal_document)
+                : null,
             'status_logs' => $project->statusLogs->map(fn ($log) => [
                 'id' => $log->id,
                 'date' => $log->created_at?->format('M d, Y') ?? '',
@@ -596,6 +661,10 @@ class ProjectController extends Controller
             'need_electrical' => $project->need_electrical,
             'need_mechanical' => $project->need_mechanical,
             'notes' => $project->notes ?? '',
+            'project_type' => $project->project_type ?? 'minor',
+            'proposal_document_url' => $project->proposal_document
+                ? Storage::disk('public')->url($project->proposal_document)
+                : null,
         ];
     }
 

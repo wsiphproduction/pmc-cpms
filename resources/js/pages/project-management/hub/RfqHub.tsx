@@ -19,6 +19,9 @@ interface RfqRow {
     terms?: string;
     inclusions?: string;
     exclusions?: string;
+    quotation_file?: string | null;
+    recipient_email?: string | null;
+    has_ntp: boolean;
     items?: RfqItem[];
 }
 
@@ -82,6 +85,7 @@ function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProj
     const [exclusions, setExclusions] = useState(row.exclusions ?? '');
     const [saving, setSaving]         = useState(false);
     const [error, setError]           = useState('');
+    const [quotationFile, setQuotationFile] = useState<File | null>(null);
     const [rows, setRows]             = useState<RfqItem[]>(() =>
         Array.from({ length: 10 }, (_, i) => {
             const src = row.items?.[i];
@@ -116,7 +120,8 @@ function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProj
         if (!scope.trim()) { setError('Scope of Work is required.'); return; }
         setError('');
         setSaving(true);
-        router.patch(route('hub.rfq.update', [project.id, row.id]), {
+
+        const basePayload = {
             scope_of_work:    scope,
             due_date:         due || null,
             duration_days:    duration || null,
@@ -124,7 +129,19 @@ function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProj
             inclusions,
             exclusions,
             items: rows.filter(r => r.description?.trim()) as any,
-        }, { preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false) });
+        };
+
+        const opts = { preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false) };
+
+        if (quotationFile) {
+            // PHP only parses $_FILES for POST — use method-spoofed POST so the file is accessible
+            router.post(route('hub.rfq.update', [project.id, row.id]),
+                { ...basePayload, _method: 'patch', quotation_file: quotationFile },
+                opts,
+            );
+        } else {
+            router.patch(route('hub.rfq.update', [project.id, row.id]), basePayload, opts);
+        }
     };
 
     return (
@@ -206,6 +223,112 @@ function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProj
                     </div>
                 </div>
             </div>
+
+            <ModalSection>V. Quotation File Attachment</ModalSection>
+            <div style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: '8px', padding: '16px', display: 'flex', gap: '18px', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                    <Field label="Upload Quotation File (PDF, Word, Excel, Image — max 20 MB)">
+                        <input
+                            type="file"
+                            accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                            onChange={e => setQuotationFile(e.target.files?.[0] ?? null)}
+                            style={{ ...inputStyle, padding: '6px 8px', fontSize: '12.5px', cursor: 'pointer' }}
+                        />
+                    </Field>
+                    {quotationFile && (
+                        <div style={{ marginTop: '6px', fontSize: '12px', color: '#2563eb', fontWeight: 600 }}>
+                            Selected: {quotationFile.name}
+                        </div>
+                    )}
+                </div>
+                {row.quotation_file && (
+                    <div style={{ flexShrink: 0, paddingTop: '20px' }}>
+                        <a
+                            href={row.quotation_file}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 700, textDecoration: 'none' }}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            View Current File
+                        </a>
+                        <div style={{ marginTop: '4px', fontSize: '11px', color: '#94a3b8' }}>Upload new file to replace</div>
+                    </div>
+                )}
+            </div>
+        </Modal>
+    );
+}
+
+// ── Send Confirm Modal ─────────────────────────────────────────────────────
+function SendConfirmModal({ contractor, dueDate, email, onClose, onSend }: {
+    contractor: string;
+    dueDate: string;
+    email: string;
+    onClose: () => void;
+    onSend: (email: string) => void;
+}) {
+    const [recipientEmail, setRecipientEmail] = useState(email);
+    const [emailError, setEmailError]         = useState('');
+
+    const handleConfirm = () => {
+        if (!recipientEmail.trim()) { setEmailError('Email address is required.'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail.trim())) { setEmailError('Please enter a valid email address.'); return; }
+        setEmailError('');
+        onSend(recipientEmail.trim());
+    };
+
+    return (
+        <Modal title="Confirm & Send RFQ" onClose={onClose} size="460px" headerBg="#2563eb"
+            footer={<>
+                <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Cancel</button>
+                <button type="button" onClick={handleConfirm} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                    Send RFQ
+                </button>
+            </>}
+        >
+            {/* Contractor info strip */}
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                <div>
+                    <div style={{ fontSize: '10px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Service Contractor</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e3a8a' }}>{contractor}</div>
+                </div>
+                {dueDate && (
+                    <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Due Date</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e3a8a' }}>{dueDate}</div>
+                    </div>
+                )}
+            </div>
+
+            {/* Email input */}
+            <div style={{ marginBottom: '6px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                    Recipient Email Address
+                </label>
+                <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    </span>
+                    <input
+                        type="email"
+                        value={recipientEmail}
+                        onChange={e => { setRecipientEmail(e.target.value); setEmailError(''); }}
+                        placeholder="contractor@example.com"
+                        autoFocus
+                        style={{
+                            width: '100%', boxSizing: 'border-box', padding: '9px 11px 9px 34px',
+                            border: `1.5px solid ${emailError ? '#fca5a5' : '#e2e8f0'}`,
+                            borderRadius: '7px', fontSize: '13px', fontFamily: 'inherit', outline: 'none',
+                            background: emailError ? '#fff7f7' : '#fff',
+                        }}
+                    />
+                </div>
+                {emailError && <div style={{ color: '#dc2626', fontSize: '11.5px', fontWeight: 600, marginTop: '5px' }}>{emailError}</div>}
+                <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '5px' }}>You can edit the email before sending.</div>
+            </div>
         </Modal>
     );
 }
@@ -281,24 +404,41 @@ function SuccessModal({ contractor, onClose }: { contractor: string; onClose: ()
 export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: RfqRow[] }) {
     const [dispatchContractor, setDispatchContractor] = useState('');
     const [dueDate, setDueDate] = useState('');
-    const [showSuccess, setShowSuccess] = useState(false);
+    const [showSuccess, setShowSuccess]   = useState(false);
     const [sentContractor, setSentContractor] = useState('');
-    const [viewRow, setViewRow]         = useState<RfqRow | null>(null);
-    const [ntpRow, setNtpRow]           = useState<RfqRow | null>(null);
-    const [sending, setSending]         = useState(false);
-    const [sendError, setSendError]     = useState('');
+    const [showSendModal, setShowSendModal]   = useState(false);
+    const [viewRow, setViewRow]           = useState<RfqRow | null>(null);
+    const [ntpRow, setNtpRow]             = useState<RfqRow | null>(null);
+    const [sending, setSending]           = useState(false);
+    const [sendError, setSendError]       = useState('');
 
-    const handleSend = () => {
+    // Set of contractors that already have an RFQ on this project
+    const usedContractors = new Set(rfqs.map(r => r.contractor));
+
+    const selectedContractor = CONTRACTORS.find(c => c.name === dispatchContractor) ?? null;
+
+    const handleOpenSendModal = () => {
         if (!dispatchContractor) { setSendError('Please select a contractor before sending.'); return; }
+        if (usedContractors.has(dispatchContractor)) {
+            setSendError(`An RFQ has already been sent to ${dispatchContractor} for this project.`);
+            return;
+        }
         setSendError('');
+        setShowSendModal(true);
+    };
+
+    const handleSend = (recipientEmail: string) => {
+        setShowSendModal(false);
         setSending(true);
         router.post(route('hub.rfq.store', project.id), {
             contractor_name: dispatchContractor,
-            due_date: dueDate || null,
+            due_date:        dueDate || null,
+            recipient_email: recipientEmail,
         }, {
             preserveScroll: true,
             onSuccess: () => { setSentContractor(dispatchContractor); setShowSuccess(true); setDispatchContractor(''); setDueDate(''); },
             onFinish: () => setSending(false),
+            onError:  (errors) => { if (errors.contractor_name) setSendError(errors.contractor_name); },
         });
     };
 
@@ -316,12 +456,34 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
         }, { title: 'Update Status', confirmLabel: 'Confirm', variant: 'warning' });
     };
 
+    const filePreviewCell = (row: RfqRow) => {
+        if (!row.quotation_file) return <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>;
+        return (
+            <a
+                href={row.quotation_file}
+                target="_blank"
+                rel="noreferrer"
+                title="View quotation file"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb', fontSize: '11.5px', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}
+            >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                View File
+            </a>
+        );
+    };
+
     const actionCell = (row: RfqRow) => {
         if (row.status === 'Awarded') return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 <ActionBtns view onView={() => setViewRow(row)} />
                 <ActionBtns print />
-                <Button variant="success" onClick={() => setNtpRow(row)}>Create NTP</Button>
+                {row.has_ntp ? (
+                    <span style={{ padding: '5px 12px', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', fontSize: '11.5px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        ✓ NTP Issued
+                    </span>
+                ) : (
+                    <Button variant="success" onClick={() => setNtpRow(row)}>Create NTP</Button>
+                )}
             </div>
         );
         if (row.status === 'Submitted') return (
@@ -366,6 +528,15 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
         <HubShell>
             {confirmDialog}
             {showSuccess   && <SuccessModal contractor={sentContractor} onClose={() => setShowSuccess(false)} />}
+            {showSendModal && selectedContractor && (
+                <SendConfirmModal
+                    contractor={selectedContractor.name}
+                    dueDate={dueDate}
+                    email={selectedContractor.email}
+                    onClose={() => setShowSendModal(false)}
+                    onSend={handleSend}
+                />
+            )}
             {viewRow       && <RfqViewModal row={viewRow} project={project} onClose={() => setViewRow(null)} />}
             {ntpRow        && <NtpModal row={ntpRow} project={project} onClose={() => setNtpRow(null)} />}
 
@@ -374,19 +545,27 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '18px', marginBottom: '22px' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 180px', gap: '14px', alignItems: 'end' }}>
                     <Field label="Select Contractor">
-                        <select style={inputStyle} value={dispatchContractor} onChange={e => setDispatchContractor(e.target.value)}>
+                        <select style={inputStyle} value={dispatchContractor} onChange={e => { setDispatchContractor(e.target.value); setSendError(''); }}>
                             <option value="" disabled>Choose from registered contractors...</option>
-                            {CONTRACTORS.map(name => (
-                                <option key={name}>{name}</option>
+                            {CONTRACTORS.map(c => (
+                                <option key={c.name} value={c.name} disabled={usedContractors.has(c.name)}>
+                                    {c.name}{usedContractors.has(c.name) ? ' — Already Sent' : ''}
+                                </option>
                             ))}
                         </select>
+                        {selectedContractor && (
+                            <div style={{ marginTop: '5px', fontSize: '11.5px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                {selectedContractor.email}
+                            </div>
+                        )}
                     </Field>
                     <Field label="Due Date (Optional)">
                         <input type="date" style={inputStyle} value={dueDate} onChange={e => setDueDate(e.target.value)} />
                     </Field>
                     <div>
                         <div style={{ fontSize: '11px', fontWeight: 800, color: '#374151', marginBottom: '5px' }}>&nbsp;</div>
-                        <button type="button" onClick={handleSend} disabled={sending} style={{ width: '100%', padding: '8px 13px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                        <button type="button" onClick={handleOpenSendModal} disabled={sending} style={{ width: '100%', padding: '8px 13px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                             {sending ? 'Sending...' : 'Send RFQ'}
                         </button>
@@ -401,14 +580,21 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
             </div>
 
             <DataTable
-                headers={['Contractor Name', 'Sent Date', 'Due Date', 'Status', 'Actions']}
-                rows={rfqs.map(row => [
-                    <strong>{row.contractor}</strong>,
-                    row.sent,
-                    row.due,
-                    <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>,
-                    actionCell(row),
-                ])}
+                headers={['Contractor Name', 'Sent Date', 'Due Date', 'Status', 'Total Amount', 'File', 'Actions']}
+                rows={rfqs.map(row => {
+                    const grandTotal = (row.items ?? []).reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
+                    return [
+                        <strong>{row.contractor}</strong>,
+                        row.sent,
+                        row.due,
+                        <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>,
+                        grandTotal > 0
+                            ? <strong style={{ color: '#2563eb' }}>PhP {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+                            : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
+                        filePreviewCell(row),
+                        actionCell(row),
+                    ];
+                })}
             />
         </HubShell>
     );

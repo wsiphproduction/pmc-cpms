@@ -67,9 +67,9 @@ class ProjectRequestController extends Controller
             'capex'           => ['boolean'],
             'for_budgeting'   => ['boolean'],
 
-            'attachments'               => ['nullable', 'array'],
-            'attachments.*.file'        => ['nullable', 'file', 'max:10240'],
-            'attachments.*.type'        => ['required_with:attachments.*.file', 'string', 'in:picture,drawing,report'],
+            'attachments'               => ['required', 'array', 'min:1'],
+            'attachments.*.file'        => ['required', 'file', 'max:10240'],
+            'attachments.*.type'        => ['required', 'string', 'in:picture,drawing,report'],
             'attachments.*.description' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -80,7 +80,7 @@ class ProjectRequestController extends Controller
             'description'   => $request->description,
             'requester_id'  => auth()->id(),
             'job_location'  => $request->job_location,
-            'costcode'      => $request->costcode,
+            'costcode'      => $request->costcode ?: null,
             'opex'          => $request->boolean('opex'),
             'capex'         => $request->boolean('capex'),
             'for_budgeting' => $request->boolean('for_budgeting'),
@@ -143,12 +143,20 @@ class ProjectRequestController extends Controller
             'deleted_attachments.*' => ['integer'],
         ]);
 
+        $existingCount = $projectRequest->attachments()->count();
+        $deletedCount  = count($request->input('deleted_attachments', []));
+        $newFileCount  = count(array_filter($request->file('attachments', []), fn ($a) => !empty($a['file'])));
+
+        if ($existingCount - $deletedCount + $newFileCount < 1) {
+            return back()->withErrors(['attachments' => 'At least one attachment is required.'])->withInput();
+        }
+
         $projectRequest->update([
             'title'         => $request->title,
             'job_type'      => $request->job_type,
             'description'   => $request->description,
             'job_location'  => $request->job_location,
-            'costcode'      => $request->costcode,
+            'costcode'      => $request->costcode ?: null,
             'opex'          => $request->boolean('opex'),
             'capex'         => $request->boolean('capex'),
             'for_budgeting' => $request->boolean('for_budgeting'),

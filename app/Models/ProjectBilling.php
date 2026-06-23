@@ -12,6 +12,7 @@ class ProjectBilling extends Model
 
     protected $fillable = [
         'project_id',
+        'project_ntp_id',
         'stmt_no',
         'billing_type',
         'period_from',
@@ -20,6 +21,7 @@ class ProjectBilling extends Model
         'progress_pct',
         'summary',
         'remarks',
+        'attachments',
         'recommendation',
         'status',
         'file_path',
@@ -31,12 +33,18 @@ class ProjectBilling extends Model
         'period_from'  => 'date',
         'period_to'    => 'date',
         'amount'       => 'decimal:2',
-        'progress_pct' => 'integer',
+        'progress_pct' => 'decimal:2',
+        'attachments'  => 'array',
     ];
 
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function ntp(): BelongsTo
+    {
+        return $this->belongsTo(ProjectNtp::class, 'project_ntp_id');
     }
 
     public function creator(): BelongsTo

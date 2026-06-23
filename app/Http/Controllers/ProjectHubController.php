@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\RfqDispatched;
 use App\Models\AuditTrail;
+use Illuminate\Support\Facades\Mail;
 use App\Models\Project;
 use App\Models\ProjectBilling;
 use App\Models\ProjectIocItem;
@@ -12,6 +14,7 @@ use App\Models\ProjectPermit;
 use App\Models\ProjectQualityDoc;
 use App\Models\ProjectRfq;
 use App\Models\ProjectVariationOrder;
+use App\Models\ProjectTask;
 use App\Models\ProjectWeeklyReport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,8 +27,16 @@ class ProjectHubController extends Controller
     public function storeRfq(Request $request, Project $project): RedirectResponse
     {
         $data = $request->validate([
-            'contractor_name' => ['required', 'string', 'max:255'],
+            'contractor_name' => [
+                'required', 'string', 'max:255',
+                function ($attr, $value, $fail) use ($project) {
+                    if ($project->rfqs()->where('contractor_name', $value)->exists()) {
+                        $fail("An RFQ has already been sent to {$value} for this project.");
+                    }
+                },
+            ],
             'due_date'        => ['nullable', 'date'],
+            'recipient_email' => ['nullable', 'email', 'max:255'],
         ]);
 
         $rfq = $project->rfqs()->create([
@@ -35,6 +46,14 @@ class ProjectHubController extends Controller
             'created_by' => auth()->id(),
         ]);
 
+        if (!empty($data['recipient_email'])) {
+            try {
+                Mail::to($data['recipient_email'])->send(new RfqDispatched($rfq, $project));
+            } catch (\Throwable $e) {
+                \Log::error("RFQ email failed for RFQ #{$rfq->id}: " . $e->getMessage());
+            }
+        }
+
         AuditTrail::log("Dispatched RFQ to {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'create']);
 
         return back()->with('success', 'RFQ dispatched successfully.');
@@ -42,7 +61,7 @@ class ProjectHubController extends Controller
 
     public function updateRfq(Request $request, Project $project, ProjectRfq $rfq): RedirectResponse
     {
-        abort_unless($rfq->project_id === $project->id, 403);
+        abort_unless((int) $rfq->project_id === (int) $project->id, 403);
 
         $data = $request->validate([
             'scope_of_work'       => ['nullable', 'string'],
@@ -57,21 +76,38 @@ class ProjectHubController extends Controller
             'items.*.unit'        => ['nullable', 'string', 'max:50'],
             'items.*.unit_cost'   => ['nullable', 'numeric', 'min:0'],
             'items.*.total_cost'  => ['nullable', 'numeric'],
+            'quotation_file'      => ['nullable', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx'],
         ]);
 
-        $rfq->update(\Arr::except($data, ['items']));
+        $rfq->update([
+            'scope_of_work'    => ($data['scope_of_work']    ?? '') ?: null,
+            'due_date'         => ($data['due_date']         ?? '') ?: null,
+            'duration_days'    => ($data['duration_days']    ?? '') ?: null,
+            'terms_conditions' => ($data['terms_conditions'] ?? '') ?: null,
+            'inclusions'       => ($data['inclusions']       ?? '') ?: null,
+            'exclusions'       => ($data['exclusions']       ?? '') ?: null,
+        ]);
 
-        if (isset($data['items'])) {
+        if (!empty($data['quotation_file'])) {
+            $oldPath = $rfq->fresh()->quotation_file;
+            if ($oldPath) {
+                Storage::disk('public')->delete($oldPath);
+            }
+            $path = $data['quotation_file']->store('rfq-files', 'public');
+            $rfq->update(['quotation_file' => $path]);
+        }
+
+        if (!empty($data['items'])) {
             $rfq->items()->delete();
             foreach (array_values($data['items']) as $i => $item) {
                 if (empty($item['description'])) continue;
                 $rfq->items()->create([
-                    'seq'        => $i + 1,
-                    'description'=> $item['description'],
-                    'qty'        => $item['qty']        ?? null,
-                    'unit'       => $item['unit']        ?? null,
-                    'unit_cost'  => $item['unit_cost']   ?? null,
-                    'total_cost' => $item['total_cost']  ?? null,
+                    'seq'         => $i + 1,
+                    'description' => $item['description'],
+                    'qty'         => ($item['qty']        ?? '') !== '' ? (float) $item['qty']        : null,
+                    'unit'        => ($item['unit']       ?? '') ?: null,
+                    'unit_cost'   => ($item['unit_cost']  ?? '') !== '' ? (float) $item['unit_cost']  : null,
+                    'total_cost'  => ($item['total_cost'] ?? '') !== '' ? (float) $item['total_cost'] : null,
                 ]);
             }
         }
@@ -96,7 +132,7 @@ class ProjectHubController extends Controller
 
     public function destroyRfq(Project $project, ProjectRfq $rfq): RedirectResponse
     {
-        abort_unless($rfq->project_id === $project->id, 403);
+        abort_unless((int) $rfq->project_id === (int) $project->id, 403);
 
         AuditTrail::log("Deleted RFQ for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'delete']);
         $rfq->delete();
@@ -110,7 +146,14 @@ class ProjectHubController extends Controller
     {
         $data = $request->validate([
             'contractor_name' => ['required', 'string', 'max:255'],
-            'project_rfq_id'  => ['nullable', 'exists:project_rfqs,id'],
+            'project_rfq_id'  => [
+                'nullable', 'exists:project_rfqs,id',
+                function ($attr, $value, $fail) use ($project) {
+                    if ($value && $project->ntps()->where('project_rfq_id', $value)->exists()) {
+                        $fail('An NTP has already been issued for this RFQ.');
+                    }
+                },
+            ],
             'baseline_start'  => ['required', 'date'],
             'baseline_end'    => ['required', 'date', 'after:baseline_start'],
             'approved_cost'   => ['required', 'numeric', 'min:0'],
@@ -138,7 +181,7 @@ class ProjectHubController extends Controller
 
     public function destroyNtp(Project $project, ProjectNtp $ntp): RedirectResponse
     {
-        abort_unless($ntp->project_id === $project->id, 403);
+        abort_unless((int) $ntp->project_id === (int) $project->id, 403);
 
         AuditTrail::log("NTP {$ntp->ntp_no} deleted", $project, ['module' => 'NTP', 'type' => 'delete']);
         $ntp->delete();
@@ -179,7 +222,7 @@ class ProjectHubController extends Controller
 
     public function destroyPermit(Project $project, ProjectPermit $permit): RedirectResponse
     {
-        abort_unless($permit->project_id === $project->id, 403);
+        abort_unless((int) $permit->project_id === (int) $project->id, 403);
 
         AuditTrail::log("Permit deleted: {$permit->label}", $project, ['module' => 'Permit', 'type' => 'delete']);
 
@@ -197,19 +240,52 @@ class ProjectHubController extends Controller
     public function storeVof(Request $request, Project $project): RedirectResponse
     {
         $data = $request->validate([
-            'title'       => ['required', 'string', 'max:255'],
-            'description' => ['nullable', 'string'],
-            'amount'      => ['required', 'numeric', 'min:0'],
+            'title'             => ['required', 'string', 'max:255'],
+            'description'       => ['nullable', 'string'],
+            'amount'            => ['required', 'numeric', 'min:0'],
+            'requestor'         => ['nullable', 'string', 'max:255'],
+            'date_of_request'   => ['nullable', 'date'],
+            'priority'          => ['nullable', 'string', 'max:255'],
+            'attachment'        => ['nullable', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+            'scope_original'    => ['nullable', 'string'],
+            'scope_proposed'    => ['nullable', 'string'],
+            'scope_remark'      => ['nullable', 'string'],
+            'schedule_original' => ['nullable', 'string'],
+            'schedule_proposed' => ['nullable', 'string'],
+            'schedule_remark'   => ['nullable', 'string'],
+            'cost_original'     => ['nullable', 'string'],
+            'cost_proposed'     => ['nullable', 'string'],
+            'cost_remark'       => ['nullable', 'string'],
         ]);
 
         $voNo = $this->nextVoNo($project);
 
+        $attachmentPath = null;
+        if ($request->hasFile('attachment')) {
+            $attachmentPath = $request->file('attachment')->store('vof-files', 'public');
+        }
+
         $project->variationOrders()->create([
-            ...$data,
-            'vo_no'          => $voNo,
-            'status'         => 'pending',
-            'submitted_date' => now()->toDateString(),
-            'created_by'     => auth()->id(),
+            'title'             => $data['title'],
+            'description'       => ($data['description']       ?? '') ?: null,
+            'amount'            => $data['amount'],
+            'requestor'         => ($data['requestor']         ?? '') ?: null,
+            'date_of_request'   => ($data['date_of_request']   ?? '') ?: null,
+            'priority'          => ($data['priority']           ?? '') ?: null,
+            'attachment'        => $attachmentPath,
+            'scope_original'    => ($data['scope_original']    ?? '') ?: null,
+            'scope_proposed'    => ($data['scope_proposed']    ?? '') ?: null,
+            'scope_remark'      => ($data['scope_remark']      ?? '') ?: null,
+            'schedule_original' => ($data['schedule_original'] ?? '') ?: null,
+            'schedule_proposed' => ($data['schedule_proposed'] ?? '') ?: null,
+            'schedule_remark'   => ($data['schedule_remark']   ?? '') ?: null,
+            'cost_original'     => ($data['cost_original']     ?? '') ?: null,
+            'cost_proposed'     => ($data['cost_proposed']     ?? '') ?: null,
+            'cost_remark'       => ($data['cost_remark']       ?? '') ?: null,
+            'vo_no'             => $voNo,
+            'status'            => 'pending',
+            'submitted_date'    => now()->toDateString(),
+            'created_by'        => auth()->id(),
         ]);
 
         AuditTrail::log("Variation Order {$voNo} submitted: {$data['title']}", $project, ['module' => 'VOF', 'type' => 'create']);
@@ -219,23 +295,64 @@ class ProjectHubController extends Controller
 
     public function updateVof(Request $request, Project $project, ProjectVariationOrder $vof): RedirectResponse
     {
-        abort_unless($vof->project_id === $project->id, 403);
+        abort_unless((int) $vof->project_id === (int) $project->id, 403);
 
         $data = $request->validate([
-            'status'        => ['required', 'in:pending,approved,rejected'],
-            'approved_date' => ['nullable', 'date'],
+            'title'             => ['required', 'string', 'max:255'],
+            'description'       => ['nullable', 'string'],
+            'amount'            => ['required', 'numeric', 'min:0'],
+            'status'            => ['required', 'in:pending,approved,rejected'],
+            'approved_date'     => ['nullable', 'date'],
+            'requestor'         => ['nullable', 'string', 'max:255'],
+            'date_of_request'   => ['nullable', 'date'],
+            'priority'          => ['nullable', 'string', 'max:255'],
+            'attachment'        => ['nullable', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,doc,docx'],
+            'scope_original'    => ['nullable', 'string'],
+            'scope_proposed'    => ['nullable', 'string'],
+            'scope_remark'      => ['nullable', 'string'],
+            'schedule_original' => ['nullable', 'string'],
+            'schedule_proposed' => ['nullable', 'string'],
+            'schedule_remark'   => ['nullable', 'string'],
+            'cost_original'     => ['nullable', 'string'],
+            'cost_proposed'     => ['nullable', 'string'],
+            'cost_remark'       => ['nullable', 'string'],
         ]);
 
-        $vof->update($data);
+        $vof->update([
+            'title'             => $data['title'],
+            'description'       => ($data['description']       ?? '') ?: null,
+            'amount'            => $data['amount'],
+            'status'            => $data['status'],
+            'approved_date'     => ($data['approved_date']     ?? '') ?: null,
+            'requestor'         => ($data['requestor']         ?? '') ?: null,
+            'date_of_request'   => ($data['date_of_request']   ?? '') ?: null,
+            'priority'          => ($data['priority']           ?? '') ?: null,
+            'scope_original'    => ($data['scope_original']    ?? '') ?: null,
+            'scope_proposed'    => ($data['scope_proposed']    ?? '') ?: null,
+            'scope_remark'      => ($data['scope_remark']      ?? '') ?: null,
+            'schedule_original' => ($data['schedule_original'] ?? '') ?: null,
+            'schedule_proposed' => ($data['schedule_proposed'] ?? '') ?: null,
+            'schedule_remark'   => ($data['schedule_remark']   ?? '') ?: null,
+            'cost_original'     => ($data['cost_original']     ?? '') ?: null,
+            'cost_proposed'     => ($data['cost_proposed']     ?? '') ?: null,
+            'cost_remark'       => ($data['cost_remark']       ?? '') ?: null,
+        ]);
 
-        AuditTrail::log("Variation Order {$vof->vo_no} status changed to {$data['status']}", $project, ['module' => 'VOF', 'type' => 'update']);
+        if ($request->hasFile('attachment')) {
+            $oldPath = $vof->fresh()->attachment;
+            if ($oldPath) Storage::disk('public')->delete($oldPath);
+            $path = $request->file('attachment')->store('vof-files', 'public');
+            $vof->update(['attachment' => $path]);
+        }
+
+        AuditTrail::log("Variation Order {$vof->vo_no} updated", $project, ['module' => 'VOF', 'type' => 'update']);
 
         return back()->with('success', 'Variation order updated.');
     }
 
     public function destroyVof(Project $project, ProjectVariationOrder $vof): RedirectResponse
     {
-        abort_unless($vof->project_id === $project->id, 403);
+        abort_unless((int) $vof->project_id === (int) $project->id, 403);
 
         AuditTrail::log("Variation Order {$vof->vo_no} deleted: {$vof->title}", $project, ['module' => 'VOF', 'type' => 'delete']);
         $vof->delete();
@@ -271,7 +388,7 @@ class ProjectHubController extends Controller
 
     public function destroyQpp(Project $project, ProjectQualityDoc $qpp): RedirectResponse
     {
-        abort_unless($qpp->project_id === $project->id, 403);
+        abort_unless((int) $qpp->project_id === (int) $project->id, 403);
 
         AuditTrail::log("Quality document deleted: {$qpp->label}", $project, ['module' => 'QPP', 'type' => 'delete']);
         Storage::disk('public')->delete($qpp->file_path);
@@ -309,7 +426,7 @@ class ProjectHubController extends Controller
 
     public function destroyMtr(Project $project, ProjectMtrDoc $mtr): RedirectResponse
     {
-        abort_unless($mtr->project_id === $project->id, 403);
+        abort_unless((int) $mtr->project_id === (int) $project->id, 403);
 
         AuditTrail::log("Material test report deleted: {$mtr->label}", $project, ['module' => 'MTR', 'type' => 'delete']);
         Storage::disk('public')->delete($mtr->file_path);
@@ -323,14 +440,17 @@ class ProjectHubController extends Controller
     public function storeBilling(Request $request, Project $project): RedirectResponse
     {
         $data = $request->validate([
-            'billing_type' => ['required', 'string', 'max:50'],
-            'period_from'  => ['nullable', 'date'],
-            'period_to'    => ['nullable', 'date'],
-            'amount'       => ['required', 'numeric', 'min:0'],
-            'progress_pct' => ['nullable', 'integer', 'min:0', 'max:100'],
-            'summary'      => ['nullable', 'string'],
-            'remarks'      => ['nullable', 'string'],
-            'file'         => ['nullable', 'file', 'max:20480'],
+            'project_ntp_id' => ['nullable', 'exists:project_ntps,id'],
+            'billing_type'   => ['required', 'string', 'max:50'],
+            'period_from'    => ['nullable', 'date'],
+            'period_to'      => ['nullable', 'date'],
+            'amount'         => ['required', 'numeric', 'min:0'],
+            'progress_pct'   => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'summary'        => ['nullable', 'string'],
+            'remarks'        => ['nullable', 'string'],
+            'attachments'    => ['nullable', 'array'],
+            'attachments.*'  => ['string'],
+            'file'           => ['nullable', 'file', 'max:20480'],
         ]);
 
         $stmtNo = $this->nextStmtNo($project);
@@ -344,12 +464,20 @@ class ProjectHubController extends Controller
         }
 
         $project->billings()->create([
-            ...$data,
-            'stmt_no'    => $stmtNo,
-            'status'     => 'pending',
-            'file_path'  => $filePath,
-            'filename'   => $filename,
-            'created_by' => auth()->id(),
+            'project_ntp_id' => ($data['project_ntp_id'] ?? '') ?: null,
+            'billing_type'   => $data['billing_type'],
+            'period_from'    => ($data['period_from']  ?? '') ?: null,
+            'period_to'      => ($data['period_to']    ?? '') ?: null,
+            'amount'         => $data['amount'],
+            'progress_pct'   => ($data['progress_pct'] ?? '') !== '' ? $data['progress_pct'] : null,
+            'summary'        => ($data['summary']      ?? '') ?: null,
+            'remarks'        => ($data['remarks']      ?? '') ?: null,
+            'attachments'    => $data['attachments']   ?? null,
+            'stmt_no'        => $stmtNo,
+            'status'         => 'pending',
+            'file_path'      => $filePath,
+            'filename'       => $filename,
+            'created_by'     => auth()->id(),
         ]);
 
         AuditTrail::log("Billing {$stmtNo} submitted ({$data['billing_type']}) — PhP {$data['amount']}", $project, ['module' => 'RFP', 'type' => 'finance']);
@@ -359,21 +487,33 @@ class ProjectHubController extends Controller
 
     public function updateBilling(Request $request, Project $project, ProjectBilling $billing): RedirectResponse
     {
-        abort_unless($billing->project_id === $project->id, 403);
+        abort_unless((int) $billing->project_id === (int) $project->id, 403);
 
         $data = $request->validate([
             'billing_type' => ['required', 'string', 'max:50'],
             'period_from'  => ['nullable', 'date'],
             'period_to'    => ['nullable', 'date'],
             'amount'       => ['required', 'numeric', 'min:0'],
-            'progress_pct' => ['nullable', 'integer', 'min:0', 'max:100'],
+            'progress_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'summary'      => ['nullable', 'string'],
             'remarks'      => ['nullable', 'string'],
+            'attachments'  => ['nullable', 'array'],
+            'attachments.*'=> ['string'],
             'status'       => ['required', 'in:pending,approved,paid'],
         ]);
 
         $wasPaid = $billing->status === 'paid';
-        $billing->update($data);
+        $billing->update([
+            'billing_type' => $data['billing_type'],
+            'period_from'  => ($data['period_from']  ?? '') ?: null,
+            'period_to'    => ($data['period_to']    ?? '') ?: null,
+            'amount'       => $data['amount'],
+            'progress_pct' => ($data['progress_pct'] ?? '') !== '' ? $data['progress_pct'] : null,
+            'summary'      => ($data['summary']      ?? '') ?: null,
+            'remarks'      => ($data['remarks']      ?? '') ?: null,
+            'attachments'  => $data['attachments']   ?? null,
+            'status'       => $data['status'],
+        ]);
 
         if (!$wasPaid && $data['status'] === 'paid') {
             $project->increment('budget_paid', $billing->amount);
@@ -386,7 +526,7 @@ class ProjectHubController extends Controller
 
     public function updateBillingStatus(Request $request, Project $project, ProjectBilling $billing): RedirectResponse
     {
-        abort_unless($billing->project_id === $project->id, 403);
+        abort_unless((int) $billing->project_id === (int) $project->id, 403);
 
         $data = $request->validate([
             'status' => ['required', 'in:pending,approved,paid'],
@@ -405,7 +545,7 @@ class ProjectHubController extends Controller
 
     public function destroyBilling(Project $project, ProjectBilling $billing): RedirectResponse
     {
-        abort_unless($billing->project_id === $project->id, 403);
+        abort_unless((int) $billing->project_id === (int) $project->id, 403);
 
         AuditTrail::log("Billing {$billing->stmt_no} deleted ({$billing->billing_type})", $project, ['module' => 'RFP', 'type' => 'delete']);
 
@@ -450,7 +590,7 @@ class ProjectHubController extends Controller
 
     public function updateIoc(Request $request, Project $project, ProjectIocItem $ioc): RedirectResponse
     {
-        abort_unless($ioc->project_id === $project->id, 403);
+        abort_unless((int) $ioc->project_id === (int) $project->id, 403);
 
         $data = $request->validate([
             'description' => ['required', 'string', 'max:255'],
@@ -466,7 +606,7 @@ class ProjectHubController extends Controller
 
     public function destroyIoc(Project $project, ProjectIocItem $ioc): RedirectResponse
     {
-        abort_unless($ioc->project_id === $project->id, 403);
+        abort_unless((int) $ioc->project_id === (int) $project->id, 403);
 
         AuditTrail::log("Other cost deleted: {$ioc->description}", $project, ['module' => 'IOC', 'type' => 'delete']);
 
@@ -519,7 +659,7 @@ class ProjectHubController extends Controller
 
     public function destroyPsr(Project $project, ProjectWeeklyReport $psr): RedirectResponse
     {
-        abort_unless($psr->project_id === $project->id, 403);
+        abort_unless((int) $psr->project_id === (int) $project->id, 403);
 
         AuditTrail::log("Weekly report {$psr->week_code} deleted", $project, ['module' => 'PSR', 'type' => 'delete']);
 
@@ -529,6 +669,42 @@ class ProjectHubController extends Controller
         $psr->delete();
 
         return back()->with('success', 'Weekly report deleted.');
+    }
+
+    // ── Todo ─────────────────────────────────────────────────────────────────
+
+    public function storeTodo(Project $project, Request $request): RedirectResponse
+    {
+        $request->validate([
+            'task_name'   => ['required', 'string', 'max:255'],
+            'target_date' => ['required', 'date'],
+        ]);
+
+        $project->tasks()->create([
+            'task_name'   => $request->task_name,
+            'target_date' => $request->target_date,
+            'status'      => 'pending',
+        ]);
+
+        return back()->with('success', 'Task added.');
+    }
+
+    public function toggleTodo(Project $project, ProjectTask $task): RedirectResponse
+    {
+        abort_unless((int) $task->project_id === (int) $project->id, 403);
+
+        $task->update(['status' => $task->status === 'done' ? 'pending' : 'done']);
+
+        return back()->with('success', 'Task updated.');
+    }
+
+    public function destroyTodo(Project $project, ProjectTask $task): RedirectResponse
+    {
+        abort_unless((int) $task->project_id === (int) $project->id, 403);
+
+        $task->delete();
+
+        return back()->with('success', 'Task deleted.');
     }
 
     // ── Auto-numbering helpers ────────────────────────────────────────────────

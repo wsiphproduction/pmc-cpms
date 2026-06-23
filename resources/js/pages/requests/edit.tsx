@@ -161,8 +161,10 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
     const [opex,         setOpex]         = useState(projectRequest.opex);
     const [capex,        setCapex]        = useState(projectRequest.capex);
     const [forBudgeting, setForBudgeting] = useState(projectRequest.for_budgeting);
-    const [processing,   setProcessing]   = useState(false);
+    const [processing,         setProcessing]         = useState(false);
     const [deletedAttachments, setDeletedAttachments] = useState<number[]>([]);
+    const [attachmentError,    setAttachmentError]    = useState('');
+    const [costcodeError,      setCostcodeError]      = useState('');
 
     let _nextId = 1;
     const makeRow = (type: UploadRow['type']): UploadRow => ({ id: _nextId++, file: null, description: '', type });
@@ -180,6 +182,20 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (opex && capex && !costcode) {
+            setCostcodeError('Cost code is required when both OPEX and CAPEX are selected.');
+            return;
+        }
+        setCostcodeError('');
+
+        const existingRemaining = projectRequest.attachments.length - deletedAttachments.length;
+        const newFileCount = [...pictureRows, ...drawingRows, ...reportRows].filter(r => r.file).length;
+        if (existingRemaining + newFileCount < 1) {
+            setAttachmentError('At least one attachment is required.');
+            return;
+        }
+        setAttachmentError('');
         setProcessing(true);
 
         const fd = new FormData();
@@ -281,12 +297,18 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                 <SectionTitle>Financials &amp; Budgeting</SectionTitle>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
-                        <FormLabel>Cost Code</FormLabel>
-                        <select value={costcode} onChange={e => setCostcode(e.target.value)} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer' }}>
+                        <FormLabel required={opex && capex}>Cost Code</FormLabel>
+                        <select value={costcode} onChange={e => { setCostcode(e.target.value); setCostcodeError(''); }} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer', borderColor: costcodeError ? '#dc2626' : undefined }}>
                             <option value="">Select Cost Code…</option>
                             {!hasOption(costCodes, costcode) && <option value={costcode}>{costcode}</option>}
                             {costCodes.map(code => <option key={code.id} value={code.name}>{code.name}</option>)}
                         </select>
+                        {costcodeError && (
+                            <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '5px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                {costcodeError}
+                            </p>
+                        )}
                     </div>
                     <div>
                         <FormLabel>Funding Classification</FormLabel>
@@ -324,6 +346,12 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
 
                 {/* New attachments */}
                 <SectionTitle>Add New Attachments</SectionTitle>
+                {attachmentError && (
+                    <p style={{ fontSize: '12px', color: '#dc2626', margin: '-12px 0 16px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                        {attachmentError}
+                    </p>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '32px' }}>
                     <UploadSection
                         label="Picture Attachments" accept="image/*" placeholder="Image description" rows={pictureRows}

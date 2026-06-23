@@ -20,12 +20,26 @@ class ProjectVariationOrder extends Model
         'submitted_date',
         'approved_date',
         'created_by',
+        'requestor',
+        'date_of_request',
+        'priority',
+        'attachment',
+        'scope_original',
+        'scope_proposed',
+        'scope_remark',
+        'schedule_original',
+        'schedule_proposed',
+        'schedule_remark',
+        'cost_original',
+        'cost_proposed',
+        'cost_remark',
     ];
 
     protected $casts = [
-        'submitted_date' => 'date',
-        'approved_date'  => 'date',
-        'amount'         => 'decimal:2',
+        'submitted_date'  => 'date',
+        'approved_date'   => 'date',
+        'date_of_request' => 'date',
+        'amount'          => 'decimal:2',
     ];
 
     public function project(): BelongsTo

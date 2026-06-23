@@ -1,34 +1,326 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
-import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, InfoStrip, SectionTitle, inputStyle } from './Common';
+import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, InfoStrip, Modal, ModalSection, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface VofRow { id: number; vo_no: string; title: string; description: string | null; amount: number; status: string; submitted_date: string; approved_date: string }
+interface VofRow {
+    id: number;
+    vo_no: string;
+    title: string;
+    description: string | null;
+    amount: number;
+    status: string;
+    submitted_date: string;
+    approved_date: string | null;
+    requestor: string | null;
+    date_of_request: string | null;
+    priority: string | null;
+    attachment_url: string | null;
+    scope_original: string | null;
+    scope_proposed: string | null;
+    scope_remark: string | null;
+    schedule_original: string | null;
+    schedule_proposed: string | null;
+    schedule_remark: string | null;
+    cost_original: string | null;
+    cost_proposed: string | null;
+    cost_remark: string | null;
+}
 
-const STATUS_TONE: Record<string, 'green' | 'slate' | 'red' | 'yellow'> = {
+const ACCENT = '#f59e0b';
+const PRIORITIES = ['Immediate', 'High', 'Essential', 'Medium', 'Urgent', 'Low'];
+
+const STATUS_TONE: Record<string, 'green' | 'slate' | 'red'> = {
     Approved: 'green', Pending: 'slate', Rejected: 'red',
 };
 
-export default function VofHub({ project, vofs }: { project: HubProject; vofs: VofRow[] }) {
-    const [title, setTitle]   = useState('');
-    const [desc, setDesc]     = useState('');
-    const [amount, setAmount] = useState('');
-    const [saving, setSaving] = useState(false);
-    const [error, setError]   = useState('');
+// ── Shared detail table ────────────────────────────────────────────────────
+function DetailTable({
+    scope, setScope, schedule, setSchedule, cost, setCost,
+}: {
+    scope:    { original: string; proposed: string; remark: string };
+    setScope: (v: { original: string; proposed: string; remark: string }) => void;
+    schedule: { original: string; proposed: string; remark: string };
+    setSchedule: (v: { original: string; proposed: string; remark: string }) => void;
+    cost:    { original: string; proposed: string; remark: string };
+    setCost: (v: { original: string; proposed: string; remark: string }) => void;
+}) {
+    const rows = [
+        { label: 'Scope',    state: scope,    set: setScope },
+        { label: 'Schedule', state: schedule, set: setSchedule },
+        { label: 'Cost',     state: cost,     set: setCost },
+    ];
 
-    const textCell = <textarea rows={3} style={{ ...inputStyle, border: 'none', borderRadius: 0, resize: 'vertical' }} />;
+    return (
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                    <tr style={{ background: '#fefce8' }}>
+                        {['Aspect', 'Original Details', 'Proposed Change', 'Reason / Remark'].map(h => (
+                            <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: '10px', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #fde68a' }}>{h}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map(({ label, state, set }, i) => (
+                        <tr key={label} style={{ borderBottom: i < 2 ? '1px solid #f1f5f9' : 'none' }}>
+                            <td style={{ padding: '8px 12px', fontWeight: 700, color: '#374151', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{label}</td>
+                            {(['original', 'proposed', 'remark'] as const).map(key => (
+                                <td key={key} style={{ padding: '4px' }}>
+                                    <textarea
+                                        rows={3}
+                                        style={{ ...inputStyle, border: 'none', borderRadius: 0, resize: 'vertical', minWidth: '140px' }}
+                                        value={state[key]}
+                                        onChange={e => set({ ...state, [key]: e.target.value })}
+                                    />
+                                </td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+// ── Priority checkboxes ────────────────────────────────────────────────────
+function PriorityGroup({ priorities, onChange }: { priorities: string[]; onChange: (p: string[]) => void }) {
+    const toggle = (item: string) =>
+        onChange(priorities.includes(item) ? priorities.filter(p => p !== item) : [...priorities, item]);
+    return (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '12px', color: '#334155', marginTop: '2px' }}>
+            {PRIORITIES.map(item => (
+                <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={priorities.includes(item)} onChange={() => toggle(item)} />
+                    {item}
+                </label>
+            ))}
+        </div>
+    );
+}
+
+// ── Create Modal ───────────────────────────────────────────────────────────
+function CreateModal({ project, onClose }: { project: HubProject; onClose: () => void }) {
+    const [title,      setTitle]      = useState('');
+    const [desc,       setDesc]       = useState('');
+    const [amount,     setAmount]     = useState('');
+    const [requestor,  setRequestor]  = useState('');
+    const [dateReq,    setDateReq]    = useState('');
+    const [priorities, setPriorities] = useState<string[]>([]);
+    const [attachment, setAttachment] = useState<File | null>(null);
+    const [scope,      setScope]      = useState({ original: '', proposed: '', remark: '' });
+    const [schedule,   setSchedule]   = useState({ original: '', proposed: '', remark: '' });
+    const [cost,       setCost]       = useState({ original: '', proposed: '', remark: '' });
+    const [saving,     setSaving]     = useState(false);
+    const [error,      setError]      = useState('');
 
     const handleSubmit = () => {
-        if (!title.trim()) { setError('Title / Subject is required.'); return; }
-        if (!amount || Number(amount) === 0) { setError('Amount is required and must be greater than zero.'); return; }
-        setError('');
-        setSaving(true);
-        router.post(route('hub.vof.store', project.id), { title, description: desc, amount }, {
+        if (!title.trim())                  { setError('Title / Subject is required.'); return; }
+        if (!amount || Number(amount) <= 0) { setError('Amount must be greater than zero.'); return; }
+        setError(''); setSaving(true);
+
+        router.post(route('hub.vof.store', project.id), {
+            title, description: desc, amount,
+            requestor, date_of_request: dateReq,
+            priority: priorities.join(','),
+            attachment,
+            scope_original:    scope.original,    scope_proposed:    scope.proposed,    scope_remark:    scope.remark,
+            schedule_original: schedule.original, schedule_proposed: schedule.proposed, schedule_remark: schedule.remark,
+            cost_original:     cost.original,     cost_proposed:     cost.proposed,     cost_remark:     cost.remark,
+        } as any, {
+            forceFormData: true,
             preserveScroll: true,
-            onSuccess: () => { setTitle(''); setDesc(''); setAmount(''); },
+            onSuccess: onClose,
             onFinish: () => setSaving(false),
         });
     };
+
+    return (
+        <Modal title="New Variation Order" onClose={onClose} headerBg={ACCENT} size="900px"
+            footer={
+                <>
+                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                    <Button variant="dark" onClick={handleSubmit}>{saving ? 'Submitting…' : 'Submit Variation Order'}</Button>
+                </>
+            }
+        >
+            {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginBottom: '14px' }}>{error}</div>}
+
+            <ModalSection color={ACCENT}>I. Variation Order Information</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                <Field label="V.O. Number">
+                    <input style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8' }} placeholder="Auto-assigned on submit" readOnly />
+                </Field>
+                <Field label="Date of Request">
+                    <input type="date" style={inputStyle} value={dateReq} onChange={e => setDateReq(e.target.value)} />
+                </Field>
+                <Field label="Requestor">
+                    <input style={inputStyle} placeholder="Enter full name" value={requestor} onChange={e => setRequestor(e.target.value)} />
+                </Field>
+            </div>
+
+            <ModalSection color={ACCENT}>II. Variation Order Details</ModalSection>
+            <DetailTable scope={scope} setScope={setScope} schedule={schedule} setSchedule={setSchedule} cost={cost} setCost={setCost} />
+
+            <ModalSection color={ACCENT}>III. Variation Order Form</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <Field label="Priority">
+                    <PriorityGroup priorities={priorities} onChange={setPriorities} />
+                </Field>
+                <Field label="Title / Subject *">
+                    <input style={inputStyle} placeholder="Brief title of this VO" value={title} onChange={e => setTitle(e.target.value)} />
+                </Field>
+                <Field label="Amount (PhP) *">
+                    <input type="number" style={inputStyle} placeholder="0.00" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} />
+                </Field>
+            </div>
+            <div style={{ marginBottom: '14px' }}>
+                <Field label="Description / Justification">
+                    <textarea rows={3} style={inputStyle} placeholder="Describe the variation and why it is needed…" value={desc} onChange={e => setDesc(e.target.value)} />
+                </Field>
+            </div>
+            <Field label="Attachment (PDF / Image / Document)">
+                <input type="file" style={{ ...inputStyle, padding: '6px' }}
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                    onChange={e => setAttachment(e.target.files?.[0] ?? null)} />
+            </Field>
+        </Modal>
+    );
+}
+
+// ── View / Edit Modal ──────────────────────────────────────────────────────
+function ViewModal({ project, vof, onClose }: { project: HubProject; vof: VofRow; onClose: () => void }) {
+    const [title,       setTitle]       = useState(vof.title);
+    const [desc,        setDesc]        = useState(vof.description ?? '');
+    const [amount,      setAmount]      = useState(String(vof.amount));
+    const [requestor,   setRequestor]   = useState(vof.requestor ?? '');
+    const [dateReq,     setDateReq]     = useState(vof.date_of_request ?? '');
+    const [priorities,  setPriorities]  = useState<string[]>(vof.priority ? vof.priority.split(',').filter(Boolean) : []);
+    const [newFile,     setNewFile]     = useState<File | null>(null);
+    const [scope,       setScope]       = useState({ original: vof.scope_original ?? '', proposed: vof.scope_proposed ?? '', remark: vof.scope_remark ?? '' });
+    const [schedule,    setSchedule]    = useState({ original: vof.schedule_original ?? '', proposed: vof.schedule_proposed ?? '', remark: vof.schedule_remark ?? '' });
+    const [cost,        setCost]        = useState({ original: vof.cost_original ?? '', proposed: vof.cost_proposed ?? '', remark: vof.cost_remark ?? '' });
+    const [status,      setStatus]      = useState(vof.status.toLowerCase());
+    const [approvedDate,setApproved]    = useState(vof.approved_date ?? '');
+    const [saving,      setSaving]      = useState(false);
+    const [error,       setError]       = useState('');
+
+    const handleSave = () => {
+        if (!title.trim())                  { setError('Title is required.'); return; }
+        if (!amount || Number(amount) <= 0) { setError('Amount must be greater than zero.'); return; }
+        setError(''); setSaving(true);
+
+        router.post(route('hub.vof.update', [project.id, vof.id]), {
+            _method: 'patch',
+            title, description: desc, amount,
+            status, approved_date: approvedDate || null,
+            requestor, date_of_request: dateReq,
+            priority: priorities.join(','),
+            attachment: newFile,
+            scope_original:    scope.original,    scope_proposed:    scope.proposed,    scope_remark:    scope.remark,
+            schedule_original: schedule.original, schedule_proposed: schedule.proposed, schedule_remark: schedule.remark,
+            cost_original:     cost.original,     cost_proposed:     cost.proposed,     cost_remark:     cost.remark,
+        } as any, {
+            forceFormData: true,
+            preserveScroll: true,
+            onSuccess: onClose,
+            onFinish: () => setSaving(false),
+        });
+    };
+
+    return (
+        <Modal
+            title={`${vof.vo_no} — Edit Variation Order`}
+            onClose={onClose}
+            headerBg={ACCENT}
+            size="920px"
+            footer={
+                <>
+                    <Button variant="outline" onClick={onClose}>Cancel</Button>
+                    <Button variant="dark" onClick={handleSave}>{saving ? 'Saving…' : 'Save Changes'}</Button>
+                </>
+            }
+        >
+            {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginBottom: '14px' }}>{error}</div>}
+
+            {/* Header strip */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', border: '1px solid #fde68a', borderRadius: '8px', background: '#fffbeb', marginBottom: '20px' }}>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: ACCENT }}>{vof.vo_no}</div>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>Submitted: {vof.submitted_date}</div>
+                <Badge tone={STATUS_TONE[vof.status] ?? 'slate'}>{vof.status}</Badge>
+            </div>
+
+            <ModalSection color={ACCENT}>I. Variation Order Information</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                <Field label="V.O. Number">
+                    <input style={{ ...inputStyle, background: '#f8fafc', color: '#94a3b8' }} value={vof.vo_no} readOnly />
+                </Field>
+                <Field label="Date of Request">
+                    <input type="date" style={inputStyle} value={dateReq} onChange={e => setDateReq(e.target.value)} />
+                </Field>
+                <Field label="Requestor">
+                    <input style={inputStyle} placeholder="Enter full name" value={requestor} onChange={e => setRequestor(e.target.value)} />
+                </Field>
+            </div>
+
+            <ModalSection color={ACCENT}>II. Variation Order Details</ModalSection>
+            <DetailTable scope={scope} setScope={setScope} schedule={schedule} setSchedule={setSchedule} cost={cost} setCost={setCost} />
+
+            <ModalSection color={ACCENT}>III. Variation Order Form</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <Field label="Priority">
+                    <PriorityGroup priorities={priorities} onChange={setPriorities} />
+                </Field>
+                <Field label="Title / Subject *">
+                    <input style={inputStyle} placeholder="Brief title of this VO" value={title} onChange={e => setTitle(e.target.value)} />
+                </Field>
+                <Field label="Amount (PhP) *">
+                    <input type="number" style={inputStyle} placeholder="0.00" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} />
+                </Field>
+            </div>
+            <div style={{ marginBottom: '14px' }}>
+                <Field label="Description / Justification">
+                    <textarea rows={3} style={inputStyle} placeholder="Describe the variation and why it is needed…" value={desc} onChange={e => setDesc(e.target.value)} />
+                </Field>
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+                <Field label="Attachment">
+                    {vof.attachment_url && (
+                        <div style={{ marginBottom: '6px' }}>
+                            <a href={vof.attachment_url} target="_blank" rel="noopener noreferrer"
+                               style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
+                                📎 View Current File ↗
+                            </a>
+                            <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '8px' }}>Upload below to replace</span>
+                        </div>
+                    )}
+                    <input type="file" style={{ ...inputStyle, padding: '6px' }}
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        onChange={e => setNewFile(e.target.files?.[0] ?? null)} />
+                </Field>
+            </div>
+
+            <ModalSection color={ACCENT}>IV. Status Management</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <Field label="Status">
+                    <select style={inputStyle} value={status} onChange={e => setStatus(e.target.value)}>
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                    </select>
+                </Field>
+                <Field label="Approval / Decision Date">
+                    <input type="date" style={inputStyle} value={approvedDate} onChange={e => setApproved(e.target.value)} />
+                </Field>
+            </div>
+        </Modal>
+    );
+}
+
+// ── Main Component ─────────────────────────────────────────────────────────
+export default function VofHub({ project, vofs }: { project: HubProject; vofs: VofRow[] }) {
+    const [showCreate, setShowCreate] = useState(false);
+    const [viewVof,    setViewVof]    = useState<VofRow | null>(null);
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
@@ -41,69 +333,37 @@ export default function VofHub({ project, vofs }: { project: HubProject; vofs: V
     return (
         <HubShell>
             {confirmDialog}
-            <InfoStrip project={project} accent="#f59e0b" />
+            {showCreate && <CreateModal project={project} onClose={() => setShowCreate(false)} />}
+            {viewVof    && <ViewModal   project={project} vof={viewVof} onClose={() => setViewVof(null)} />}
 
-            {vofs.length > 0 && (
-                <>
-                    <SectionTitle color="#f59e0b">Variation Order History</SectionTitle>
-                    <DataTable
-                        headers={['VO No.', 'Title', 'Amount (PhP)', 'Status', 'Date', 'Actions']}
-                        rows={vofs.map(vo => [
-                            <strong style={{ color: '#f59e0b' }}>{vo.vo_no}</strong>,
-                            vo.title,
-                            <strong>{vo.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
-                            <Badge tone={STATUS_TONE[vo.status] ?? 'slate'}>{vo.status}</Badge>,
-                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>{vo.submitted_date}</span>,
-                            <ActionBtns del onDelete={() => handleDelete(vo)} />,
-                        ])}
-                    />
-                </>
-            )}
+            <InfoStrip project={project} accent={ACCENT} />
 
-            <SectionTitle color="#f59e0b">Variation Order Information</SectionTitle>
-            <DataTable
-                headers={['V.O. Number', 'Date of Request', 'Requestor']}
-                rows={[[
-                    <input style={inputStyle} placeholder="Auto-assigned on submit" readOnly />,
-                    <input type="date" style={inputStyle} />,
-                    <input style={inputStyle} placeholder="Enter full name" />
-                ]]}
-            />
-            <SectionTitle color="#f59e0b">Variation Order Details</SectionTitle>
-            <DataTable
-                headers={['Aspect', 'Original Details', 'Proposed Change', 'Reason / Remark']}
-                rows={['Scope', 'Schedule', 'Cost'].map(label => [<strong>{label}</strong>, textCell, textCell, textCell])}
-            />
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', padding: '16px', marginTop: '18px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
-                    <Field label="Priority">
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '12px', color: '#334155' }}>
-                            {['Immediate', 'High', 'Essential', 'Medium', 'Urgent', 'Low'].map(item => <label key={item}><input type="checkbox" /> {item}</label>)}
-                        </div>
-                    </Field>
-                    <Field label="Title / Subject">
-                        <input style={inputStyle} placeholder="Brief title of this VO" value={title} onChange={e => setTitle(e.target.value)} />
-                    </Field>
-                    <Field label="Amount (PhP)">
-                        <input type="number" style={inputStyle} placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
-                    </Field>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ borderLeft: `4px solid ${ACCENT}`, background: '#f8fafc', padding: '9px 14px', fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    {vofs.length > 0 ? `Variation Orders (${vofs.length})` : 'Variation Orders'}
                 </div>
-                <div style={{ marginTop: '14px' }}>
-                    <Field label="Description / Justification">
-                        <textarea rows={3} style={inputStyle} placeholder="Describe the variation and why it is needed..." value={desc} onChange={e => setDesc(e.target.value)} />
-                    </Field>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', gap: '14px', marginTop: '14px' }}>
-                    <Field label="Attachments"><input type="file" multiple style={inputStyle} /></Field>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
-                        {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, width: '100%', textAlign: 'left' }}>{error}</div>}
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            <Button variant="outline">Save as Draft</Button>
-                            <Button variant="dark" onClick={handleSubmit}>{saving ? 'Submitting...' : 'Submit Variation Order'}</Button>
-                        </div>
-                    </div>
-                </div>
+                <Button variant="dark" onClick={() => setShowCreate(true)}>+ Create Variation Order</Button>
             </div>
+
+            {vofs.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px 24px', border: '1px dashed #e2e8f0', borderRadius: '10px', color: '#94a3b8' }}>
+                    <div style={{ fontSize: '28px', marginBottom: '8px' }}>📋</div>
+                    <div style={{ fontWeight: 700, marginBottom: '4px', color: '#64748b' }}>No variation orders yet</div>
+                    <div style={{ fontSize: '12px' }}>Click "Create Variation Order" to add one.</div>
+                </div>
+            ) : (
+                <DataTable
+                    headers={['VO No.', 'Title', 'Amount (PhP)', 'Status', 'Date Submitted', 'Actions']}
+                    rows={vofs.map(vo => [
+                        <strong style={{ color: ACCENT }}>{vo.vo_no}</strong>,
+                        <span style={{ fontWeight: 600, color: '#1e293b' }}>{vo.title}</span>,
+                        <strong>PhP {vo.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
+                        <Badge tone={STATUS_TONE[vo.status] ?? 'slate'}>{vo.status}</Badge>,
+                        <span style={{ fontSize: '12px', color: '#64748b' }}>{vo.submitted_date}</span>,
+                        <ActionBtns view del onView={() => setViewVof(vo)} onDelete={() => handleDelete(vo)} />,
+                    ])}
+                />
+            )}
         </HubShell>
     );
 }

@@ -23,6 +23,8 @@ class ProjectRfq extends Model
         'exclusions',
         'duration_days',
         'created_by',
+        'quotation_file',
+        'recipient_email',
     ];
 
     protected $casts = [

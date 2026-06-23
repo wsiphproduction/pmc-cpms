@@ -34,7 +34,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('projects/{project}/status', [ProjectController::class, 'status'])->name('projects.status');
     Route::patch('projects/{project}/status', [ProjectController::class, 'updateStatus'])->name('projects.update-status');
 
-    foreach (['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at'] as $section) {
+    foreach (['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'] as $section) {
         Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])
             ->defaults('section', $section)
             ->name("projects.hub.{$section}");
@@ -75,6 +75,10 @@ Route::middleware(['auth'])->group(function () {
         // PSR
         Route::post('psr',                     [ProjectHubController::class, 'storePsr'])->name('hub.psr.store');
         Route::delete('psr/{psr}',             [ProjectHubController::class, 'destroyPsr'])->name('hub.psr.destroy');
+        // Todo
+        Route::post('todo',                    [ProjectHubController::class, 'storeTodo'])->name('hub.todo.store');
+        Route::patch('todo/{task}/toggle',     [ProjectHubController::class, 'toggleTodo'])->name('hub.todo.toggle');
+        Route::delete('todo/{task}',           [ProjectHubController::class, 'destroyTodo'])->name('hub.todo.destroy');
     });
 
     Route::resource('projects', ProjectController::class);

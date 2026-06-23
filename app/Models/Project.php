@@ -42,6 +42,8 @@ class Project extends Model
         'budget_paid',
         'completion_percent',
         'created_by',
+        'project_type',
+        'proposal_document',
     ];
 
     protected $casts = [
@@ -121,5 +123,10 @@ class Project extends Model
     public function weeklyReports(): HasMany
     {
         return $this->hasMany(ProjectWeeklyReport::class)->latest('submitted_date');
+    }
+
+    public function tasks(): HasMany
+    {
+        return $this->hasMany(ProjectTask::class)->orderBy('target_date');
     }
 }

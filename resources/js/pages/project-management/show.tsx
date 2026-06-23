@@ -12,6 +12,7 @@ import PsrHub from './hub/PsrHub';
 import QppHub from './hub/QppHub';
 import RfpHub from './hub/RfpHub';
 import RfqHub from './hub/RfqHub';
+import TodoHub from './hub/TodoHub';
 import VofHub from './hub/VofHub';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -63,6 +64,8 @@ interface Project {
     technical_plans: TechnicalPlan;
     admin_notes: string;
     status_logs: StatusLog[];
+    project_type: 'major' | 'minor';
+    proposal_document_url: string | null;
 }
 
 interface Props {
@@ -113,7 +116,8 @@ const OPS_MENU = [
     { key: 'ioc', label: 'Input Other Cost', short: 'IOC', action: 'Add Other Cost', summary: 'Capture miscellaneous project costs outside the main budget line.' },
     { key: 'acr', label: 'Actual Cost Report', short: 'ACR', action: 'Generate Cost Report', summary: 'Review paid, committed, and actual project cost movement.' },
     { key: 'psr', label: 'Project Status Report', short: 'PSR', action: 'Create Status Report', summary: 'Summarize progress, blockers, photos, milestones, and next actions.' },
-    { key: 'at', label: 'Project Audit Trail', short: 'AT', action: 'View Audit Trail', summary: 'Review project events, status changes, and user activity history.' },
+    { key: 'at',   label: 'Project Audit Trail', short: 'AT',  action: 'View Audit Trail',   summary: 'Review project events, status changes, and user activity history.' },
+    { key: 'todo', label: 'Todo List',           short: 'TODO', action: 'Add Task',           summary: 'Track project tasks with target dates and completion status.' },
 ];
 
 function renderHubSection(
@@ -128,11 +132,12 @@ function renderHubSection(
         case 'vof':     return <VofHub     project={hubProject} vofs={hubData.vofs ?? []} />;
         case 'qpp':     return <QppHub     project={hubProject} qpps={hubData.qpps ?? []} />;
         case 'mtr':     return <MtrHub     project={hubProject} mtrs={hubData.mtrs ?? []} />;
-        case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} />;
+        case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} ntps={hubData.ntps ?? []} />;
         case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} />;
         case 'acr':     return <AcrHub     project={hubProject} iocs={hubData.iocs ?? []} />;
         case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
+        case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} />;
         default:        return <RfqHub     project={hubProject} rfqs={[]} />;
     }
 }
@@ -566,10 +571,17 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
 
                     {/* Right */}
                     <div style={{ padding: '28px' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 16px', marginBottom: '20px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0 16px', marginBottom: '20px' }}>
                             <InfoField label="Class">{project.cls}</InfoField>
                             <InfoField label="Category">{project.category}</InfoField>
                             <InfoField label="Service Type">{project.service_type}</InfoField>
+                            <InfoField label="Project Type">
+                                {project.project_type === 'major' ? (
+                                    <span style={{ background: '#1e3a5f', color: '#fff', padding: '2px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 700 }}>★ MAJOR</span>
+                                ) : (
+                                    <span style={{ background: '#f1f5f9', color: '#475569', padding: '2px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, border: '1px solid #cbd5e1' }}>MINOR</span>
+                                )}
+                            </InfoField>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 16px', marginBottom: '20px' }}>
                             <InfoField label="Work Force">{project.work_force}</InfoField>
@@ -585,6 +597,23 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
                                 <PlanCard label="Mechanical Plans"  required={project.technical_plans.mechanical} />
                             </div>
                         </div>
+
+                        {project.project_type === 'major' && (
+                            <div style={{ marginBottom: '24px', padding: '14px 16px', border: '1px solid #bfdbfe', borderRadius: '8px', background: '#eff6ff', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1d4ed8" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                <div style={{ flex: 1 }}>
+                                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Approved Proposal Document</div>
+                                    {project.proposal_document_url ? (
+                                        <a href={project.proposal_document_url} target="_blank" rel="noopener noreferrer"
+                                           style={{ fontSize: '13px', color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>
+                                            View / Download Document ↗
+                                        </a>
+                                    ) : (
+                                        <span style={{ fontSize: '13px', color: '#94a3b8' }}>No document uploaded yet.</span>
+                                    )}
+                                </div>
+                            </div>
+                        )}
 
                         <div>
                             <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Administrative Notes</div>

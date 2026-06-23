@@ -1,5 +1,5 @@
-import { Head, Link, useForm } from '@inertiajs/react';
-import { useEffect, useMemo, useState } from 'react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -22,7 +22,7 @@ interface Props {
     categories: SelectOption[];
     serviceTypes: SelectOption[];
     structures: SelectOption[];
-    project?: Partial<ProjectFormData> & { id?: number };
+    project?: Partial<ProjectFormData> & { id?: number; proposal_document_url?: string | null };
 }
 
 // ── Form Data ──────────────────────────────────────────────────────────────
@@ -50,7 +50,8 @@ interface ProjectFormData {
     need_mechanical: boolean;
     notes: string;
     project_request_id: string;
-    [key: string]: string | boolean;
+    project_type: string;
+    [key: string]: string | boolean | File | null;
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -225,7 +226,7 @@ export default function ProjectCreate({
     project,
 }: Props) {
     const isEditing = Boolean(project?.id);
-    const { data, setData, post, put, processing, errors } = useForm<ProjectFormData>({
+    const { data, setData, processing, errors, setError, clearErrors } = useForm<ProjectFormData>({
         project_request_id: project?.project_request_id ?? '',
         title:           project?.title ?? '',
         project_manager: project?.project_manager ?? '',
@@ -249,18 +250,32 @@ export default function ProjectCreate({
         need_electrical: project?.need_electrical ?? false,
         need_mechanical: project?.need_mechanical ?? false,
         notes:           project?.notes ?? '',
+        project_type:    project?.project_type ?? 'minor',
     });
+
+    const [proposalFile, setProposalFile] = useState<File | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const set = (key: keyof ProjectFormData) => (v: string | boolean) => setData(key, v);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (isEditing) {
-            put(route('projects.update', project!.id!));
+        clearErrors('proposal_document' as any);
+
+        // Client-side guard: major projects need a proposal document
+        if (data.project_type === 'major' && !proposalFile && !project?.proposal_document_url) {
+            setError('proposal_document' as any, 'Approved proposal document is required for major projects.');
             return;
         }
 
-        post(route('projects.store'));
+        const payload: Record<string, string | boolean | File | null> = { ...data };
+        if (proposalFile) payload.proposal_document = proposalFile;
+
+        if (isEditing) {
+            router.post(route('projects.update', project!.id!), { ...payload, _method: 'put' }, { forceFormData: true });
+            return;
+        }
+        router.post(route('projects.store'), payload, { forceFormData: true });
     };
 
     const col2: React.CSSProperties = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' };
@@ -288,7 +303,7 @@ export default function ProjectCreate({
 
                     {/* ── Section 01 ──────────────────────────────────── */}
                     <SectionLabel num="01">Project Identification</SectionLabel>
-                    <div style={{ ...col2, gridTemplateColumns: '1fr 3fr', marginBottom: '20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 3fr 1fr', gap: '20px', marginBottom: '20px', alignItems: 'start' }}>
                         <div>
                             <FormLabel>Project No</FormLabel>
                             <InputField value={next_project_no} readOnly />
@@ -303,7 +318,84 @@ export default function ProjectCreate({
                                 error={errors.title}
                             />
                         </div>
+                        {/* Project Type */}
+                        <div>
+                            <FormLabel required>Project Type</FormLabel>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                {(['minor', 'major'] as const).map(type => (
+                                    <button
+                                        key={type}
+                                        type="button"
+                                        onClick={() => { setData('project_type', type); if (type === 'minor') { setProposalFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; clearErrors('proposal_document' as any); } }}
+                                        style={{
+                                            flex: 1, padding: '9px 0', borderRadius: '8px', fontSize: '13px', fontWeight: 700,
+                                            cursor: 'pointer', textTransform: 'capitalize',
+                                            border: data.project_type === type ? 'none' : '1.5px solid #e2e8f0',
+                                            background: data.project_type === type
+                                                ? (type === 'major' ? '#1e3a8a' : '#0f172a')
+                                                : '#fff',
+                                            color: data.project_type === type ? '#fff' : '#64748b',
+                                            transition: 'all 0.15s',
+                                        }}
+                                    >
+                                        {type === 'major' ? '★ Major' : 'Minor'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
                     </div>
+
+                    {/* Proposal document upload — Major only */}
+                    {data.project_type === 'major' && (
+                        <div style={{
+                            background: '#fff7ed', border: `1.5px solid ${(errors as any).proposal_document ? '#fca5a5' : '#fed7aa'}`,
+                            borderRadius: '10px', padding: '18px 20px', marginBottom: '20px',
+                            display: 'grid', gridTemplateColumns: '1fr auto', gap: '16px', alignItems: 'start',
+                        }}>
+                            <div>
+                                <div style={{ fontSize: '11px', fontWeight: 800, color: '#c2410c', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                    Approved Proposal Document <span style={{ color: '#ef4444' }}>*</span>
+                                </div>
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".pdf,.doc,.docx"
+                                    onChange={e => { setProposalFile(e.target.files?.[0] ?? null); clearErrors('proposal_document' as any); }}
+                                    style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px', borderRadius: '7px', border: '1.5px solid #fdba74', background: '#fff', fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}
+                                />
+                                {proposalFile && (
+                                    <div style={{ marginTop: '5px', fontSize: '12px', color: '#ea580c', fontWeight: 600 }}>
+                                        Selected: {proposalFile.name}
+                                    </div>
+                                )}
+                                {(errors as any).proposal_document && (
+                                    <div style={{ marginTop: '5px', fontSize: '11.5px', color: '#ef4444', fontWeight: 600 }}>
+                                        {(errors as any).proposal_document}
+                                    </div>
+                                )}
+                                <div style={{ marginTop: '4px', fontSize: '11px', color: '#9a3412' }}>
+                                    PDF, Word only · Max 20 MB · Required for major projects
+                                </div>
+                            </div>
+                            {/* Existing file link (edit mode) */}
+                            {project?.proposal_document_url && !proposalFile && (
+                                <div style={{ paddingTop: '20px' }}>
+                                    <a
+                                        href={project.proposal_document_url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '7px', border: '1px solid #fdba74', background: '#fff7ed', color: '#c2410c', fontSize: '12px', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}
+                                    >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                                        View Current
+                                    </a>
+                                    <div style={{ fontSize: '10.5px', color: '#9a3412', marginTop: '3px', textAlign: 'center' }}>Upload to replace</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div style={{ ...col3, marginBottom: '32px' }}>
                         <div>
                             <FormLabel required>Project Manager</FormLabel>
