@@ -18,8 +18,6 @@
             </ul>
         </div>
         <a href="master_data.php" class="nav-link"><i class="bi bi-book me-3"></i>Master Data</a>
-        <a href="#" class="nav-link"><i class="bi bi-clock me-3"></i>Man-hours Form</a>
-        <a href="#" class="nav-link"><i class="bi bi-file-earmark-text me-3"></i>Documents</a>
         <a href="#" class="nav-link"><i class="bi bi-graph-up-arrow me-3"></i>Reports</a>
         <a href="#" class="nav-link"><i class="bi bi-people me-3"></i>Users</a>
         <hr class="mx-3">

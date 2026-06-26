@@ -13,6 +13,7 @@ class ProjectIocItem extends Model
     protected $fillable = [
         'project_id',
         'description',
+        'cost_code',
         'amount',
         'file_path',
         'filename',

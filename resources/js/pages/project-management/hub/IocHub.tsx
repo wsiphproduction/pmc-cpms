@@ -1,9 +1,70 @@
 import { router } from '@inertiajs/react';
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionBtns, DataTable, Field, HubProject, HubShell, Modal, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface IocRow { id: number; description: string; amount: number; filename: string | null; url: string | null; created: string }
+interface CostCodeOption { value: string; label: string }
+interface IocRow { id: number; description: string; cost_code: string | null; amount: number; filename: string | null; url: string | null; created: string }
+
+function CostCodeSelect({ value, onChange, options, id }: {
+    value: string;
+    onChange: (value: string) => void;
+    options: CostCodeOption[];
+    id: string;
+}) {
+    const [open, setOpen] = useState(false);
+    const selectedOption = options.find(option => option.value === value);
+    const [inputValue, setInputValue] = useState(selectedOption?.label ?? value);
+
+    useEffect(() => {
+        const selected = options.find(option => option.value === value);
+        setInputValue(selected?.label ?? value);
+    }, [options, value]);
+
+    const filtered = useMemo(() => {
+        const needle = inputValue.trim().toLowerCase();
+        return needle
+            ? options.filter(option => option.label.toLowerCase().includes(needle) || option.value.toLowerCase().includes(needle)).slice(0, 8)
+            : options.slice(0, 8);
+    }, [inputValue, options]);
+
+    return (
+        <div style={{ position: 'relative' }}>
+            <input
+                value={inputValue}
+                onChange={e => { setInputValue(e.target.value); onChange(e.target.value); setOpen(true); }}
+                placeholder="Select or type cost code"
+                role="combobox"
+                aria-expanded={open}
+                aria-controls={id}
+                autoComplete="off"
+                style={{ ...inputStyle, cursor: 'text', paddingRight: '34px' }}
+                onFocus={e => { e.currentTarget.style.borderColor = '#2563eb'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(37,99,235,0.08)'; setOpen(true); }}
+                onBlur={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; window.setTimeout(() => setOpen(false), 120); }}
+            />
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: 'absolute', right: '11px', top: '13px', pointerEvents: 'none' }}>
+                <polyline points="6 9 12 15 18 9" />
+            </svg>
+            {open && (
+                <div id={id} role="listbox" style={{ position: 'absolute', top: 'calc(100% + 5px)', left: 0, right: 0, zIndex: 60, background: '#fff', border: '1px solid #dbe3ef', borderRadius: '8px', boxShadow: '0 14px 32px rgba(15,23,42,0.14)', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
+                    {filtered.length ? filtered.map(option => (
+                        <button
+                            key={option.value}
+                            type="button"
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => { onChange(option.value); setInputValue(option.label); setOpen(false); }}
+                            style={{ width: '100%', border: 'none', background: option.value === value ? '#eff6ff' : '#fff', padding: '9px 12px', textAlign: 'left', fontSize: '13px', color: '#334155', cursor: 'pointer' }}
+                        >
+                            {option.label}
+                        </button>
+                    )) : (
+                        <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No results found</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 // ── View Modal ─────────────────────────────────────────────────────────────
 function ViewIocModal({ item, onClose, onEdit }: { item: IocRow; onClose: () => void; onEdit: () => void }) {
@@ -22,6 +83,10 @@ function ViewIocModal({ item, onClose, onEdit }: { item: IocRow; onClose: () => 
                     <tr style={row}>
                         <td style={labelCell}>Description</td>
                         <td style={valCell}>{item.description}</td>
+                    </tr>
+                    <tr style={row}>
+                        <td style={labelCell}>Cost Code</td>
+                        <td style={valCell}>{item.cost_code ?? <span style={{ color: '#94a3b8' }}>Not set</span>}</td>
                     </tr>
                     <tr style={row}>
                         <td style={labelCell}>Cost (PhP)</td>
@@ -47,8 +112,9 @@ function ViewIocModal({ item, onClose, onEdit }: { item: IocRow; onClose: () => 
 }
 
 // ── Edit Modal ─────────────────────────────────────────────────────────────
-function EditIocModal({ project, item, onClose }: { project: HubProject; item: IocRow; onClose: () => void }) {
+function EditIocModal({ project, item, costCodes, onClose }: { project: HubProject; item: IocRow; costCodes: CostCodeOption[]; onClose: () => void }) {
     const [desc, setDesc]     = useState(item.description);
+    const [costCode, setCostCode] = useState(item.cost_code ?? '');
     const [amount, setAmount] = useState(String(item.amount));
     const [saving, setSaving] = useState(false);
     const [error, setError]   = useState('');
@@ -58,7 +124,7 @@ function EditIocModal({ project, item, onClose }: { project: HubProject; item: I
         if (!amount || Number(amount) <= 0) { setError('Cost must be greater than zero.'); return; }
         setError('');
         setSaving(true);
-        router.patch(route('hub.ioc.update', [project.id, item.id]), { description: desc, amount }, {
+        router.patch(route('hub.ioc.update', [project.id, item.id]), { description: desc, cost_code: costCode || null, amount }, {
             preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false),
         });
     };
@@ -77,6 +143,9 @@ function EditIocModal({ project, item, onClose }: { project: HubProject; item: I
                 <Field label="Description of Expense">
                     <input style={inputStyle} value={desc} onChange={e => setDesc(e.target.value)} placeholder="e.g. Hauling services for site debris" />
                 </Field>
+                <Field label="Cost Code">
+                    <CostCodeSelect id="edit-ioc-cost-code-options" value={costCode} onChange={setCostCode} options={costCodes} />
+                </Field>
                 <Field label="Cost (PhP)">
                     <div style={{ display: 'flex' }}>
                         <span style={{ padding: '6px 10px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px 0 0 6px', fontSize: '12.5px', color: '#475569' }}>PhP</span>
@@ -89,8 +158,9 @@ function EditIocModal({ project, item, onClose }: { project: HubProject; item: I
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function IocHub({ project, iocs }: { project: HubProject; iocs: IocRow[] }) {
+export default function IocHub({ project, iocs, costCodes = [] }: { project: HubProject; iocs: IocRow[]; costCodes?: CostCodeOption[] }) {
     const [desc, setDesc]     = useState('');
+    const [costCode, setCostCode] = useState(project.cost_code ?? '');
     const [amount, setAmount] = useState('');
     const [saving, setSaving] = useState(false);
     const [error, setError]   = useState('');
@@ -107,13 +177,14 @@ export default function IocHub({ project, iocs }: { project: HubProject; iocs: I
         setSaving(true);
         const fd = new FormData();
         fd.append('description', desc);
+        if (costCode) fd.append('cost_code', costCode);
         fd.append('amount', amount);
         const file = fileRef.current?.files?.[0];
         if (file) fd.append('file', file);
         router.post(route('hub.ioc.store', project.id), fd as any, {
             forceFormData: true,
             preserveScroll: true,
-            onSuccess: () => { setDesc(''); setAmount(''); if (fileRef.current) fileRef.current.value = ''; },
+            onSuccess: () => { setDesc(''); setCostCode(project.cost_code ?? ''); setAmount(''); if (fileRef.current) fileRef.current.value = ''; },
             onFinish: () => setSaving(false),
         });
     };
@@ -140,6 +211,7 @@ export default function IocHub({ project, iocs }: { project: HubProject; iocs: I
                 <EditIocModal
                     project={project}
                     item={editing}
+                    costCodes={costCodes}
                     onClose={() => setEditing(null)}
                 />
             )}
@@ -159,9 +231,12 @@ export default function IocHub({ project, iocs }: { project: HubProject; iocs: I
 
             <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
                 <h4 style={{ margin: '0 0 14px', fontSize: '15px' }}>Add New Miscellaneous Cost</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr 1fr 130px', gap: '12px', alignItems: 'end' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.9fr 0.7fr 1fr 130px', gap: '12px', alignItems: 'end' }}>
                     <Field label="Description of Expense">
                         <input style={inputStyle} placeholder="e.g. Hauling services for site debris" value={desc} onChange={e => setDesc(e.target.value)} />
+                    </Field>
+                    <Field label="Cost Code">
+                        <CostCodeSelect id="ioc-cost-code-options" value={costCode} onChange={setCostCode} options={costCodes} />
                     </Field>
                     <Field label="Cost (PhP)">
                         <input type="number" step="0.01" style={inputStyle} placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
@@ -175,10 +250,11 @@ export default function IocHub({ project, iocs }: { project: HubProject; iocs: I
             </div>
 
             <DataTable
-                headers={['Seq#', 'Description', 'Cost (PhP)', 'Attachment', 'Actions']}
+                headers={['Seq#', 'Description', 'Cost Code', 'Cost (PhP)', 'Attachment', 'Actions']}
                 rows={iocs.map((item, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
                     item.description,
+                    item.cost_code ?? <span style={{ color: '#94a3b8' }}>-</span>,
                     <strong>{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                     item.filename
                         ? <a href={item.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700 }}>{item.filename}</a>

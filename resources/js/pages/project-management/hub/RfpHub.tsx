@@ -1,5 +1,5 @@
 import { router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Badge, Button, DataTable, HubProject, HubShell, Modal, inputStyle, money } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
@@ -67,6 +67,76 @@ function CheckGroup({ label, items, checked, onToggle }: {
     );
 }
 
+function formatBytes(bytes: number) {
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const idx = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / Math.pow(1024, idx)).toFixed(idx === 0 ? 0 : 1)} ${units[idx]}`;
+}
+
+function FileAttachmentField({
+    file,
+    onChange,
+    existingFilename,
+    existingUrl,
+}: {
+    file: File | null;
+    onChange: (file: File | null) => void;
+    existingFilename?: string | null;
+    existingUrl?: string | null;
+}) {
+    const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!file) {
+            setPreviewUrl(null);
+            return;
+        }
+
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+        return () => URL.revokeObjectURL(url);
+    }, [file]);
+
+    return (
+        <div style={{ display: 'grid', gap: '8px' }}>
+            <input
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                onChange={e => onChange(e.target.files?.[0] ?? null)}
+                style={{ ...inputStyle, padding: '6px 8px' }}
+            />
+            {file ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: '8px 10px', border: '1px solid #bfdbfe', borderRadius: '7px', background: '#eff6ff', color: '#1e40af' }}>
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: '12.5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
+                        <div style={{ fontSize: '11px', color: '#64748b' }}>{formatBytes(file.size)}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                        {previewUrl && (
+                            <a href={previewUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontSize: '12px', fontWeight: 700, textDecoration: 'none' }}>
+                                Preview
+                            </a>
+                        )}
+                        <button type="button" onClick={() => onChange(null)} style={{ border: 'none', background: 'transparent', color: '#dc2626', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                            Remove
+                        </button>
+                    </div>
+                </div>
+            ) : existingUrl ? (
+                <div style={{ fontSize: '12.5px', color: '#475569' }}>
+                    Current file:{' '}
+                    <a href={existingUrl} target="_blank" rel="noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                        {existingFilename ?? 'View attachment'}
+                    </a>
+                </div>
+            ) : (
+                <div style={{ fontSize: '11px', color: '#64748b' }}>Optional supporting file for review before saving.</div>
+            )}
+        </div>
+    );
+}
+
 const rowStyle: React.CSSProperties = { borderBottom: '1px solid #000' };
 const labelCell: React.CSSProperties = { background: '#f8fafc', fontWeight: 700, fontSize: '12.5px', padding: '8px 10px', width: '28%', borderRight: '1px solid #000', verticalAlign: 'top' };
 const valCell: React.CSSProperties   = { padding: '8px 10px', verticalAlign: 'top', fontSize: '13px' };
@@ -82,6 +152,7 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
     const [summary,      setSummary]      = useState('');
     const [remarks,      setRemarks]      = useState('');
     const [attachments,  setAttachments]  = useState<string[]>([]);
+    const [file,         setFile]         = useState<File | null>(null);
     const [othersBilling,setOthersBilling]= useState(false);
     const [otherRec,     setOtherRec]     = useState(false);
     const [saving,       setSaving]       = useState(false);
@@ -127,7 +198,8 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
             summary:        summary    || null,
             remarks:        remarks    || null,
             attachments,
-        }, { preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false) });
+            file,
+        }, { preserveScroll: true, forceFormData: true, onSuccess: onClose, onFinish: () => setSaving(false) });
     };
 
     return (
@@ -270,6 +342,10 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
                         <td style={labelCell}>Remarks</td>
                         <td style={valCell}><input style={{ ...inputStyle, padding: '5px 8px' }} value={remarks} onChange={e => setRemarks(e.target.value)} /></td>
                     </tr>
+                    <tr style={rowStyle}>
+                        <td style={labelCell}>Attached File</td>
+                        <td style={valCell}><FileAttachmentField file={file} onChange={setFile} /></td>
+                    </tr>
 
                     {/* Recommendation */}
                     <tr>
@@ -327,6 +403,7 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
     const [remarks,       setRemarks]       = useState(billing.remarks  ?? '');
     const [status,        setStatus]        = useState(billing.status_raw);
     const [attachments,   setAttachments]   = useState<string[]>(billing.attachments ?? []);
+    const [file,          setFile]          = useState<File | null>(null);
     const [othersBilling, setOthersBilling] = useState(false);
     const [otherRec,      setOtherRec]      = useState(false);
     const [saving,        setSaving]        = useState(false);
@@ -362,7 +439,8 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
         if (!amount || Number(amount) <= 0) { setError('Billed Amount is required.'); return; }
         setError('');
         setSaving(true);
-        router.patch(route('hub.rfp.update', [project.id, billing.id]), {
+        router.post(route('hub.rfp.update', [project.id, billing.id]), {
+            _method: 'patch',
             billing_type:  billingType,
             amount,
             period_from:   periodFrom  || null,
@@ -372,7 +450,8 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
             remarks:       remarks     || null,
             attachments,
             status,
-        }, { preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false) });
+            file,
+        }, { preserveScroll: true, forceFormData: true, onSuccess: onClose, onFinish: () => setSaving(false) });
     };
 
     return (
@@ -499,6 +578,17 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
                     <tr style={rowStyle}>
                         <td style={labelCell}>Remarks</td>
                         <td style={valCell}><input style={{ ...inputStyle, padding: '5px 8px' }} value={remarks} onChange={e => setRemarks(e.target.value)} /></td>
+                    </tr>
+                    <tr style={rowStyle}>
+                        <td style={labelCell}>Attached File</td>
+                        <td style={valCell}>
+                            <FileAttachmentField
+                                file={file}
+                                onChange={setFile}
+                                existingFilename={billing.filename}
+                                existingUrl={billing.url}
+                            />
+                        </td>
                     </tr>
 
                     {/* Recommendation */}

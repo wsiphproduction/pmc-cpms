@@ -26,12 +26,6 @@ export const Sidebar = () => {
                 </li>
 
                 <li className="nav-item">
-                    <a href="#" className="nav-link"><i className="bi bi-clock-history me-2"></i> Man-hours Form</a>
-                </li>
-                <li className="nav-item">
-                    <a href="#" className="nav-link"><i className="bi bi-file-earmark-pdf me-2"></i> Documents</a>
-                </li>
-                <li className="nav-item">
                     <a href="#" className="nav-link"><i className="bi bi-bar-chart-line me-2"></i> Reports</a>
                 </li>
                 <li className="nav-item">
@@ -46,4 +40,3 @@ export const Sidebar = () => {
     </nav>
   )
 }
-

@@ -38,6 +38,8 @@ interface Project {
     title: string;
     site: string;
     project_manager: string;
+    encoded_by: string;
+    encoded_at: string;
     status: string;
     status_key: string;
     deadline: string;
@@ -133,7 +135,7 @@ function renderHubSection(
         case 'qpp':     return <QppHub     project={hubProject} qpps={hubData.qpps ?? []} />;
         case 'mtr':     return <MtrHub     project={hubProject} mtrs={hubData.mtrs ?? []} />;
         case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} ntps={hubData.ntps ?? []} />;
-        case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} />;
+        case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} costCodes={hubData.cost_codes ?? []} />;
         case 'acr':     return <AcrHub     project={hubProject} iocs={hubData.iocs ?? []} />;
         case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
@@ -470,10 +472,29 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
                 {/* Header */}
                 <div style={{ padding: '24px 30px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
-                        <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>{project.title}</h2>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                            <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0 }}>{project.title}</h2>
+                            <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                minHeight: '24px',
+                                padding: '3px 10px',
+                                borderRadius: '999px',
+                                fontSize: '11px',
+                                fontWeight: 900,
+                                letterSpacing: '0.4px',
+                                textTransform: 'uppercase',
+                                background: project.project_type === 'major' ? '#dbeafe' : '#f1f5f9',
+                                color: project.project_type === 'major' ? '#1d4ed8' : '#475569',
+                                border: `1px solid ${project.project_type === 'major' ? '#93c5fd' : '#cbd5e1'}`,
+                            }}>
+                                {project.project_type}
+                            </span>
+                        </div>
                         <div style={{ fontSize: '13px', color: '#64748b' }}>
                             <span style={{ marginRight: '16px' }}>📍 Site: <strong style={{ color: '#374151' }}>{project.site}</strong></span>
-                            <span>PM: <strong style={{ color: '#374151' }}>{project.project_manager}</strong></span>
+                            <span style={{ marginRight: '16px' }}>PM: <strong style={{ color: '#374151' }}>{project.project_manager}</strong></span>
+                            <span>Encoded By: <strong style={{ color: '#374151' }}>{project.encoded_by}</strong></span>
                         </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
@@ -553,6 +574,9 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
                     {/* Left */}
                     <div style={{ padding: '28px', borderRight: '1px solid #e5e7eb', background: 'rgba(248,250,252,0.5)' }}>
                         <InfoField label="Project Number">{project.project_no}</InfoField>
+                        <InfoField label="Encoded By">{project.encoded_by}</InfoField>
+                        <InfoField label="Encoded At">{project.encoded_at}</InfoField>
+                        <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '16px 0' }} />
                         <InfoField label="Asset ID">{project.asset_id}</InfoField>
                         <InfoField label="Cost Code">{project.cost_code}</InfoField>
                         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '16px 0' }} />

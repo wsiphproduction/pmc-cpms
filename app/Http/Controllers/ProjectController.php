@@ -42,7 +42,7 @@ class ProjectController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = Project::with('manager')->latest();
+        $query = Project::with(['manager', 'creator'])->latest();
 
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
@@ -50,7 +50,8 @@ class ProjectController extends Controller
                 $q->where('project_no', 'like', "%{$search}%")
                     ->orWhere('title', 'like', "%{$search}%")
                     ->orWhere('project_manager_name', 'like', "%{$search}%")
-                    ->orWhere('dept_owner', 'like', "%{$search}%");
+                    ->orWhere('dept_owner', 'like', "%{$search}%")
+                    ->orWhereHas('creator', fn ($creator) => $creator->where('name', 'like', "%{$search}%"));
             });
         }
 
@@ -161,7 +162,7 @@ class ProjectController extends Controller
     public function show(Project $project): Response
     {
         return Inertia::render('project-management/show', [
-            'project' => $this->projectDetailData($project->load(['manager', 'statusLogs.user'])),
+            'project' => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user'])),
         ]);
     }
 
@@ -261,7 +262,7 @@ class ProjectController extends Controller
         $validSections = ['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
-        $project->load(['manager', 'statusLogs.user']);
+        $project->load(['manager', 'creator', 'statusLogs.user']);
 
         return Inertia::render('project-management/show', [
             'project'        => $this->projectDetailData($project),
@@ -416,9 +417,13 @@ class ProjectController extends Controller
             ],
 
             'ioc', 'acr' => [
+                'cost_codes' => CostCode::orderBy('name')->get(['name'])
+                    ->map(fn ($row) => ['value' => (string) $row->name, 'label' => (string) $row->name])
+                    ->values(),
                 'iocs' => $project->iocItems()->get()->map(fn ($item) => [
                     'id'          => $item->id,
                     'description' => $item->description,
+                    'cost_code'   => $item->cost_code,
                     'amount'      => (float) $item->amount,
                     'filename'    => $item->filename,
                     'url'         => $item->file_path ? Storage::disk('public')->url($item->file_path) : null,
@@ -573,6 +578,7 @@ class ProjectController extends Controller
             'type' => $this->projectType($project->class_name),
             'progress' => $project->completion_percent,
             'project_manager' => $project->project_manager_name ?? $project->manager?->name ?? 'Unassigned',
+            'encoded_by' => $project->creator?->name ?? 'Unassigned',
             'dept_owner' => $project->dept_owner,
             'status' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
             'created_at' => $project->created_at?->format('M d, Y h:i A'),
@@ -591,6 +597,8 @@ class ProjectController extends Controller
             'title' => $project->title,
             'site' => $project->site,
             'project_manager' => $project->project_manager_name ?? $project->manager?->name ?? 'Unassigned',
+            'encoded_by' => $project->creator?->name ?? 'Unassigned',
+            'encoded_at' => $project->created_at?->format('M d, Y h:i A') ?? '-',
             'status' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
             'status_key' => $project->status_key,
             'deadline' => optional($project->deadline)->format('M d, Y') ?? '-',

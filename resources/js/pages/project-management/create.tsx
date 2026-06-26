@@ -318,7 +318,6 @@ export default function ProjectCreate({
                                 error={errors.title}
                             />
                         </div>
-                        {/* Project Type */}
                         <div>
                             <FormLabel required>Project Type</FormLabel>
                             <div style={{ display: 'flex', gap: '8px' }}>

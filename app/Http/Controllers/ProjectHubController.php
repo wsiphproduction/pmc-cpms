@@ -453,7 +453,7 @@ class ProjectHubController extends Controller
             'file'           => ['nullable', 'file', 'max:20480'],
         ]);
 
-        $stmtNo = $this->nextStmtNo($project);
+        $stmtNo = $this->nextStmtNo();
 
         $filePath = null;
         $filename = null;
@@ -500,6 +500,7 @@ class ProjectHubController extends Controller
             'attachments'  => ['nullable', 'array'],
             'attachments.*'=> ['string'],
             'status'       => ['required', 'in:pending,approved,paid'],
+            'file'         => ['nullable', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx'],
         ]);
 
         $wasPaid = $billing->status === 'paid';
@@ -514,6 +515,20 @@ class ProjectHubController extends Controller
             'attachments'  => $data['attachments']   ?? null,
             'status'       => $data['status'],
         ]);
+
+        if ($request->hasFile('file')) {
+            if ($billing->file_path) {
+                Storage::disk('public')->delete($billing->file_path);
+            }
+
+            $file = $request->file('file');
+            $path = $file->store("hub/rfp/{$project->id}", 'public');
+
+            $billing->update([
+                'file_path' => $path,
+                'filename'  => $file->getClientOriginalName(),
+            ]);
+        }
 
         if (!$wasPaid && $data['status'] === 'paid') {
             $project->increment('budget_paid', $billing->amount);
@@ -563,6 +578,7 @@ class ProjectHubController extends Controller
     {
         $data = $request->validate([
             'description' => ['required', 'string', 'max:255'],
+            'cost_code'   => ['nullable', 'string', 'max:255'],
             'amount'      => ['required', 'numeric', 'min:0'],
             'file'        => ['nullable', 'file', 'max:20480'],
         ]);
@@ -577,6 +593,7 @@ class ProjectHubController extends Controller
 
         $project->iocItems()->create([
             'description' => $data['description'],
+            'cost_code'   => ($data['cost_code'] ?? '') ?: null,
             'amount'      => $data['amount'],
             'file_path'   => $filePath,
             'filename'    => $filename,
@@ -594,10 +611,15 @@ class ProjectHubController extends Controller
 
         $data = $request->validate([
             'description' => ['required', 'string', 'max:255'],
+            'cost_code'   => ['nullable', 'string', 'max:255'],
             'amount'      => ['required', 'numeric', 'min:0'],
         ]);
 
-        $ioc->update($data);
+        $ioc->update([
+            'description' => $data['description'],
+            'cost_code'   => ($data['cost_code'] ?? '') ?: null,
+            'amount'      => $data['amount'],
+        ]);
 
         AuditTrail::log("Other cost updated: {$data['description']} — PhP {$data['amount']}", $project, ['module' => 'IOC', 'type' => 'update']);
 
@@ -729,11 +751,17 @@ class ProjectHubController extends Controller
         return 'VO-' . str_pad((string) $count, 3, '0', STR_PAD_LEFT);
     }
 
-    private function nextStmtNo(Project $project): string
+    private function nextStmtNo(): string
     {
         $year  = now()->format('Y');
-        $count = $project->billings()->withTrashed()->count() + 1;
+        $latest = ProjectBilling::withTrashed()
+            ->where('stmt_no', 'like', "BLG-{$year}-%")
+            ->orderByDesc('stmt_no')
+            ->value('stmt_no');
 
-        return 'BLG-' . $year . '-' . str_pad((string) $count, 3, '0', STR_PAD_LEFT);
+        $prefix = "BLG-{$year}-";
+        $next = $latest ? ((int) substr($latest, strlen($prefix))) + 1 : 1;
+
+        return 'BLG-' . $year . '-' . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
     }
 }
