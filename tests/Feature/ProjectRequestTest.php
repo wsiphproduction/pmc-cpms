@@ -6,6 +6,7 @@ use App\Models\Attachment;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Role;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
@@ -18,12 +19,23 @@ function makeUser(): User
     return User::factory()->create();
 }
 
+function makeApprover(): User
+{
+    Role::firstOrCreate(['name' => 'approver']);
+
+    $user = User::factory()->create();
+    $user->assignRole('approver');
+
+    return $user;
+}
+
 function makeRequest(array $overrides = []): ProjectRequest
 {
     return ProjectRequest::factory()->create($overrides);
 }
 
-// Valid base payload for store/update — costcode required (NOT NULL in DB)
+// Valid base payload for store/update — costcode required (NOT NULL in DB),
+// for_budgeting defaults true since at least one funding classification is required
 function basePayload(array $overrides = []): array
 {
     return array_merge([
@@ -34,7 +46,7 @@ function basePayload(array $overrides = []): array
         'costcode'      => 'CC-001',
         'opex'          => false,
         'capex'         => false,
-        'for_budgeting' => false,
+        'for_budgeting' => true,
     ], $overrides);
 }
 
@@ -61,7 +73,7 @@ describe('index', function () {
     });
 
     it('returns paginated requests', function () {
-        $user = makeUser();
+        $user = makeApprover();
         ProjectRequest::factory()->count(20)->create();
 
         $this->actingAs($user)
@@ -73,7 +85,7 @@ describe('index', function () {
     });
 
     it('filters by search keyword', function () {
-        $user = makeUser();
+        $user = makeApprover();
         makeRequest(['title' => 'XQZTEST_Electrical_XQZTEST']);
         makeRequest(['title' => 'XQZTEST_Plumbing_XQZTEST']);
 
@@ -87,7 +99,7 @@ describe('index', function () {
     });
 
     it('filters by job_type', function () {
-        $user = makeUser();
+        $user = makeApprover();
         makeRequest(['job_type' => 'civil']);
         makeRequest(['job_type' => 'electrical']);
 
@@ -101,7 +113,7 @@ describe('index', function () {
     });
 
     it('filters by status array', function () {
-        $user = makeUser();
+        $user = makeApprover();
         makeRequest(['status' => 'pending']);
         makeRequest(['status' => 'approved']);
         makeRequest(['status' => 'rejected']);
@@ -159,13 +171,16 @@ describe('store', function () {
     });
 
     it('stores a valid project request', function () {
+        Storage::fake('public');
         $user = makeUser();
+        $file = UploadedFile::fake()->create('drawing.pdf', 500, 'application/pdf');
 
         $this->actingAs($user)
             ->post(route('requests.store'), basePayload([
-                'title'    => 'New Road Construction',
-                'job_type' => 'civil',
-                'capex'    => true,
+                'title'       => 'New Road Construction',
+                'job_type'    => 'civil',
+                'capex'       => true,
+                'attachments' => [['file' => $file, 'type' => 'drawing']],
             ]))
             ->assertRedirect(route('requests.index'));
 
@@ -178,11 +193,14 @@ describe('store', function () {
     });
 
     it('sets status to pending on creation', function () {
+        Storage::fake('public');
         $user = makeUser();
+        $file = UploadedFile::fake()->create('drawing.pdf', 500, 'application/pdf');
 
         $this->actingAs($user)
             ->post(route('requests.store'), basePayload([
-                'title' => 'StatusPendingTest',
+                'title'       => 'StatusPendingTest',
+                'attachments' => [['file' => $file, 'type' => 'drawing']],
             ]))
             ->assertRedirect(route('requests.index'));
 
@@ -193,10 +211,14 @@ describe('store', function () {
     });
 
     it('assigns the authenticated user as requester', function () {
+        Storage::fake('public');
         $user = makeUser();
+        $file = UploadedFile::fake()->create('drawing.pdf', 500, 'application/pdf');
 
         $this->actingAs($user)
-            ->post(route('requests.store'), basePayload());
+            ->post(route('requests.store'), basePayload([
+                'attachments' => [['file' => $file, 'type' => 'drawing']],
+            ]));
 
         $this->assertDatabaseHas('project_requests', [
             'title'        => 'Test Project Request',
@@ -216,6 +238,16 @@ describe('store', function () {
                 'title' => str_repeat('a', 256),
             ]))
             ->assertSessionHasErrors(['title']);
+    });
+
+    it('fails validation when no funding classification is checked', function () {
+        $this->actingAs(makeUser())
+            ->post(route('requests.store'), basePayload([
+                'opex'          => false,
+                'capex'         => false,
+                'for_budgeting' => false,
+            ]))
+            ->assertSessionHasErrors(['opex']);
     });
 
     it('stores attachments with the request', function () {
@@ -344,6 +376,10 @@ describe('update', function () {
     it('updates all fields from the edit form', function () {
         $user = makeUser();
         $pr   = makeRequest(['requester_id' => $user->id]);
+        Attachment::factory()->create([
+            'reference_id'   => $pr->id,
+            'reference_type' => ProjectRequest::class,
+        ]);
 
         $this->actingAs($user)
             ->put(route('requests.update', $pr), basePayload([
@@ -367,10 +403,10 @@ describe('update', function () {
     });
 
     it('can update status only (approve/reject patch)', function () {
-        $user = makeUser();
-        $pr   = makeRequest(['status' => 'pending', 'requester_id' => $user->id]);
+        $approver = makeApprover();
+        $pr   = makeRequest(['status' => 'pending']);
 
-        $this->actingAs($user)
+        $this->actingAs($approver)
             ->patch(route('requests.update', $pr), ['status' => 'approved'])
             ->assertRedirect();
 
@@ -380,11 +416,25 @@ describe('update', function () {
         ]);
     });
 
-    it('can reject a request via status patch', function () {
-        $user = makeUser();
-        $pr   = makeRequest(['status' => 'pending', 'requester_id' => $user->id]);
+    it('cannot re-decide a request that is already approved or rejected', function () {
+        $approver = makeApprover();
+        $pr = makeRequest(['status' => 'approved']);
 
-        $this->actingAs($user)
+        $this->actingAs($approver)
+            ->patch(route('requests.update', $pr), ['status' => 'rejected'])
+            ->assertForbidden();
+
+        $this->assertDatabaseHas('project_requests', [
+            'id'     => $pr->id,
+            'status' => 'approved',
+        ]);
+    });
+
+    it('can reject a request via status patch', function () {
+        $approver = makeApprover();
+        $pr   = makeRequest(['status' => 'pending']);
+
+        $this->actingAs($approver)
             ->patch(route('requests.update', $pr), ['status' => 'rejected'])
             ->assertRedirect();
 
@@ -395,10 +445,10 @@ describe('update', function () {
     });
 
     it('fails validation when status is invalid', function () {
-        $user = makeUser();
-        $pr   = makeRequest(['requester_id' => $user->id]);
+        $approver = makeApprover();
+        $pr   = makeRequest();
 
-        $this->actingAs($user)
+        $this->actingAs($approver)
             ->patch(route('requests.update', $pr), ['status' => 'invalid_status'])
             ->assertSessionHasErrors(['status']);
     });
@@ -413,6 +463,12 @@ describe('update', function () {
             'reference_id'   => $pr->id,
             'reference_type' => ProjectRequest::class,
             'filepath'       => $filepath,
+        ]);
+
+        // A second surviving attachment so the request still has at least one after deletion
+        Attachment::factory()->create([
+            'reference_id'   => $pr->id,
+            'reference_type' => ProjectRequest::class,
         ]);
 
         Storage::disk('public')->put($filepath, 'dummy content');

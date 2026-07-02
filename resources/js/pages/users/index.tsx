@@ -35,6 +35,16 @@ const formatDate = (value?: string | null) => {
     });
 };
 
+// Display labels only — underlying DB role slugs ('requestor'/'approver'/'admin') are unchanged.
+const ROLE_LABELS: Record<string, string> = {
+    admin:     'Admin',
+    approver:  'Project Engineer',
+    requestor: 'Department User',
+};
+
+const roleLabel = (role: string): string =>
+    ROLE_LABELS[role] ?? (role.charAt(0).toUpperCase() + role.slice(1));
+
 function RoleBadge({ role }: { role: string | null }) {
     const map: Record<string, { bg: string; color: string }> = {
         admin:     { bg: '#dbeafe', color: '#1e40af' },
@@ -48,7 +58,7 @@ function RoleBadge({ role }: { role: string | null }) {
             fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px',
             background: s.bg, color: s.color,
         }}>
-            {role ?? 'no role'}
+            {role ? roleLabel(role) : 'no role'}
         </span>
     );
 }
@@ -250,8 +260,8 @@ export default function UsersIndex({ users, trashedUsers, roles }: Props) {
                 {[
                     { label: 'Total Users',  value: users.length,                                        color: '#2563eb' },
                     { label: 'Admins',       value: users.filter(u => u.role === 'admin').length,     color: '#7c3aed' },
-                    { label: 'Approvers',    value: users.filter(u => u.role === 'approver').length,  color: '#16a34a' },
-                    { label: 'Requestors',   value: users.filter(u => u.role === 'requestor').length, color: '#92400e' },
+                    { label: 'Project Engineers', value: users.filter(u => u.role === 'approver').length,  color: '#16a34a' },
+                    { label: 'Department Users',  value: users.filter(u => u.role === 'requestor').length, color: '#92400e' },
                 ].map(stat => (
                     <div key={stat.label} style={{
                         background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px',
@@ -319,7 +329,7 @@ export default function UsersIndex({ users, trashedUsers, roles }: Props) {
                                 >
                                     <option value="">All Roles</option>
                                     {roles.map(r => (
-                                        <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>
+                                        <option key={r} value={r}>{roleLabel(r)}</option>
                                     ))}
                                 </select>
                                 <button style={btnPrimary} onClick={() => setShowAdd(true)}>
@@ -510,7 +520,7 @@ export default function UsersIndex({ users, trashedUsers, roles }: Props) {
                         <div style={fieldStyle}>
                             <label style={labelStyle}>Role</label>
                             <select style={inputStyle} value={addForm.role} onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))} required>
-                                {roles.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                                {roles.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                             </select>
                             {errors.role && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.role}</p>}
                         </div>
@@ -543,7 +553,7 @@ export default function UsersIndex({ users, trashedUsers, roles }: Props) {
                         <div style={fieldStyle}>
                             <label style={labelStyle}>Role</label>
                             <select style={inputStyle} value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} required>
-                                {roles.map(r => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
+                                {roles.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                             </select>
                             {errors.role && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.role}</p>}
                         </div>

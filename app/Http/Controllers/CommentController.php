@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Comment;
+use App\Models\Notification;
 use App\Models\ProjectRequest;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -27,6 +29,19 @@ class CommentController extends Controller
         ]);
 
         $comment->load('user');
+
+        $link = route('requests.show', $projectRequest->id, absolute: false);
+        $message = "New Comment was added to project request #{$projectRequest->request_no}";
+
+        if (auth()->id() === $projectRequest->requester_id) {
+            Notification::notify(
+                User::whereHas('roles', fn ($q) => $q->where('name', 'approver'))->pluck('id'),
+                $message,
+                $link
+            );
+        } else {
+            Notification::notify($projectRequest->requester_id, $message, $link);
+        }
 
         return response()->json([
             'id'      => $comment->id,

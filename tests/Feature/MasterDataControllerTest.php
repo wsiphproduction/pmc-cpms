@@ -14,6 +14,7 @@ use App\Models\Structure;
 use App\Models\User;
 use App\Models\WorkForce;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Role;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
@@ -23,7 +24,12 @@ uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 function makeMasterDataUser(): User
 {
-    return User::factory()->create();
+    Role::firstOrCreate(['name' => 'approver']);
+
+    $user = User::factory()->create();
+    $user->assignRole('approver');
+
+    return $user;
 }
 
 function masterDataPayload(array $overrides = []): array

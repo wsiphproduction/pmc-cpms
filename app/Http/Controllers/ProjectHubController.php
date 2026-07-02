@@ -37,18 +37,30 @@ class ProjectHubController extends Controller
             ],
             'due_date'        => ['nullable', 'date'],
             'recipient_email' => ['nullable', 'email', 'max:255'],
+            'additional_recipients'   => ['nullable', 'array'],
+            'additional_recipients.*' => ['email', 'max:255'],
+            'cc_self'         => ['nullable', 'boolean'],
         ]);
 
         $rfq = $project->rfqs()->create([
-            ...$data,
-            'sent_date'  => now()->toDateString(),
-            'status'     => 'pending',
-            'created_by' => auth()->id(),
+            'contractor_name' => $data['contractor_name'],
+            'due_date'        => $data['due_date'] ?? null,
+            'recipient_email' => $data['recipient_email'] ?? null,
+            'sent_date'       => now()->toDateString(),
+            'status'          => 'pending',
+            'created_by'      => auth()->id(),
         ]);
 
         if (!empty($data['recipient_email'])) {
+            $ccRecipients = $data['additional_recipients'] ?? [];
+            if ($data['cc_self'] ?? false) {
+                $ccRecipients[] = auth()->user()->email;
+            }
+
             try {
-                Mail::to($data['recipient_email'])->send(new RfqDispatched($rfq, $project));
+                Mail::to($data['recipient_email'])
+                    ->when(!empty($ccRecipients), fn ($mail) => $mail->cc($ccRecipients))
+                    ->send(new RfqDispatched($rfq, $project));
             } catch (\Throwable $e) {
                 \Log::error("RFQ email failed for RFQ #{$rfq->id}: " . $e->getMessage());
             }
@@ -176,6 +188,8 @@ class ProjectHubController extends Controller
 
         AuditTrail::log("NTP {$ntpNo} issued to {$data['contractor_name']}", $project, ['module' => 'NTP', 'type' => 'create']);
 
+        $this->recalculateBudgetTotal($project);
+
         return back()->with('success', "NTP {$ntpNo} issued successfully.");
     }
 
@@ -185,6 +199,8 @@ class ProjectHubController extends Controller
 
         AuditTrail::log("NTP {$ntp->ntp_no} deleted", $project, ['module' => 'NTP', 'type' => 'delete']);
         $ntp->delete();
+
+        $this->recalculateBudgetTotal($project);
 
         return back()->with('success', 'NTP deleted.');
     }
@@ -258,7 +274,7 @@ class ProjectHubController extends Controller
             'cost_remark'       => ['nullable', 'string'],
         ]);
 
-        $voNo = $this->nextVoNo($project);
+        $voNo = $this->nextVoNo();
 
         $attachmentPath = null;
         if ($request->hasFile('attachment')) {
@@ -348,6 +364,24 @@ class ProjectHubController extends Controller
         AuditTrail::log("Variation Order {$vof->vo_no} updated", $project, ['module' => 'VOF', 'type' => 'update']);
 
         return back()->with('success', 'Variation order updated.');
+    }
+
+    public function updateVofStatus(Request $request, Project $project, ProjectVariationOrder $vof): RedirectResponse
+    {
+        abort_unless((int) $vof->project_id === (int) $project->id, 403);
+
+        $data = $request->validate([
+            'status' => ['required', 'in:pending,approved,rejected'],
+        ]);
+
+        $vof->update([
+            'status'        => $data['status'],
+            'approved_date' => $data['status'] === 'pending' ? null : ($vof->approved_date ?? now()->toDateString()),
+        ]);
+
+        AuditTrail::log("Variation Order {$vof->vo_no} status changed to {$data['status']}", $project, ['module' => 'VOF', 'type' => 'update']);
+
+        return back()->with('success', 'Variation order status updated.');
     }
 
     public function destroyVof(Project $project, ProjectVariationOrder $vof): RedirectResponse
@@ -450,6 +484,7 @@ class ProjectHubController extends Controller
             'remarks'        => ['nullable', 'string'],
             'attachments'    => ['nullable', 'array'],
             'attachments.*'  => ['string'],
+            'recommendation' => ['nullable', 'string', 'max:255'],
             'file'           => ['nullable', 'file', 'max:20480'],
         ]);
 
@@ -473,6 +508,7 @@ class ProjectHubController extends Controller
             'summary'        => ($data['summary']      ?? '') ?: null,
             'remarks'        => ($data['remarks']      ?? '') ?: null,
             'attachments'    => $data['attachments']   ?? null,
+            'recommendation' => ($data['recommendation'] ?? '') ?: null,
             'stmt_no'        => $stmtNo,
             'status'         => 'pending',
             'file_path'      => $filePath,
@@ -481,6 +517,8 @@ class ProjectHubController extends Controller
         ]);
 
         AuditTrail::log("Billing {$stmtNo} submitted ({$data['billing_type']}) — PhP {$data['amount']}", $project, ['module' => 'RFP', 'type' => 'finance']);
+
+        $this->recalculateBudgetPaid($project);
 
         return back()->with('success', "Billing statement {$stmtNo} submitted.");
     }
@@ -499,11 +537,11 @@ class ProjectHubController extends Controller
             'remarks'      => ['nullable', 'string'],
             'attachments'  => ['nullable', 'array'],
             'attachments.*'=> ['string'],
+            'recommendation' => ['nullable', 'string', 'max:255'],
             'status'       => ['required', 'in:pending,approved,paid'],
             'file'         => ['nullable', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx'],
         ]);
 
-        $wasPaid = $billing->status === 'paid';
         $billing->update([
             'billing_type' => $data['billing_type'],
             'period_from'  => ($data['period_from']  ?? '') ?: null,
@@ -513,6 +551,7 @@ class ProjectHubController extends Controller
             'summary'      => ($data['summary']      ?? '') ?: null,
             'remarks'      => ($data['remarks']      ?? '') ?: null,
             'attachments'  => $data['attachments']   ?? null,
+            'recommendation' => ($data['recommendation'] ?? '') ?: null,
             'status'       => $data['status'],
         ]);
 
@@ -530,11 +569,9 @@ class ProjectHubController extends Controller
             ]);
         }
 
-        if (!$wasPaid && $data['status'] === 'paid') {
-            $project->increment('budget_paid', $billing->amount);
-        }
-
         AuditTrail::log("Billing {$billing->stmt_no} updated — status: {$data['status']}", $project, ['module' => 'RFP', 'type' => 'update']);
+
+        $this->recalculateBudgetPaid($project);
 
         return back()->with('success', 'Billing updated.');
     }
@@ -549,11 +586,9 @@ class ProjectHubController extends Controller
 
         $billing->update($data);
 
-        if ($data['status'] === 'paid') {
-            $project->increment('budget_paid', $billing->amount);
-        }
-
         AuditTrail::log("Billing {$billing->stmt_no} status changed to {$data['status']}", $project, ['module' => 'RFP', 'type' => 'finance']);
+
+        $this->recalculateBudgetPaid($project);
 
         return back()->with('success', 'Billing status updated.');
     }
@@ -569,7 +604,27 @@ class ProjectHubController extends Controller
         }
         $billing->delete();
 
+        $this->recalculateBudgetPaid($project);
+
         return back()->with('success', 'Billing record deleted.');
+    }
+
+    private function recalculateBudgetPaid(Project $project): void
+    {
+        $project->update([
+            'budget_paid' => $project->billings()->where('status', 'paid')->sum('amount'),
+        ]);
+    }
+
+    /**
+     * Total Project Cost is derived from the sum of approved NTP contract values
+     * (the officially awarded cost) rather than a manually-entered figure.
+     */
+    private function recalculateBudgetTotal(Project $project): void
+    {
+        $project->update([
+            'budget_total' => $project->ntps()->sum('approved_cost'),
+        ]);
     }
 
     // ── IOC ───────────────────────────────────────────────────────────────────
@@ -702,11 +757,13 @@ class ProjectHubController extends Controller
             'target_date' => ['required', 'date'],
         ]);
 
-        $project->tasks()->create([
+        $task = $project->tasks()->create([
             'task_name'   => $request->task_name,
             'target_date' => $request->target_date,
             'status'      => 'pending',
         ]);
+
+        AuditTrail::log("Task added: {$task->task_name}", $project, ['module' => 'Todo', 'type' => 'create']);
 
         return back()->with('success', 'Task added.');
     }
@@ -717,6 +774,8 @@ class ProjectHubController extends Controller
 
         $task->update(['status' => $task->status === 'done' ? 'pending' : 'done']);
 
+        AuditTrail::log("Task '{$task->task_name}' marked as {$task->status}", $project, ['module' => 'Todo', 'type' => 'update']);
+
         return back()->with('success', 'Task updated.');
     }
 
@@ -724,7 +783,10 @@ class ProjectHubController extends Controller
     {
         abort_unless((int) $task->project_id === (int) $project->id, 403);
 
+        $taskName = $task->task_name;
         $task->delete();
+
+        AuditTrail::log("Task deleted: {$taskName}", $project, ['module' => 'Todo', 'type' => 'delete']);
 
         return back()->with('success', 'Task deleted.');
     }
@@ -744,11 +806,16 @@ class ProjectHubController extends Controller
         return 'PMC-NTP-' . $year . '-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
-    private function nextVoNo(Project $project): string
+    private function nextVoNo(): string
     {
-        $count = $project->variationOrders()->withTrashed()->count() + 1;
+        $latest = ProjectVariationOrder::withTrashed()
+            ->where('vo_no', 'like', 'VO-%')
+            ->orderByDesc('vo_no')
+            ->value('vo_no');
 
-        return 'VO-' . str_pad((string) $count, 3, '0', STR_PAD_LEFT);
+        $next = $latest ? ((int) substr($latest, 3)) + 1 : 1;
+
+        return 'VO-' . str_pad((string) $next, 3, '0', STR_PAD_LEFT);
     }
 
     private function nextStmtNo(): string

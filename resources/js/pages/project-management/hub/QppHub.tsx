@@ -5,7 +5,7 @@ import { useConfirm } from '@/components/useConfirm';
 
 interface QppRow { id: number; label: string; doc_type: string; filename: string; url: string; created: string }
 
-export default function QppHub({ project, qpps }: { project: HubProject; qpps: QppRow[] }) {
+export default function QppHub({ project, qpps, canEdit = true }: { project: HubProject; qpps: QppRow[]; canEdit?: boolean }) {
     const [label, setLabel]   = useState('');
     const [docType, setDocType] = useState('Inspection & Test Plan (ITP)');
     const [saving, setSaving] = useState(false);
@@ -42,27 +42,29 @@ export default function QppHub({ project, qpps }: { project: HubProject; qpps: Q
         <HubShell>
             {confirmDialog}
             <InfoStrip project={project} accent="#0ea5e9" />
-            <div style={{ background: '#f0f9ff', border: '2px dashed #bae6fd', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 150px', gap: '12px', alignItems: 'end' }}>
-                    <Field label="Document Label">
-                        <input style={inputStyle} placeholder="e.g. Concrete Pouring ITP" value={label} onChange={e => setLabel(e.target.value)} />
-                    </Field>
-                    <Field label="Type of Document">
-                        <select style={inputStyle} value={docType} onChange={e => setDocType(e.target.value)}>
-                            <option>Inspection & Test Plan (ITP)</option>
-                            <option>Method Statement</option>
-                            <option>Quality Control Procedure</option>
-                            <option>Material Approval Request</option>
-                            <option>Site Inspection Report</option>
-                        </select>
-                    </Field>
-                    <Field label="Upload File"><input type="file" ref={fileRef} style={inputStyle} /></Field>
-                    <button type="button" onClick={handleUpload} disabled={saving} style={{ padding: '8px 13px', borderRadius: '7px', background: '#0ea5e9', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px' }}>
-                        {saving ? 'Uploading...' : 'Upload File'}
-                    </button>
+            {canEdit && (
+                <div style={{ background: '#f0f9ff', border: '2px dashed #bae6fd', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr 150px', gap: '12px', alignItems: 'end' }}>
+                        <Field label="Document Label">
+                            <input style={inputStyle} placeholder="e.g. Concrete Pouring ITP" value={label} onChange={e => setLabel(e.target.value)} />
+                        </Field>
+                        <Field label="Type of Document">
+                            <select style={inputStyle} value={docType} onChange={e => setDocType(e.target.value)}>
+                                <option>Inspection & Test Plan (ITP)</option>
+                                <option>Method Statement</option>
+                                <option>Quality Control Procedure</option>
+                                <option>Material Approval Request</option>
+                                <option>Site Inspection Report</option>
+                            </select>
+                        </Field>
+                        <Field label="Upload File"><input type="file" ref={fileRef} style={inputStyle} /></Field>
+                        <button type="button" onClick={handleUpload} disabled={saving} style={{ padding: '8px 13px', borderRadius: '7px', background: '#0ea5e9', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px' }}>
+                            {saving ? 'Uploading...' : 'Upload File'}
+                        </button>
+                    </div>
+                    {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{error}</div>}
                 </div>
-                {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{error}</div>}
-            </div>
+            )}
             <DataTable
                 headers={['Seq#', 'Label', 'Type of Document', 'Date', 'Actions']}
                 rows={qpps.map((doc, idx) => [
@@ -70,7 +72,7 @@ export default function QppHub({ project, qpps }: { project: HubProject; qpps: Q
                     <strong>{doc.label}</strong>,
                     <Badge tone="blue">{doc.doc_type}</Badge>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{doc.created}</span>,
-                    <ActionBtns download del onDownload={() => window.open(doc.url)} onDelete={() => handleDelete(doc)} />,
+                    <ActionBtns download del={canEdit} onDownload={() => window.open(doc.url)} onDelete={() => handleDelete(doc)} />,
                 ])}
             />
         </HubShell>

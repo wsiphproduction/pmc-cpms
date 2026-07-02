@@ -10,6 +10,7 @@ class ProjectRequestFactory extends Factory
     public function definition(): array
     {
         return [
+            'request_no'    => 'REQ-' . fake()->unique()->numerify('##########'),
             'title'         => fake()->sentence(3),
             'job_type'      => fake()->randomElement(['civil', 'electrical', 'mechanical']),
             'description'   => fake()->paragraph(),

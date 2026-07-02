@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 class Project extends Model
 {
@@ -56,6 +57,8 @@ class Project extends Model
         'budget_total' => 'decimal:2',
         'budget_paid' => 'decimal:2',
         'completion_percent' => 'integer',
+        'created_by' => 'integer',
+        'project_manager_id' => 'integer',
     ];
 
     public function manager(): BelongsTo
@@ -128,5 +131,60 @@ class Project extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(ProjectTask::class)->orderBy('target_date');
+    }
+
+    // ── Health / KPI ──────────────────────────────────────────────────────
+
+    public function daysElapsed(): int
+    {
+        return $this->created_at?->diffInDays(now()) ?? 0;
+    }
+
+    public function daysRemaining(): int
+    {
+        $deadline = $this->deadline ? Carbon::parse($this->deadline) : now();
+
+        return max(0, now()->startOfDay()->diffInDays($deadline->startOfDay(), false));
+    }
+
+    /**
+     * "On-Time" requires actual completion to be at least the admin-configured
+     * `project_completion_kpi` percentage of the completion expected from time elapsed
+     * (e.g. 50% of the timeline elapsed with an 80% KPI expects >= 40% actual completion).
+     */
+    public function health(): string
+    {
+        if ($this->completion_percent >= 100) {
+            return 'Advanced';
+        }
+
+        $daysElapsed = $this->daysElapsed();
+        $daysRemaining = $this->daysRemaining();
+        $totalDays = $daysElapsed + $daysRemaining;
+
+        if ($totalDays <= 0) {
+            return $daysRemaining === 0 ? 'Delayed' : 'On-Time';
+        }
+
+        $expectedPercent = min(100, ($daysElapsed / $totalDays) * 100);
+        if ($expectedPercent <= 0) {
+            return 'On-Time';
+        }
+
+        $kpiThreshold = (float) Setting::get('project_completion_kpi', 80);
+        $onTrackRatio = ($this->completion_percent / $expectedPercent) * 100;
+
+        return $onTrackRatio < $kpiThreshold ? 'Delayed' : 'On-Time';
+    }
+
+    // ── Notifications ─────────────────────────────────────────────────────
+
+    public function notifyRequester(string $message, ?string $link = null): void
+    {
+        $requesterId = $this->projectRequest?->requester_id;
+
+        if ($requesterId && $requesterId !== auth()->id()) {
+            Notification::notify($requesterId, $message, $link ?? route('projects.show', $this->id, absolute: false));
+        }
     }
 }

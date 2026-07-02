@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Notification;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -48,6 +49,22 @@ class HandleInertiaRequests extends Middleware
                     ['role' => $request->user()->roles->first()?->name]
                 ) : null,
             ],
+            'notifications' => $request->user()
+                ? Notification::where('recipient', $request->user()->id)
+                    ->latest()
+                    ->take(8)
+                    ->get()
+                    ->map(fn (Notification $n) => [
+                        'id' => $n->id,
+                        'message' => $n->message,
+                        'link' => $n->link,
+                        'is_read' => $n->is_read,
+                        'created_at' => $n->created_at?->diffForHumans(),
+                    ])
+                : [],
+            'unread_notifications_count' => $request->user()
+                ? Notification::where('recipient', $request->user()->id)->where('is_read', false)->count()
+                : 0,
         ]);
     }
 }

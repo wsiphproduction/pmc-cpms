@@ -146,16 +146,16 @@ function mkBtn(bg: string, border: string, color: string, title: string, icon: R
 
 export function ActionBtns({
     view, edit, del, download, print, trophy, refresh,
-    onView, onEdit, onDelete, onDownload, onTrophy, onRefresh,
+    onView, onEdit, onDelete, onDownload, onPrint, onTrophy, onRefresh,
 }: {
     view?: boolean; edit?: boolean; del?: boolean; download?: boolean; print?: boolean; trophy?: boolean; refresh?: boolean;
-    onView?: () => void; onEdit?: () => void; onDelete?: () => void; onDownload?: () => void; onTrophy?: () => void; onRefresh?: () => void;
+    onView?: () => void; onEdit?: () => void; onDelete?: () => void; onDownload?: () => void; onPrint?: () => void; onTrophy?: () => void; onRefresh?: () => void;
 }) {
     return (
         <div style={{ display: 'flex', gap: '4px' }}>
             {view     && mkBtn('#fff',    '#e2e8f0', '#475569', 'View',     <EyeIcon />,     onView)}
             {download && mkBtn('#eff6ff', '#bfdbfe', '#2563eb', 'Download', <DlIcon />,      onDownload)}
-            {print    && mkBtn('#fff',    '#e2e8f0', '#475569', 'Print',    <PrintIcon />)}
+            {print    && mkBtn('#fff',    '#e2e8f0', '#475569', 'Print',    <PrintIcon />,   onPrint)}
             {edit     && mkBtn('#eff6ff', '#bfdbfe', '#2563eb', 'Edit',     <PencilIcon />,  onEdit)}
             {trophy   && mkBtn('#f0fdf4', '#bbf7d0', '#15803d', 'Award',    <TrophyIcon />,  onTrophy)}
             {refresh  && mkBtn('#fef2f2', '#fecaca', '#dc2626', 'Resend',   <RefreshIcon />, onRefresh)}

@@ -188,8 +188,104 @@ function CreateModal({ project, onClose }: { project: HubProject; onClose: () =>
     );
 }
 
-// ── View / Edit Modal ──────────────────────────────────────────────────────
-function ViewModal({ project, vof, onClose }: { project: HubProject; vof: VofRow; onClose: () => void }) {
+// ── Read-only detail table (View modal) ────────────────────────────────────
+function ReadOnlyDetailTable({
+    scope, schedule, cost,
+}: {
+    scope:    { original: string; proposed: string; remark: string };
+    schedule: { original: string; proposed: string; remark: string };
+    cost:    { original: string; proposed: string; remark: string };
+}) {
+    const rows = [
+        { label: 'Scope',    state: scope },
+        { label: 'Schedule', state: schedule },
+        { label: 'Cost',     state: cost },
+    ];
+
+    return (
+        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', marginBottom: '20px' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                <thead>
+                    <tr style={{ background: '#fefce8' }}>
+                        {['Aspect', 'Original Details', 'Proposed Change', 'Reason / Remark'].map(h => (
+                            <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: '10px', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #fde68a' }}>{h}</th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map(({ label, state }, i) => (
+                        <tr key={label} style={{ borderBottom: i < 2 ? '1px solid #f1f5f9' : 'none' }}>
+                            <td style={{ padding: '8px 12px', fontWeight: 700, color: '#374151', whiteSpace: 'nowrap', verticalAlign: 'top' }}>{label}</td>
+                            {(['original', 'proposed', 'remark'] as const).map(key => (
+                                <td key={key} style={{ padding: '8px 12px', verticalAlign: 'top', color: '#0f172a', whiteSpace: 'pre-wrap' }}>{state[key] || '—'}</td>
+                            ))}
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+// ── View Modal (read-only) ─────────────────────────────────────────────────
+function ViewVofModal({ vof, onClose }: { vof: VofRow; onClose: () => void }) {
+    const priorities = vof.priority ? vof.priority.split(',').filter(Boolean) : [];
+
+    return (
+        <Modal title={`${vof.vo_no} — View Details`} onClose={onClose} headerBg={ACCENT} size="920px"
+            footer={<Button variant="outline" onClick={onClose}>Close</Button>}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', border: '1px solid #fde68a', borderRadius: '8px', background: '#fffbeb', marginBottom: '20px' }}>
+                <div style={{ fontSize: '20px', fontWeight: 900, color: ACCENT }}>{vof.vo_no}</div>
+                <div style={{ fontSize: '12px', color: '#64748b' }}>Submitted: {vof.submitted_date}</div>
+                <Badge tone={STATUS_TONE[vof.status] ?? 'slate'}>{vof.status}</Badge>
+            </div>
+
+            <ModalSection color={ACCENT}>I. Variation Order Information</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                <Field label="V.O. Number"><div>{vof.vo_no}</div></Field>
+                <Field label="Date of Request"><div>{vof.date_of_request || '—'}</div></Field>
+                <Field label="Requestor"><div>{vof.requestor || '—'}</div></Field>
+            </div>
+
+            <ModalSection color={ACCENT}>II. Variation Order Details</ModalSection>
+            <ReadOnlyDetailTable
+                scope={{ original: vof.scope_original ?? '', proposed: vof.scope_proposed ?? '', remark: vof.scope_remark ?? '' }}
+                schedule={{ original: vof.schedule_original ?? '', proposed: vof.schedule_proposed ?? '', remark: vof.schedule_remark ?? '' }}
+                cost={{ original: vof.cost_original ?? '', proposed: vof.cost_proposed ?? '', remark: vof.cost_remark ?? '' }}
+            />
+
+            <ModalSection color={ACCENT}>III. Variation Order Form</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <Field label="Priority"><div>{priorities.length ? priorities.join(', ') : '—'}</div></Field>
+                <Field label="Title / Subject"><div>{vof.title}</div></Field>
+                <Field label="Amount (PhP)"><div>PhP {vof.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></Field>
+            </div>
+            <div style={{ marginBottom: '14px' }}>
+                <Field label="Description / Justification"><div style={{ whiteSpace: 'pre-wrap' }}>{vof.description || '—'}</div></Field>
+            </div>
+            <div style={{ marginBottom: '20px' }}>
+                <Field label="Attachment">
+                    {vof.attachment_url ? (
+                        <a href={vof.attachment_url} target="_blank" rel="noopener noreferrer"
+                           style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
+                            📎 View File ↗
+                        </a>
+                    ) : <div style={{ color: '#94a3b8', fontSize: '12px' }}>No attachment.</div>}
+                </Field>
+            </div>
+
+            <ModalSection color={ACCENT}>IV. Status Management</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <Field label="Status"><div>{vof.status}</div></Field>
+                <Field label="Approval / Decision Date"><div>{vof.approved_date || '—'}</div></Field>
+            </div>
+        </Modal>
+    );
+}
+
+// ── Edit Modal ──────────────────────────────────────────────────────────────
+function EditModal({ project, vof, onClose }: { project: HubProject; vof: VofRow; onClose: () => void }) {
     const [title,       setTitle]       = useState(vof.title);
     const [desc,        setDesc]        = useState(vof.description ?? '');
     const [amount,      setAmount]      = useState(String(vof.amount));
@@ -230,7 +326,7 @@ function ViewModal({ project, vof, onClose }: { project: HubProject; vof: VofRow
 
     return (
         <Modal
-            title={`${vof.vo_no} — Edit Variation Order`}
+            title={`${vof.vo_no} — Edit Details`}
             onClose={onClose}
             headerBg={ACCENT}
             size="920px"
@@ -317,10 +413,21 @@ function ViewModal({ project, vof, onClose }: { project: HubProject; vof: VofRow
     );
 }
 
+function quickStatusBtn(bg: string, border: string, color: string, title: string, icon: React.ReactNode, onClick: () => void) {
+    return (
+        <button type="button" title={title} onClick={onClick} style={{ width: '30px', height: '30px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: bg, border: `1px solid ${border}`, color }}>
+            {icon}
+        </button>
+    );
+}
+const CheckIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>;
+const XIcon      = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function VofHub({ project, vofs }: { project: HubProject; vofs: VofRow[] }) {
+export default function VofHub({ project, vofs, canEdit = true }: { project: HubProject; vofs: VofRow[]; canEdit?: boolean }) {
     const [showCreate, setShowCreate] = useState(false);
     const [viewVof,    setViewVof]    = useState<VofRow | null>(null);
+    const [editVof,    setEditVof]    = useState<VofRow | null>(null);
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
@@ -330,11 +437,16 @@ export default function VofHub({ project, vofs }: { project: HubProject; vofs: V
         }, { title: 'Delete Variation Order', confirmLabel: 'Delete', variant: 'danger' });
     };
 
+    const handleQuickStatus = (vof: VofRow, status: 'approved' | 'rejected') => {
+        router.patch(route('hub.vof.update-status', [project.id, vof.id]), { status }, { preserveScroll: true });
+    };
+
     return (
         <HubShell>
             {confirmDialog}
-            {showCreate && <CreateModal project={project} onClose={() => setShowCreate(false)} />}
-            {viewVof    && <ViewModal   project={project} vof={viewVof} onClose={() => setViewVof(null)} />}
+            {showCreate && <CreateModal    project={project} onClose={() => setShowCreate(false)} />}
+            {viewVof    && <ViewVofModal   vof={viewVof} onClose={() => setViewVof(null)} />}
+            {editVof    && <EditModal      project={project} vof={editVof} onClose={() => setEditVof(null)} />}
 
             <InfoStrip project={project} accent={ACCENT} />
 
@@ -342,7 +454,7 @@ export default function VofHub({ project, vofs }: { project: HubProject; vofs: V
                 <div style={{ borderLeft: `4px solid ${ACCENT}`, background: '#f8fafc', padding: '9px 14px', fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                     {vofs.length > 0 ? `Variation Orders (${vofs.length})` : 'Variation Orders'}
                 </div>
-                <Button variant="dark" onClick={() => setShowCreate(true)}>+ Create Variation Order</Button>
+                {canEdit && <Button variant="dark" onClick={() => setShowCreate(true)}>+ Create Variation Order</Button>}
             </div>
 
             {vofs.length === 0 ? (
@@ -360,7 +472,11 @@ export default function VofHub({ project, vofs }: { project: HubProject; vofs: V
                         <strong>PhP {vo.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                         <Badge tone={STATUS_TONE[vo.status] ?? 'slate'}>{vo.status}</Badge>,
                         <span style={{ fontSize: '12px', color: '#64748b' }}>{vo.submitted_date}</span>,
-                        <ActionBtns view del onView={() => setViewVof(vo)} onDelete={() => handleDelete(vo)} />,
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                            {canEdit && vo.status === 'Pending' && quickStatusBtn('#f0fdf4', '#bbf7d0', '#15803d', 'Approve', <CheckIcon />, () => handleQuickStatus(vo, 'approved'))}
+                            {canEdit && vo.status === 'Pending' && quickStatusBtn('#fef2f2', '#fecaca', '#dc2626', 'Reject',  <XIcon />,     () => handleQuickStatus(vo, 'rejected'))}
+                            <ActionBtns view edit={canEdit} del={canEdit} onView={() => setViewVof(vo)} onEdit={() => setEditVof(vo)} onDelete={() => handleDelete(vo)} />
+                        </div>,
                     ])}
                 />
             )}

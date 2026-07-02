@@ -57,7 +57,7 @@ export default function AuthenticatedLayout({ children }: Props) {
                 onNavigate={() => isMobile && setMobileSidebarOpen(false)}
             />
 
-            <div style={{
+            <div className="print-full-width" style={{
                 marginLeft: isMobile ? 0 : `${sidebarWidth}px`,
                 flex: 1,
                 display: 'flex',

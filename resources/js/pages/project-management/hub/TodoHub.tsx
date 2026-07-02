@@ -16,7 +16,7 @@ function isOverdue(dateStr: string, status: string) {
     return new Date(dateStr) < new Date(new Date().toDateString());
 }
 
-export default function TodoHub({ project, tasks }: { project: HubProject; tasks: Task[] }) {
+export default function TodoHub({ project, tasks, canEdit = true }: { project: HubProject; tasks: Task[]; canEdit?: boolean }) {
     const [taskName,   setTaskName]   = useState('');
     const [targetDate, setTargetDate] = useState('');
     const [adding,     setAdding]     = useState(false);
@@ -64,37 +64,39 @@ export default function TodoHub({ project, tasks }: { project: HubProject; tasks
             </div>
 
             {/* Add form */}
-            <form onSubmit={handleAdd} style={{ display: 'flex', gap: '10px', marginBottom: '28px', alignItems: 'flex-end', background: '#f5f3ff', border: `1.5px solid #ede9fe`, borderRadius: '10px', padding: '16px' }}>
-                <div style={{ flex: 1 }}>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#6d28d9', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Task Name</label>
-                    <input
-                        ref={nameRef}
-                        type="text"
-                        value={taskName}
-                        onChange={e => setTaskName(e.target.value)}
-                        placeholder="Enter task description…"
-                        style={inp}
-                        required
-                    />
-                </div>
-                <div style={{ width: '160px' }}>
-                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#6d28d9', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Target Date</label>
-                    <input
-                        type="date"
-                        value={targetDate}
-                        onChange={e => setTargetDate(e.target.value)}
-                        style={inp}
-                        required
-                    />
-                </div>
-                <button
-                    type="submit"
-                    disabled={adding}
-                    style={{ padding: '8px 20px', borderRadius: '7px', border: 'none', background: adding ? '#a78bfa' : ACCENT, color: '#fff', fontSize: '13px', fontWeight: 700, cursor: adding ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', height: '36px' }}
-                >
-                    {adding ? 'Adding…' : '+ Add Task'}
-                </button>
-            </form>
+            {canEdit && (
+                <form onSubmit={handleAdd} style={{ display: 'flex', gap: '10px', marginBottom: '28px', alignItems: 'flex-end', background: '#f5f3ff', border: `1.5px solid #ede9fe`, borderRadius: '10px', padding: '16px' }}>
+                    <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#6d28d9', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Task Name</label>
+                        <input
+                            ref={nameRef}
+                            type="text"
+                            value={taskName}
+                            onChange={e => setTaskName(e.target.value)}
+                            placeholder="Enter task description…"
+                            style={inp}
+                            required
+                        />
+                    </div>
+                    <div style={{ width: '160px' }}>
+                        <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: '#6d28d9', marginBottom: '5px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Target Date</label>
+                        <input
+                            type="date"
+                            value={targetDate}
+                            onChange={e => setTargetDate(e.target.value)}
+                            style={inp}
+                            required
+                        />
+                    </div>
+                    <button
+                        type="submit"
+                        disabled={adding}
+                        style={{ padding: '8px 20px', borderRadius: '7px', border: 'none', background: adding ? '#a78bfa' : ACCENT, color: '#fff', fontSize: '13px', fontWeight: 700, cursor: adding ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', height: '36px' }}
+                    >
+                        {adding ? 'Adding…' : '+ Add Task'}
+                    </button>
+                </form>
+            )}
 
             {tasks.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '60px 24px', color: '#94a3b8' }}>
@@ -113,7 +115,7 @@ export default function TodoHub({ project, tasks }: { project: HubProject; tasks
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
                                 {pending.map(task => (
-                                    <TaskRow key={task.id} task={task} onToggle={handleToggle} onDelete={handleDelete} />
+                                    <TaskRow key={task.id} task={task} onToggle={handleToggle} onDelete={handleDelete} canEdit={canEdit} />
                                 ))}
                             </div>
                         </>
@@ -128,7 +130,7 @@ export default function TodoHub({ project, tasks }: { project: HubProject; tasks
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 {done.map(task => (
-                                    <TaskRow key={task.id} task={task} onToggle={handleToggle} onDelete={handleDelete} />
+                                    <TaskRow key={task.id} task={task} onToggle={handleToggle} onDelete={handleDelete} canEdit={canEdit} />
                                 ))}
                             </div>
                         </>
@@ -139,7 +141,7 @@ export default function TodoHub({ project, tasks }: { project: HubProject; tasks
     );
 }
 
-function TaskRow({ task, onToggle, onDelete }: { task: Task; onToggle: (t: Task) => void; onDelete: (t: Task) => void }) {
+function TaskRow({ task, onToggle, onDelete, canEdit = true }: { task: Task; onToggle: (t: Task) => void; onDelete: (t: Task) => void; canEdit?: boolean }) {
     const done    = task.status === 'done';
     const overdue = isOverdue(task.target_date, task.status);
 
@@ -159,13 +161,14 @@ function TaskRow({ task, onToggle, onDelete }: { task: Task; onToggle: (t: Task)
             {/* Toggle checkbox */}
             <button
                 type="button"
-                onClick={() => onToggle(task)}
-                title={done ? 'Mark as pending' : 'Mark as done'}
+                onClick={() => canEdit && onToggle(task)}
+                disabled={!canEdit}
+                title={canEdit ? (done ? 'Mark as pending' : 'Mark as done') : undefined}
                 style={{
                     width: '20px', height: '20px', borderRadius: '5px', flexShrink: 0,
                     border: `2px solid ${done ? '#16a34a' : '#cbd5e1'}`,
                     background: done ? '#16a34a' : '#fff',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: canEdit ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
             >
                 {done && (
@@ -201,14 +204,16 @@ function TaskRow({ task, onToggle, onDelete }: { task: Task; onToggle: (t: Task)
             </span>
 
             {/* Delete */}
-            <button
-                type="button"
-                onClick={() => onDelete(task)}
-                title="Delete task"
-                style={{ width: '26px', height: '26px', borderRadius: '6px', border: '1px solid #fecaca', background: '#fff5f5', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-            >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-            </button>
+            {canEdit && (
+                <button
+                    type="button"
+                    onClick={() => onDelete(task)}
+                    title="Delete task"
+                    style={{ width: '26px', height: '26px', borderRadius: '6px', border: '1px solid #fecaca', background: '#fff5f5', color: '#ef4444', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                </button>
+            )}
         </div>
     );
 }

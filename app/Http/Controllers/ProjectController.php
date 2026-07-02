@@ -8,6 +8,7 @@ use App\Models\CostCode;
 use App\Models\Department;
 use App\Models\MasterClass;
 use App\Models\MasterStatus;
+use App\Models\Notification;
 use App\Models\Priority;
 use App\Models\Project;
 use App\Models\ProjectRequest;
@@ -18,7 +19,6 @@ use App\Models\User;
 use App\Models\WorkForce;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -43,6 +43,11 @@ class ProjectController extends Controller
     public function index(Request $request): Response
     {
         $query = Project::with(['manager', 'creator'])->latest();
+
+        $user = $request->user();
+        if (!$user->hasRole(['approver', 'admin'])) {
+            $query->whereHas('projectRequest', fn ($q) => $q->where('requester_id', $user->id));
+        }
 
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
@@ -80,11 +85,14 @@ class ProjectController extends Controller
                 'need_electrical',
                 'need_mechanical',
             ]),
+            'canCreate' => $request->user()->can('create', Project::class),
         ]);
     }
 
     public function create(Request $request): Response
     {
+        $this->authorize('create', Project::class);
+
         $projectRequest = $request->filled('request_id')
             ? ProjectRequest::with(['project', 'requester'])->findOrFail($request->integer('request_id'))
             : null;
@@ -100,6 +108,8 @@ class ProjectController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authorize('create', Project::class);
+
         $data = $this->validatedProjectData($request);
         $manager = User::find($data['project_manager']);
         $sourceRequest = !empty($data['project_request_id'])
@@ -155,12 +165,22 @@ class ProjectController extends Controller
             'remarks' => 'Project registered.',
         ]);
 
+        if ($sourceRequest && $sourceRequest->requester_id !== auth()->id()) {
+            Notification::notify(
+                $sourceRequest->requester_id,
+                "A Project has been created from your Project Request #{$sourceRequest->request_no}",
+                route('projects.show', $project->id, absolute: false)
+            );
+        }
+
         return redirect()->route('projects.show', $project)
             ->with('success', 'Project registered successfully.');
     }
 
     public function show(Project $project): Response
     {
+        $this->authorize('view', $project);
+
         return Inertia::render('project-management/show', [
             'project' => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user'])),
         ]);
@@ -168,6 +188,8 @@ class ProjectController extends Controller
 
     public function edit(Project $project): Response
     {
+        $this->authorize('update', $project);
+
         return Inertia::render('project-management/edit', [
             'next_project_no' => $project->project_no,
             'project' => $this->projectFormData($project),
@@ -177,6 +199,8 @@ class ProjectController extends Controller
 
     public function update(Request $request, Project $project): RedirectResponse
     {
+        $this->authorize('update', $project);
+
         $data = $this->validatedProjectData($request);
         $manager = User::find($data['project_manager']);
 
@@ -219,12 +243,16 @@ class ProjectController extends Controller
             $project->update(['proposal_document' => $path]);
         }
 
+        AuditTrail::log('Project details updated', $project, ['module' => 'Project', 'type' => 'update']);
+
         return redirect()->route('projects.show', $project)
             ->with('success', 'Project updated successfully.');
     }
 
     public function destroy(Project $project): RedirectResponse
     {
+        $this->authorize('delete', $project);
+
         $project->delete();
 
         return redirect()->route('projects.index')->with('success', 'Project deleted.');
@@ -232,11 +260,15 @@ class ProjectController extends Controller
 
     public function status(Project $project): RedirectResponse
     {
+        $this->authorize('view', $project);
+
         return redirect()->route('projects.show', $project);
     }
 
     public function updateStatus(Request $request, Project $project): RedirectResponse
     {
+        $this->authorize('update', $project);
+
         $data = $request->validate([
             'status_key' => ['required', 'string', 'max:80'],
             'remarks' => ['nullable', 'string', 'max:1000'],
@@ -259,6 +291,8 @@ class ProjectController extends Controller
 
     public function hub(Project $project, string $section): Response
     {
+        $this->authorize('view', $project);
+
         $validSections = ['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
@@ -409,6 +443,7 @@ class ProjectController extends Controller
                     'filename'        => $b->filename,
                     'url'             => $b->file_path ? Storage::disk('public')->url($b->file_path) : null,
                     'attachments'         => $b->attachments ?? [],
+                    'recommendation'      => $b->recommendation,
                     'ntp_id'              => $b->project_ntp_id,
                     'ntp_no'              => $b->ntp?->ntp_no,
                     'ntp_contractor'      => $b->ntp?->contractor_name,
@@ -515,7 +550,11 @@ class ProjectController extends Controller
                 ->map(fn (User $user) => ['value' => (string) $user->id, 'label' => $user->name]),
             'sites' => Site::orderBy('name')->get(['name'])->map($option),
             'assets' => Structure::orderBy('name')->get(['name'])->map($option),
-            'departments' => Department::orderBy('name')->get(['name'])->map($option),
+            'departments' => Department::orderBy('name')->get(['name', 'description'])->map(fn ($row) => [
+                'value' => (string) $row->name,
+                'label' => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,
+                'displayLabel' => (string) $row->name,
+            ]),
             'classes' => MasterClass::orderBy('name')->get(['name'])->map($option),
             'priorities' => Priority::orderByRaw('CASE WHEN sequence_no IS NULL THEN 1 ELSE 0 END, sequence_no ASC')
                 ->orderBy('name')
@@ -582,14 +621,17 @@ class ProjectController extends Controller
             'dept_owner' => $project->dept_owner,
             'status' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
             'created_at' => $project->created_at?->format('M d, Y h:i A'),
+            'can' => [
+                'update' => auth()->user()->can('update', $project),
+                'delete' => auth()->user()->can('delete', $project),
+            ],
         ];
     }
 
     private function projectDetailData(Project $project): array
     {
-        $deadline = $project->deadline ? Carbon::parse($project->deadline) : now();
-        $daysElapsed = $project->created_at?->diffInDays(now()) ?? 0;
-        $daysRemaining = max(0, now()->startOfDay()->diffInDays($deadline->startOfDay(), false));
+        $daysElapsed = $project->daysElapsed();
+        $daysRemaining = $project->daysRemaining();
 
         return [
             'id' => $project->id,
@@ -607,7 +649,7 @@ class ProjectController extends Controller
             'budget_total' => (float) $project->budget_total,
             'budget_paid' => (float) $project->budget_paid,
             'completion_percent' => $project->completion_percent,
-            'project_health' => $this->projectHealth($project, $daysRemaining),
+            'project_health' => $project->health(),
             'asset_id' => $project->asset_id,
             'cost_code' => $project->cost_code,
             'wr_no' => $project->wr_no,
@@ -640,6 +682,10 @@ class ProjectController extends Controller
                 'status_key' => $log->status_key,
                 'remarks' => $log->remarks ?? '',
             ]),
+            'can' => [
+                'update' => auth()->user()->can('update', $project),
+                'delete' => auth()->user()->can('delete', $project),
+            ],
         ];
     }
 
@@ -719,12 +765,4 @@ class ProjectController extends Controller
             : 'Minor';
     }
 
-    private function projectHealth(Project $project, int $daysRemaining): string
-    {
-        if ($project->completion_percent >= 100) {
-            return 'Advanced';
-        }
-
-        return $daysRemaining === 0 ? 'Delayed' : 'On-Time';
-    }
 }

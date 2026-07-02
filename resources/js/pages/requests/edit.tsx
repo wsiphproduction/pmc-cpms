@@ -165,6 +165,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
     const [deletedAttachments, setDeletedAttachments] = useState<number[]>([]);
     const [attachmentError,    setAttachmentError]    = useState('');
     const [costcodeError,      setCostcodeError]      = useState('');
+    const [fundingError,       setFundingError]       = useState('');
 
     let _nextId = 1;
     const makeRow = (type: UploadRow['type']): UploadRow => ({ id: _nextId++, file: null, description: '', type });
@@ -188,6 +189,12 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
             return;
         }
         setCostcodeError('');
+
+        if (!opex && !capex && !forBudgeting) {
+            setFundingError('Select at least one funding classification (OPEX, CAPEX, or For Budgeting).');
+            return;
+        }
+        setFundingError('');
 
         const existingRemaining = projectRequest.attachments.length - deletedAttachments.length;
         const newFileCount = [...pictureRows, ...drawingRows, ...reportRows].filter(r => r.file).length;
@@ -311,19 +318,25 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                         )}
                     </div>
                     <div>
-                        <FormLabel>Funding Classification</FormLabel>
-                        <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-around', height: 'calc(100% - 22px)' }}>
+                        <FormLabel required>Funding Classification</FormLabel>
+                        <div style={{ background: '#f8fafc', border: `1.5px solid ${fundingError ? '#fca5a5' : '#e5e7eb'}`, borderRadius: '8px', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-around', height: 'calc(100% - 22px)' }}>
                             {[
                                 ['opex',         'OPEX',          opex,         setOpex]         as const,
                                 ['capex',        'CAPEX',         capex,        setCapex]        as const,
                                 ['for_budgeting','For Budgeting', forBudgeting, setForBudgeting] as const,
                             ].map(([key, lbl, val, setter]) => (
                                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                                    <input type="checkbox" checked={val} onChange={e => setter(e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
+                                    <input type="checkbox" checked={val} onChange={e => { setter(e.target.checked); setFundingError(''); }} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
                                     {lbl}
                                 </label>
                             ))}
                         </div>
+                        {fundingError && (
+                            <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '5px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                {fundingError}
+                            </p>
+                        )}
                     </div>
                 </div>
 

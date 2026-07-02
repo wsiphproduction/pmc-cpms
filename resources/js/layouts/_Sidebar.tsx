@@ -20,66 +20,10 @@ interface SidebarProps {
     onNavigate?: () => void;
 }
 
-const navItems: NavItem[] = [
-    {
-        label: 'Dashboard',
-        href: route('dashboard'),
-        icon: (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-            </svg>
-        ),
-    },
-    {
-        label: 'Projects',
-        href: '#',
-        icon: (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-            </svg>
-        ),
-        children: [
-            { label: 'Requests', href: route('requests.index') },
-            { label: 'View All', href: route('projects.index') },
-            { label: 'Add New', href: route('projects.create') },
-        ],
-    },
-    {
-        label: 'Master Data',
-        href: route('master.index'),
-        icon: (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <ellipse cx="12" cy="5" rx="9" ry="3"/>
-                <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
-                <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
-            </svg>
-        ),
-    },
-    {
-        label: 'Reports',
-        href: '#',
-        icon: (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="20" x2="18" y2="10"/>
-                <line x1="12" y1="20" x2="12" y2="4"/>
-                <line x1="6" y1="20" x2="6" y2="14"/>
-            </svg>
-        ),
-    },
-    {
-        label: 'Users',
-        href: route('users.index'),
-        icon: (
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
-                <circle cx="9" cy="7" r="4"/>
-                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
-                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-            </svg>
-        ),
-    },
-];
+interface PageProps {
+    auth: { user: { role?: string } };
+    [key: string]: unknown;
+}
 
 export default function Sidebar({
     collapsed = false,
@@ -87,9 +31,83 @@ export default function Sidebar({
     isMobile = false,
     onNavigate,
 }: SidebarProps) {
-    const { url } = usePage();
+    const { url, props } = usePage<PageProps>();
+    const role = props.auth?.user?.role;
+    const isRequestor = role === 'requestor';
+    const isAdmin = role === 'admin';
     const isCompact = collapsed && !isMobile;
     const sidebarWidth = isMobile ? 250 : isCompact ? 72 : 205;
+
+    const navItems: NavItem[] = [
+        {
+            label: 'Dashboard',
+            href: route('dashboard'),
+            icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                </svg>
+            ),
+        },
+        {
+            label: 'Projects',
+            href: '#',
+            icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+            ),
+            children: [
+                { label: 'Requests', href: route('requests.index') },
+                { label: 'View All', href: route('projects.index') },
+                ...(isRequestor ? [] : [{ label: 'Add New', href: route('projects.create') }]),
+            ],
+        },
+        ...(isRequestor ? [] : [{
+            label: 'Master Data',
+            href: route('master.index'),
+            icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/>
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                </svg>
+            ),
+        }]),
+        {
+            label: 'Reports',
+            href: '#',
+            icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="20" x2="18" y2="10"/>
+                    <line x1="12" y1="20" x2="12" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="14"/>
+                </svg>
+            ),
+        },
+        ...(isRequestor ? [] : [{
+            label: 'Users',
+            href: route('users.index'),
+            icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+            ),
+        }]),
+        ...(isAdmin ? [{
+            label: 'Settings',
+            href: route('system-settings.index'),
+            icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+            ),
+        }] : []),
+    ];
 
     const defaultOpen = navItems
         .filter(item => item.children && item.children.some(c => {
@@ -131,7 +149,7 @@ export default function Sidebar({
     });
 
     return (
-        <aside style={{
+        <aside className="print-hide" style={{
             width: `${sidebarWidth}px`, height: '100vh', position: 'fixed', top: 0, left: 0,
             background: '#fff', borderRight: '1px solid #e5e7eb',
             display: 'flex', flexDirection: 'column', zIndex: 100,

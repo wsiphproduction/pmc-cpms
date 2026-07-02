@@ -28,6 +28,7 @@ class ProjectRequest extends Model
     ];
 
     protected $casts = [
+        'requester_id' => 'integer',
         'opex'         => 'boolean',
         'capex'        => 'boolean',
         'for_budgeting'=> 'boolean',

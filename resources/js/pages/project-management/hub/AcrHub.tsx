@@ -27,7 +27,7 @@ function Bar({ pct, color }: { pct: number; color: string }) {
 }
 
 // ── View Modal ─────────────────────────────────────────────────────────────
-function ViewModal({ item, onClose, onEdit }: { item: IocRow; onClose: () => void; onEdit: () => void }) {
+function ViewModal({ item, onClose, onEdit, canEdit = true }: { item: IocRow; onClose: () => void; onEdit: () => void; canEdit?: boolean }) {
     const lc: React.CSSProperties = { background: '#f8fafc', fontWeight: 700, fontSize: '12.5px', padding: '10px 14px', width: '32%', borderRight: '1px solid #e5e7eb', color: '#374151' };
     const vc: React.CSSProperties = { padding: '10px 14px', fontSize: '13px', color: '#0f172a' };
     const rw: React.CSSProperties = { borderBottom: '1px solid #e5e7eb' };
@@ -35,7 +35,7 @@ function ViewModal({ item, onClose, onEdit }: { item: IocRow; onClose: () => voi
         <Modal title="Cost Entry — Details" onClose={onClose} size="540px"
             footer={<>
                 <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Close</button>
-                <button type="button" onClick={onEdit} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
+                {canEdit && <button type="button" onClick={onEdit} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Edit</button>}
             </>}
         >
             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden' }}>
@@ -101,7 +101,7 @@ function EditModal({ project, item, onClose }: { project: HubProject; item: IocR
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function AcrHub({ project, iocs }: { project: HubProject; iocs: IocRow[] }) {
+export default function AcrHub({ project, iocs, canEdit = true }: { project: HubProject; iocs: IocRow[]; canEdit?: boolean }) {
     const [desc, setDesc]       = useState('');
     const [amount, setAmount]   = useState('');
     const [saving, setSaving]   = useState(false);
@@ -148,7 +148,7 @@ export default function AcrHub({ project, iocs }: { project: HubProject; iocs: I
         <HubShell>
             {confirmDialog}
             {viewing && !editing && (
-                <ViewModal item={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} />
+                <ViewModal item={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} canEdit={canEdit} />
             )}
             {editing && (
                 <EditModal project={project} item={editing} onClose={() => setEditing(null)} />
@@ -182,24 +182,26 @@ export default function AcrHub({ project, iocs }: { project: HubProject; iocs: I
             </div>
 
             {/* ── Log New Expenditure ── */}
-            <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
-                <h4 style={{ margin: '0 0 14px', fontSize: '15px' }}>Log New Actual Expenditure</h4>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr 1fr 130px', gap: '12px', alignItems: 'end' }}>
-                    <Field label="Cost Description">
-                        <input style={inputStyle} placeholder="e.g. Milestone 1 Progress Payment" value={desc} onChange={e => setDesc(e.target.value)} />
-                    </Field>
-                    <Field label="Amount (PhP)">
-                        <input type="number" step="0.01" style={inputStyle} placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
-                    </Field>
-                    <Field label="Evidence Attachment">
-                        <input type="file" ref={fileRef} style={inputStyle} />
-                    </Field>
-                    <button type="button" onClick={handleAdd} disabled={saving} style={{ padding: '8px 13px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px' }}>
-                        {saving ? 'Saving...' : 'Add to Report'}
-                    </button>
+            {canEdit && (
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
+                    <h4 style={{ margin: '0 0 14px', fontSize: '15px' }}>Log New Actual Expenditure</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 0.7fr 1fr 130px', gap: '12px', alignItems: 'end' }}>
+                        <Field label="Cost Description">
+                            <input style={inputStyle} placeholder="e.g. Milestone 1 Progress Payment" value={desc} onChange={e => setDesc(e.target.value)} />
+                        </Field>
+                        <Field label="Amount (PhP)">
+                            <input type="number" step="0.01" style={inputStyle} placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} />
+                        </Field>
+                        <Field label="Evidence Attachment">
+                            <input type="file" ref={fileRef} style={inputStyle} />
+                        </Field>
+                        <button type="button" onClick={handleAdd} disabled={saving} style={{ padding: '8px 13px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px' }}>
+                            {saving ? 'Saving...' : 'Add to Report'}
+                        </button>
+                    </div>
+                    {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{error}</div>}
                 </div>
-                {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{error}</div>}
-            </div>
+            )}
 
             {/* ── Expenditure Table ── */}
             <DataTable
@@ -212,7 +214,7 @@ export default function AcrHub({ project, iocs }: { project: HubProject; iocs: I
                     item.filename
                         ? <a href={item.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700 }}>{item.filename}</a>
                         : <span style={{ color: '#94a3b8' }}>—</span>,
-                    <ActionBtns view edit del
+                    <ActionBtns view edit={canEdit} del={canEdit}
                         onView={() => setViewing(item)}
                         onEdit={() => setEditing(item)}
                         onDelete={() => handleDelete(item)}

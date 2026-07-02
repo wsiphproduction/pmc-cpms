@@ -6,7 +6,7 @@ import { useConfirm } from '@/components/useConfirm';
 interface PermitFile { id: number; filename: string; url: string; mime: string }
 interface PermitRow  { id: number; label: string; doc_type: string; files: PermitFile[] }
 
-export default function PermitsHub({ project, permits }: { project: HubProject; permits: PermitRow[] }) {
+export default function PermitsHub({ project, permits, canEdit = true }: { project: HubProject; permits: PermitRow[]; canEdit?: boolean }) {
     const [label, setLabel]     = useState('');
     const [docType, setDocType] = useState('');
     const [customType, setCustomType] = useState('');
@@ -63,42 +63,44 @@ export default function PermitsHub({ project, permits }: { project: HubProject; 
                 Project Permits & Compliance
             </h3>
 
-            <div style={{ background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr 150px', gap: '12px', alignItems: 'start' }}>
-                    <Field label="Document Label">
-                        <input style={inputStyle} placeholder="e.g. Site Clearance" value={label} onChange={e => setLabel(e.target.value)} />
-                    </Field>
-                    <Field label="Type of Document">
-                        <select style={inputStyle} value={docType} onChange={e => setDocType(e.target.value)}>
-                            <option value="" disabled>Select type...</option>
-                            <option value="Building Permit">Building Permit</option>
-                            <option value="Safety Permit">Safety Permit</option>
-                            <option value="Environmental Permit">Environmental Permit</option>
-                            <option value="OTHERS">Others (Specify...)</option>
-                        </select>
-                        {docType === 'OTHERS' && (
-                            <input
-                                type="text"
-                                placeholder="Enter custom document type"
-                                value={customType}
-                                onChange={e => setCustomType(e.target.value)}
-                                style={{ ...inputStyle, marginTop: '6px', borderColor: '#2563eb' }}
-                            />
-                        )}
-                    </Field>
-                    <Field label="Upload Files (select one or more)">
-                        <input type="file" multiple ref={filesRef} style={inputStyle} />
-                        <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>You can select multiple PDFs or images.</div>
-                    </Field>
-                    <div>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#374151', marginBottom: '5px' }}>&nbsp;</div>
-                        <button type="button" onClick={handleAdd} disabled={saving} style={{ width: '100%', padding: '8px 13px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px' }}>
-                            {saving ? 'Saving...' : 'Add Record'}
-                        </button>
+            {canEdit && (
+                <div style={{ background: '#f8fafc', border: '2px dashed #cbd5e1', borderRadius: '12px', padding: '18px', marginBottom: '22px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr 150px', gap: '12px', alignItems: 'start' }}>
+                        <Field label="Document Label">
+                            <input style={inputStyle} placeholder="e.g. Site Clearance" value={label} onChange={e => setLabel(e.target.value)} />
+                        </Field>
+                        <Field label="Type of Document">
+                            <select style={inputStyle} value={docType} onChange={e => setDocType(e.target.value)}>
+                                <option value="" disabled>Select type...</option>
+                                <option value="Building Permit">Building Permit</option>
+                                <option value="Safety Permit">Safety Permit</option>
+                                <option value="Environmental Permit">Environmental Permit</option>
+                                <option value="OTHERS">Others (Specify...)</option>
+                            </select>
+                            {docType === 'OTHERS' && (
+                                <input
+                                    type="text"
+                                    placeholder="Enter custom document type"
+                                    value={customType}
+                                    onChange={e => setCustomType(e.target.value)}
+                                    style={{ ...inputStyle, marginTop: '6px', borderColor: '#2563eb' }}
+                                />
+                            )}
+                        </Field>
+                        <Field label="Upload Files (select one or more)">
+                            <input type="file" multiple ref={filesRef} style={inputStyle} />
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>You can select multiple PDFs or images.</div>
+                        </Field>
+                        <div>
+                            <div style={{ fontSize: '11px', fontWeight: 800, color: '#374151', marginBottom: '5px' }}>&nbsp;</div>
+                            <button type="button" onClick={handleAdd} disabled={saving} style={{ width: '100%', padding: '8px 13px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px' }}>
+                                {saving ? 'Saving...' : 'Add Record'}
+                            </button>
+                        </div>
                     </div>
+                    {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{error}</div>}
                 </div>
-                {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{error}</div>}
-            </div>
+            )}
 
             <DataTable
                 headers={['Seq#', 'Label & Attached Files', 'Type', 'Actions']}
@@ -116,7 +118,7 @@ export default function PermitsHub({ project, permits }: { project: HubProject; 
                         </div>
                     </div>,
                     <Badge>{permit.doc_type}</Badge>,
-                    <ActionBtns download del onDownload={() => handleDownload(permit)} onDelete={() => handleDelete(permit)} />,
+                    <ActionBtns download del={canEdit} onDownload={() => handleDownload(permit)} onDelete={() => handleDelete(permit)} />,
                 ])}
             />
         </HubShell>

@@ -19,7 +19,7 @@ interface NtpData {
     scope_items: ScopeItem[];
 }
 
-export default function NtpHub({ project, ntps }: { project: HubProject; ntps: NtpData[] }) {
+export default function NtpHub({ project, ntps }: { project: HubProject; ntps: NtpData[]; canEdit?: boolean }) {
     const [selected, setSelected] = useState<NtpData | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
 
@@ -86,7 +86,7 @@ export default function NtpHub({ project, ntps }: { project: HubProject; ntps: N
                                             style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                                         >
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                            Preview
+                                            View
                                         </button>
                                     </td>
                                 </tr>

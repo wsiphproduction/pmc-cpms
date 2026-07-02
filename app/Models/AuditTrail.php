@@ -40,7 +40,7 @@ class AuditTrail extends Model
 
     public static function log(string $action, Model $model, array $context = []): self
     {
-        return self::create([
+        $entry = self::create([
             'user_id'        => auth()->id(),
             'action'         => $action,
             'reference_id'   => $model->getKey(),
@@ -48,5 +48,11 @@ class AuditTrail extends Model
             'changes'        => array_merge(['ip' => request()->ip()], $context) ?: null,
             'ip_address'     => request()->ip(),
         ]);
+
+        if ($model instanceof Project) {
+            $model->notifyRequester($action);
+        }
+
+        return $entry;
     }
 }

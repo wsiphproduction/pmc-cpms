@@ -24,6 +24,12 @@ interface ProjectRequest {
     project?: { id: number; project_no: string } | null;
     unread_comments?: number;
     comments?: Comment[];
+    can: {
+        update: boolean;
+        delete: boolean;
+        decide: boolean;
+        canCreateProject: boolean;
+    };
 }
 
 interface PaginationLink {
@@ -546,7 +552,7 @@ export default function RequestsIndex({ requests, filters }: Props) {
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
-                                            {req.status === 'approved' && !req.project && (
+                                            {req.status === 'approved' && !req.project && req.can.canCreateProject && (
                                                 <IconBtn title="Create Project" color="#2563eb" onClick={() => router.visit(`${route('projects.create')}?request_id=${req.id}`)}>
                                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                                 </IconBtn>
@@ -556,11 +562,13 @@ export default function RequestsIndex({ requests, filters }: Props) {
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                             </IconBtn>
 
-                                            <IconBtn title="Edit" onClick={() => router.visit(route('requests.edit', req.id))}>
-                                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                            </IconBtn>
+                                            {req.can.update && (
+                                                <IconBtn title="Edit" onClick={() => router.visit(route('requests.edit', req.id))}>
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                                </IconBtn>
+                                            )}
 
-                                            {req.status === 'pending' && (
+                                            {req.can.decide && (
                                                 <>
                                                     <IconBtn title="Approve" color="#16a34a" onClick={() => setDecisionTarget({ request: req, decision: 'approved' })}>
                                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>

@@ -1,4 +1,4 @@
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, inputStyle } from './Common';
 import { CONTRACTORS } from './contractors';
@@ -25,9 +25,21 @@ interface RfqRow {
     items?: RfqItem[];
 }
 
+interface RfqPageProps {
+    auth: { user: { email: string } };
+    [key: string]: unknown;
+}
+
 const STATUS_TONE: Record<RfqStatus, 'yellow' | 'green' | 'slate' | 'red'> = {
     Awarded: 'yellow', Submitted: 'green', Pending: 'slate', Expired: 'red',
 };
+
+function escapeHtml(value: string | number | null | undefined): string {
+    if (value == null) return '';
+    return String(value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 const UNITS = ['—', 'pcs', 'lot', 'set', 'unit', 'lm', 'sqm', 'cbm', 'kg', 'ton', 'hr', 'day', 'wk', 'mo', 'L', 'bag', 'roll', 'sht', 'box'];
 
@@ -76,7 +88,7 @@ function QuotationRows({ rows, onRowChange }: {
 }
 
 // ── RFQ View Modal ─────────────────────────────────────────────────────────
-function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProject; onClose: () => void }) {
+function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; project: HubProject; onClose: () => void; canEdit?: boolean }) {
     const [scope, setScope]           = useState(row.scope_of_work ?? '');
     const [due, setDue]               = useState(row.due_raw ?? '');
     const [duration, setDuration]     = useState(row.duration_days?.toString() ?? '');
@@ -148,9 +160,11 @@ function RfqViewModal({ row, project, onClose }: { row: RfqRow; project: HubProj
         <Modal title="RFQ & Quotation Details" onClose={onClose} size="900px"
             footer={<>
                 <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Close</button>
-                <button type="button" onClick={handleSave} disabled={saving} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
-                    {saving ? 'Saving...' : 'Save Quotation Changes'}
-                </button>
+                {canEdit && (
+                    <button type="button" onClick={handleSave} disabled={saving} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
+                        {saving ? 'Saving...' : 'Save Quotation Changes'}
+                    </button>
+                )}
             </>}
         >
             {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginBottom: '14px' }}>{error}</div>}
@@ -266,16 +280,25 @@ function SendConfirmModal({ contractor, dueDate, email, onClose, onSend }: {
     dueDate: string;
     email: string;
     onClose: () => void;
-    onSend: (email: string) => void;
+    onSend: (email: string, additionalRecipients: string[], ccSelf: boolean) => void;
 }) {
-    const [recipientEmail, setRecipientEmail] = useState(email);
-    const [emailError, setEmailError]         = useState('');
+    const { auth } = usePage<RfqPageProps>().props;
+    const [recipientEmail, setRecipientEmail]   = useState(email);
+    const [additionalInput, setAdditionalInput] = useState('');
+    const [ccSelf, setCcSelf]                   = useState(false);
+    const [emailError, setEmailError]           = useState('');
+
+    const parseAdditional = () =>
+        additionalInput.split(',').map(e => e.trim()).filter(Boolean);
 
     const handleConfirm = () => {
         if (!recipientEmail.trim()) { setEmailError('Email address is required.'); return; }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail.trim())) { setEmailError('Please enter a valid email address.'); return; }
+        const additional = parseAdditional();
+        const invalid = additional.find(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+        if (invalid) { setEmailError(`"${invalid}" is not a valid email address.`); return; }
         setEmailError('');
-        onSend(recipientEmail.trim());
+        onSend(recipientEmail.trim(), additional, ccSelf);
     };
 
     return (
@@ -329,6 +352,30 @@ function SendConfirmModal({ contractor, dueDate, email, onClose, onSend }: {
                 {emailError && <div style={{ color: '#dc2626', fontSize: '11.5px', fontWeight: 600, marginTop: '5px' }}>{emailError}</div>}
                 <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '5px' }}>You can edit the email before sending.</div>
             </div>
+
+            {/* Additional recipients */}
+            <div style={{ marginBottom: '14px' }}>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                    Additional Recipients (Optional)
+                </label>
+                <input
+                    type="text"
+                    value={additionalInput}
+                    onChange={e => { setAdditionalInput(e.target.value); setEmailError(''); }}
+                    placeholder="another@example.com, another2@example.com"
+                    style={{
+                        width: '100%', boxSizing: 'border-box', padding: '9px 11px',
+                        border: '1.5px solid #e2e8f0', borderRadius: '7px', fontSize: '13px', fontFamily: 'inherit', outline: 'none',
+                    }}
+                />
+                <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '5px' }}>Separate multiple email addresses with commas.</div>
+            </div>
+
+            {/* Send me a copy */}
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#334155', cursor: 'pointer' }}>
+                <input type="checkbox" checked={ccSelf} onChange={e => setCcSelf(e.target.checked)} />
+                Send me a copy of this email ({auth.user.email})
+            </label>
         </Modal>
     );
 }
@@ -401,7 +448,7 @@ function SuccessModal({ contractor, onClose }: { contractor: string; onClose: ()
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: RfqRow[] }) {
+export default function RfqHub({ project, rfqs, canEdit = true }: { project: HubProject; rfqs: RfqRow[]; canEdit?: boolean }) {
     const [dispatchContractor, setDispatchContractor] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [showSuccess, setShowSuccess]   = useState(false);
@@ -427,13 +474,15 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
         setShowSendModal(true);
     };
 
-    const handleSend = (recipientEmail: string) => {
+    const handleSend = (recipientEmail: string, additionalRecipients: string[], ccSelf: boolean) => {
         setShowSendModal(false);
         setSending(true);
         router.post(route('hub.rfq.store', project.id), {
             contractor_name: dispatchContractor,
             due_date:        dueDate || null,
             recipient_email: recipientEmail,
+            additional_recipients: additionalRecipients,
+            cc_self:         ccSelf,
         }, {
             preserveScroll: true,
             onSuccess: () => { setSentContractor(dispatchContractor); setShowSuccess(true); setDispatchContractor(''); setDueDate(''); },
@@ -456,6 +505,42 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
         }, { title: 'Update Status', confirmLabel: 'Confirm', variant: 'warning' });
     };
 
+    const handlePrint = (row: RfqRow) => {
+        const items = row.items ?? [];
+        const grandTotal = items.reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
+        const win = window.open('', '_blank', 'width=900,height=700');
+        if (!win) return;
+        win.document.write(`<!DOCTYPE html><html><head>
+            <title>RFQ — ${escapeHtml(row.contractor)}</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; color: #0f172a; }
+                * { box-sizing: border-box; }
+                table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+                th, td { border: 1px solid #e2e8f0; padding: 8px 12px; font-size: 13px; text-align: left; }
+                th { background: #f8fafc; font-weight: 700; }
+                .meta { font-size: 13px; color: #475569; margin-bottom: 4px; }
+                @media print { body { margin: 20px; } }
+            </style>
+        </head><body>
+            <h2>Request for Quotation</h2>
+            <div class="meta"><strong>Contractor:</strong> ${escapeHtml(row.contractor)}</div>
+            <div class="meta"><strong>Sent Date:</strong> ${escapeHtml(row.sent) || '—'}</div>
+            <div class="meta"><strong>Due Date:</strong> ${escapeHtml(row.due) || '—'}</div>
+            <div class="meta"><strong>Status:</strong> ${escapeHtml(row.status)}</div>
+            ${row.scope_of_work ? `<div class="meta"><strong>Scope of Work:</strong> ${escapeHtml(row.scope_of_work)}</div>` : ''}
+            <table>
+                <thead><tr><th>Seq</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total Cost</th></tr></thead>
+                <tbody>
+                    ${items.map((i, idx) => `<tr><td>${idx + 1}</td><td>${escapeHtml(i.description)}</td><td>${escapeHtml(i.qty)}</td><td>${escapeHtml(i.unit)}</td><td>${i.unit_cost != null ? i.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}</td><td>${i.total_cost != null ? i.total_cost.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}</td></tr>`).join('')}
+                    <tr><td colspan="5" style="text-align:right;font-weight:700;">Grand Total:</td><td style="font-weight:700;">PhP ${grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td></tr>
+                </tbody>
+            </table>
+        </body></html>`);
+        win.document.close();
+        win.focus();
+        setTimeout(() => { win.print(); win.close(); }, 250);
+    };
+
     const filePreviewCell = (row: RfqRow) => {
         if (!row.quotation_file) return <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>;
         return (
@@ -472,54 +557,72 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
         );
     };
 
+    const canEditRfq = (row: RfqRow) => canEdit && row.status !== 'Submitted' && row.status !== 'Awarded' && !row.has_ntp;
+
+    const viewOrEditBtns = (row: RfqRow) => (
+        <ActionBtns
+            view={!canEditRfq(row)}
+            edit={canEditRfq(row)}
+            onView={() => setViewRow(row)}
+            onEdit={() => setViewRow(row)}
+        />
+    );
+
     const actionCell = (row: RfqRow) => {
         if (row.status === 'Awarded') return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <ActionBtns view onView={() => setViewRow(row)} />
-                <ActionBtns print />
-                {row.has_ntp ? (
+                {viewOrEditBtns(row)}
+                <ActionBtns print onPrint={() => handlePrint(row)} />
+                {canEdit && (row.has_ntp ? (
                     <span style={{ padding: '5px 12px', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', fontSize: '11.5px', fontWeight: 700, whiteSpace: 'nowrap' }}>
                         ✓ NTP Issued
                     </span>
                 ) : (
                     <Button variant="success" onClick={() => setNtpRow(row)}>Create NTP</Button>
-                )}
+                ))}
             </div>
         );
         if (row.status === 'Submitted') return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <ActionBtns view onView={() => setViewRow(row)} />
-                <ActionBtns print />
-                <ActionBtns trophy onTrophy={() => handleStatus(row, 'awarded', 'Awarded')} />
-                <ActionBtns del onDelete={() => handleDelete(row)} />
+                {viewOrEditBtns(row)}
+                <ActionBtns print onPrint={() => handlePrint(row)} />
+                {canEdit && <ActionBtns trophy onTrophy={() => handleStatus(row, 'awarded', 'Awarded')} />}
+                {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
             </div>
         );
         if (row.status === 'Pending') return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <Button variant="outline" onClick={() => setViewRow(row)}>+ Quotation</Button>
-                <button
-                    type="button"
-                    title="Mark as Received / Submitted"
-                    onClick={() => handleStatus(row, 'submitted', 'Submitted')}
-                    style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                    ✓ Received
-                </button>
-                <button
-                    type="button"
-                    title="Mark as Expired"
-                    onClick={() => handleStatus(row, 'expired', 'Expired')}
-                    style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                    Expired
-                </button>
-                <ActionBtns del onDelete={() => handleDelete(row)} />
+                {viewOrEditBtns(row)}
+                <ActionBtns print onPrint={() => handlePrint(row)} />
+                {canEdit && (
+                    <>
+                        <button
+                            type="button"
+                            title="Mark as Received / Submitted"
+                            onClick={() => handleStatus(row, 'submitted', 'Submitted')}
+                            style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                            ✓ Received
+                        </button>
+                        <button
+                            type="button"
+                            title="Mark as Expired"
+                            onClick={() => handleStatus(row, 'expired', 'Expired')}
+                            style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                        >
+                            Expired
+                        </button>
+                        <ActionBtns del onDelete={() => handleDelete(row)} />
+                    </>
+                )}
             </div>
         );
         return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                <ActionBtns refresh onRefresh={() => handleStatus(row, 'pending', 'Re-activated')} />
-                <ActionBtns del onDelete={() => handleDelete(row)} />
+                {viewOrEditBtns(row)}
+                <ActionBtns print onPrint={() => handlePrint(row)} />
+                {canEdit && <ActionBtns refresh onRefresh={() => handleStatus(row, 'pending', 'Re-activated')} />}
+                {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
             </div>
         );
     };
@@ -537,42 +640,48 @@ export default function RfqHub({ project, rfqs }: { project: HubProject; rfqs: R
                     onSend={handleSend}
                 />
             )}
-            {viewRow       && <RfqViewModal row={viewRow} project={project} onClose={() => setViewRow(null)} />}
+            {viewRow       && <RfqViewModal row={viewRow} project={project} onClose={() => setViewRow(null)} canEdit={canEditRfq(viewRow)} />}
             {ntpRow        && <NtpModal row={ntpRow} project={project} onClose={() => setNtpRow(null)} />}
 
-            <h3 style={{ margin: '0 0 18px', color: '#2563eb', fontSize: '18px' }}>Dispatch New RFQ</h3>
+            {canEdit && (
+                <>
+                    <h3 style={{ margin: '0 0 18px', color: '#2563eb', fontSize: '18px' }}>Dispatch New RFQ</h3>
 
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '18px', marginBottom: '22px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 180px', gap: '14px', alignItems: 'end' }}>
-                    <Field label="Select Contractor">
-                        <select style={inputStyle} value={dispatchContractor} onChange={e => { setDispatchContractor(e.target.value); setSendError(''); }}>
-                            <option value="" disabled>Choose from registered contractors...</option>
-                            {CONTRACTORS.map(c => (
-                                <option key={c.name} value={c.name} disabled={usedContractors.has(c.name)}>
-                                    {c.name}{usedContractors.has(c.name) ? ' — Already Sent' : ''}
-                                </option>
-                            ))}
-                        </select>
-                        {selectedContractor && (
-                            <div style={{ marginTop: '5px', fontSize: '11.5px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                                {selectedContractor.email}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '18px', marginBottom: '22px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 180px', gap: '14px', alignItems: 'start' }}>
+                            <Field label="Select Contractor">
+                                <select style={inputStyle} value={dispatchContractor} onChange={e => { setDispatchContractor(e.target.value); setSendError(''); }}>
+                                    <option value="" disabled>Choose from registered contractors...</option>
+                                    {CONTRACTORS.map(c => (
+                                        <option key={c.name} value={c.name} disabled={usedContractors.has(c.name)}>
+                                            {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <div style={{ marginTop: '5px', fontSize: '11.5px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px', minHeight: '15px' }}>
+                                    {selectedContractor && (
+                                        <>
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                            {selectedContractor.email}
+                                        </>
+                                    )}
+                                </div>
+                            </Field>
+                            <Field label="Due Date (Optional)">
+                                <input type="date" style={inputStyle} value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                            </Field>
+                            <div>
+                                <div style={{ fontSize: '11px', fontWeight: 800, color: '#374151', marginBottom: '5px' }}>&nbsp;</div>
+                                <button type="button" onClick={handleOpenSendModal} disabled={sending} style={{ width: '100%', padding: '8px 13px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                    {sending ? 'Sending...' : 'Send RFQ'}
+                                </button>
                             </div>
-                        )}
-                    </Field>
-                    <Field label="Due Date (Optional)">
-                        <input type="date" style={inputStyle} value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                    </Field>
-                    <div>
-                        <div style={{ fontSize: '11px', fontWeight: 800, color: '#374151', marginBottom: '5px' }}>&nbsp;</div>
-                        <button type="button" onClick={handleOpenSendModal} disabled={sending} style={{ width: '100%', padding: '8px 13px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', fontSize: '12.5px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                            {sending ? 'Sending...' : 'Send RFQ'}
-                        </button>
+                        </div>
+                        {sendError && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{sendError}</div>}
                     </div>
-                </div>
-                {sendError && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{sendError}</div>}
-            </div>
+                </>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', alignItems: 'center' }}>
                 <strong style={{ color: '#475569' }}>RFQ Dispatch & Quotation Tracking</strong>

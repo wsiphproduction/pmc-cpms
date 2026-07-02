@@ -215,7 +215,7 @@ function ReportModal({ project, onClose }: { project: HubProject; onClose: () =>
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function PsrHub({ project, reports }: { project: HubProject; reports: PsrRow[] }) {
+export default function PsrHub({ project, reports, canEdit = true }: { project: HubProject; reports: PsrRow[]; canEdit?: boolean }) {
     const [showModal, setShowModal] = useState(false);
     const [viewing, setViewing]     = useState<PsrRow | null>(null);
     const progress = reports[0]?.completion_pct ?? project.completion_percent ?? 0;
@@ -249,7 +249,7 @@ export default function PsrHub({ project, reports }: { project: HubProject; repo
                 <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                         <h4 style={{ margin: 0, color: '#2563eb', fontSize: '14px' }}>Weekly Execution Phase</h4>
-                        <Button variant="dark" onClick={() => setShowModal(true)}>Add New Weekly Report</Button>
+                        {canEdit && <Button variant="dark" onClick={() => setShowModal(true)}>Add New Weekly Report</Button>}
                     </div>
                     <div style={{ background: '#e0f2fe', color: '#075985', borderRadius: '8px', padding: '10px 12px', fontSize: '12.5px', fontWeight: 600 }}>
                         A total of <strong>27 critical site checklists</strong> must be verified weekly by the site supervisor and approved by the QA/QC manager.
@@ -269,7 +269,7 @@ export default function PsrHub({ project, reports }: { project: HubProject; repo
                         : <span style={{ color: '#94a3b8' }}>—</span>,
                     <div style={{ display: 'flex', gap: '4px' }}>
                         <button type="button" title="View" onClick={() => setViewing(r)} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fff', border: '1px solid #e2e8f0', color: '#475569' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-                        <button type="button" title="Delete" onClick={() => handleDelete(r)} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+                        {canEdit && <button type="button" title="Delete" onClick={() => handleDelete(r)} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>}
                     </div>,
                 ])}
             />

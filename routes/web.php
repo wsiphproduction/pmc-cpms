@@ -1,11 +1,14 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MasterDataController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectHubController;
 use App\Http\Controllers\ProjectRequestController;
+use App\Http\Controllers\SettingController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -22,6 +25,15 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
+    // ── Notifications ────────────────────────────────────────────────────
+    Route::get('notifications/{notification}/open', [NotificationController::class, 'open'])->name('notifications.open');
+    Route::patch('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+
+    // ── Account ──────────────────────────────────────────────────────────
+    Route::get('account', [AccountController::class, 'edit'])->name('account.edit');
+    Route::patch('account/profile', [AccountController::class, 'updateProfile'])->name('account.update-profile');
+    Route::put('account/password', [AccountController::class, 'updatePassword'])->name('account.update-password');
+
     // ── Project Requests ──────────────────────────────────────────────────
     Route::resource('requests', ProjectRequestController::class)
         ->parameters(['requests' => 'projectRequest']);
@@ -37,11 +49,12 @@ Route::middleware(['auth'])->group(function () {
     foreach (['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'] as $section) {
         Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])
             ->defaults('section', $section)
+            ->middleware('can:view,project')
             ->name("projects.hub.{$section}");
     }
 
     // Hub CRUD routes
-    Route::prefix('projects/{project}/hub')->group(function () {
+    Route::prefix('projects/{project}/hub')->middleware('can:update,project')->group(function () {
         // RFQ
         Route::post('rfq',                     [ProjectHubController::class, 'storeRfq'])->name('hub.rfq.store');
         Route::patch('rfq/{rfq}',              [ProjectHubController::class, 'updateRfq'])->name('hub.rfq.update');
@@ -56,6 +69,7 @@ Route::middleware(['auth'])->group(function () {
         // Variation Orders
         Route::post('vof',                     [ProjectHubController::class, 'storeVof'])->name('hub.vof.store');
         Route::patch('vof/{vof}',              [ProjectHubController::class, 'updateVof'])->name('hub.vof.update');
+        Route::patch('vof/{vof}/status',       [ProjectHubController::class, 'updateVofStatus'])->name('hub.vof.update-status');
         Route::delete('vof/{vof}',             [ProjectHubController::class, 'destroyVof'])->name('hub.vof.destroy');
         // Quality Docs
         Route::post('qpp',                     [ProjectHubController::class, 'storeQpp'])->name('hub.qpp.store');
@@ -83,77 +97,85 @@ Route::middleware(['auth'])->group(function () {
 
     Route::resource('projects', ProjectController::class);
 
-    // ── Users ─────────────────────────────────────────────────────────────
-    Route::get('users', [UserController::class, 'index'])->name('users.index');
-    Route::post('users', [UserController::class, 'store'])->name('users.store');
-    Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
-    Route::patch('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
-    Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
-    Route::patch('users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
-    Route::delete('users/{id}/force-delete', [UserController::class, 'forceDelete'])->name('users.force-delete');
+    Route::middleware(['role:approver|admin'])->group(function () {
+        // ── Users ─────────────────────────────────────────────────────────────
+        Route::get('users', [UserController::class, 'index'])->name('users.index');
+        Route::post('users', [UserController::class, 'store'])->name('users.store');
+        Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+        Route::patch('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+        Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+        Route::patch('users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
+        Route::delete('users/{id}/force-delete', [UserController::class, 'forceDelete'])->name('users.force-delete');
 
-    // ── Master Data ───────────────────────────────────────────────────────
-    Route::get('master-data', [MasterDataController::class, 'index'])->name('master.index');
+        // ── Master Data ───────────────────────────────────────────────────────
+        Route::get('master-data', [MasterDataController::class, 'index'])->name('master.index');
 
-    // Job Types
-    Route::post('master/job-types',           [MasterDataController::class, 'storeJobType'])->name('master.job-types.store');
-    Route::put('master/job-types/{jobType}',  [MasterDataController::class, 'updateJobType'])->name('master.job-types.update');
-    Route::delete('master/job-types/{jobType}', [MasterDataController::class, 'destroyJobType'])->name('master.job-types.destroy');
+        // Job Types
+        Route::post('master/job-types',           [MasterDataController::class, 'storeJobType'])->name('master.job-types.store');
+        Route::put('master/job-types/{jobType}',  [MasterDataController::class, 'updateJobType'])->name('master.job-types.update');
+        Route::delete('master/job-types/{jobType}', [MasterDataController::class, 'destroyJobType'])->name('master.job-types.destroy');
 
-    // Job Locations
-    Route::post('master/job-locations',                [MasterDataController::class, 'storeJobLocation'])->name('master.job-locations.store');
-    Route::put('master/job-locations/{jobLocation}',   [MasterDataController::class, 'updateJobLocation'])->name('master.job-locations.update');
-    Route::delete('master/job-locations/{jobLocation}', [MasterDataController::class, 'destroyJobLocation'])->name('master.job-locations.destroy');
+        // Job Locations
+        Route::post('master/job-locations',                [MasterDataController::class, 'storeJobLocation'])->name('master.job-locations.store');
+        Route::put('master/job-locations/{jobLocation}',   [MasterDataController::class, 'updateJobLocation'])->name('master.job-locations.update');
+        Route::delete('master/job-locations/{jobLocation}', [MasterDataController::class, 'destroyJobLocation'])->name('master.job-locations.destroy');
 
-    // Cost Codes
-    Route::post('master/cost-codes',              [MasterDataController::class, 'storeCostCode'])->name('master.cost-codes.store');
-    Route::put('master/cost-codes/{costCode}',    [MasterDataController::class, 'updateCostCode'])->name('master.cost-codes.update');
-    Route::delete('master/cost-codes/{costCode}', [MasterDataController::class, 'destroyCostCode'])->name('master.cost-codes.destroy');
+        // Cost Codes
+        Route::post('master/cost-codes',              [MasterDataController::class, 'storeCostCode'])->name('master.cost-codes.store');
+        Route::put('master/cost-codes/{costCode}',    [MasterDataController::class, 'updateCostCode'])->name('master.cost-codes.update');
+        Route::delete('master/cost-codes/{costCode}', [MasterDataController::class, 'destroyCostCode'])->name('master.cost-codes.destroy');
 
-    // Sites
-    Route::post('master/sites',          [MasterDataController::class, 'storeSite'])->name('master.sites.store');
-    Route::put('master/sites/{site}',    [MasterDataController::class, 'updateSite'])->name('master.sites.update');
-    Route::delete('master/sites/{site}', [MasterDataController::class, 'destroySite'])->name('master.sites.destroy');
+        // Sites
+        Route::post('master/sites',          [MasterDataController::class, 'storeSite'])->name('master.sites.store');
+        Route::put('master/sites/{site}',    [MasterDataController::class, 'updateSite'])->name('master.sites.update');
+        Route::delete('master/sites/{site}', [MasterDataController::class, 'destroySite'])->name('master.sites.destroy');
 
-    // Classes
-    Route::post('master/classes',                    [MasterDataController::class, 'storeClass'])->name('master.classes.store');
-    Route::put('master/classes/{masterClass}',       [MasterDataController::class, 'updateClass'])->name('master.classes.update');
-    Route::delete('master/classes/{masterClass}',    [MasterDataController::class, 'destroyClass'])->name('master.classes.destroy');
+        // Classes
+        Route::post('master/classes',                    [MasterDataController::class, 'storeClass'])->name('master.classes.store');
+        Route::put('master/classes/{masterClass}',       [MasterDataController::class, 'updateClass'])->name('master.classes.update');
+        Route::delete('master/classes/{masterClass}',    [MasterDataController::class, 'destroyClass'])->name('master.classes.destroy');
 
-    // Priorities
-    Route::post('master/priorities',              [MasterDataController::class, 'storePriority'])->name('master.priorities.store');
-    Route::put('master/priorities/{priority}',    [MasterDataController::class, 'updatePriority'])->name('master.priorities.update');
-    Route::delete('master/priorities/{priority}', [MasterDataController::class, 'destroyPriority'])->name('master.priorities.destroy');
+        // Priorities
+        Route::post('master/priorities',              [MasterDataController::class, 'storePriority'])->name('master.priorities.store');
+        Route::put('master/priorities/{priority}',    [MasterDataController::class, 'updatePriority'])->name('master.priorities.update');
+        Route::delete('master/priorities/{priority}', [MasterDataController::class, 'destroyPriority'])->name('master.priorities.destroy');
 
-    // Statuses
-    Route::post('master/statuses',                    [MasterDataController::class, 'storeStatus'])->name('master.statuses.store');
-    Route::put('master/statuses/{masterStatus}',      [MasterDataController::class, 'updateStatus'])->name('master.statuses.update');
-    Route::delete('master/statuses/{masterStatus}',   [MasterDataController::class, 'destroyStatus'])->name('master.statuses.destroy');
+        // Statuses
+        Route::post('master/statuses',                    [MasterDataController::class, 'storeStatus'])->name('master.statuses.store');
+        Route::put('master/statuses/{masterStatus}',      [MasterDataController::class, 'updateStatus'])->name('master.statuses.update');
+        Route::delete('master/statuses/{masterStatus}',   [MasterDataController::class, 'destroyStatus'])->name('master.statuses.destroy');
 
-    // Departments
-    Route::post('master/departments',                [MasterDataController::class, 'storeDepartment'])->name('master.departments.store');
-    Route::put('master/departments/{department}',    [MasterDataController::class, 'updateDepartment'])->name('master.departments.update');
-    Route::delete('master/departments/{department}', [MasterDataController::class, 'destroyDepartment'])->name('master.departments.destroy');
+        // Departments
+        Route::post('master/departments',                [MasterDataController::class, 'storeDepartment'])->name('master.departments.store');
+        Route::put('master/departments/{department}',    [MasterDataController::class, 'updateDepartment'])->name('master.departments.update');
+        Route::delete('master/departments/{department}', [MasterDataController::class, 'destroyDepartment'])->name('master.departments.destroy');
 
-    // Categories
-    Route::post('master/categories',              [MasterDataController::class, 'storeCategory'])->name('master.categories.store');
-    Route::put('master/categories/{category}',    [MasterDataController::class, 'updateCategory'])->name('master.categories.update');
-    Route::delete('master/categories/{category}', [MasterDataController::class, 'destroyCategory'])->name('master.categories.destroy');
+        // Categories
+        Route::post('master/categories',              [MasterDataController::class, 'storeCategory'])->name('master.categories.store');
+        Route::put('master/categories/{category}',    [MasterDataController::class, 'updateCategory'])->name('master.categories.update');
+        Route::delete('master/categories/{category}', [MasterDataController::class, 'destroyCategory'])->name('master.categories.destroy');
 
-    // Service Types
-    Route::post('master/service-types',                [MasterDataController::class, 'storeServiceType'])->name('master.service-types.store');
-    Route::put('master/service-types/{serviceType}',    [MasterDataController::class, 'updateServiceType'])->name('master.service-types.update');
-    Route::delete('master/service-types/{serviceType}', [MasterDataController::class, 'destroyServiceType'])->name('master.service-types.destroy');
+        // Service Types
+        Route::post('master/service-types',                [MasterDataController::class, 'storeServiceType'])->name('master.service-types.store');
+        Route::put('master/service-types/{serviceType}',    [MasterDataController::class, 'updateServiceType'])->name('master.service-types.update');
+        Route::delete('master/service-types/{serviceType}', [MasterDataController::class, 'destroyServiceType'])->name('master.service-types.destroy');
 
-    // Work Forces
-    Route::post('master/work-forces',              [MasterDataController::class, 'storeWorkForce'])->name('master.work-forces.store');
-    Route::put('master/work-forces/{workForce}',    [MasterDataController::class, 'updateWorkForce'])->name('master.work-forces.update');
-    Route::delete('master/work-forces/{workForce}', [MasterDataController::class, 'destroyWorkForce'])->name('master.work-forces.destroy');
+        // Work Forces
+        Route::post('master/work-forces',              [MasterDataController::class, 'storeWorkForce'])->name('master.work-forces.store');
+        Route::put('master/work-forces/{workForce}',    [MasterDataController::class, 'updateWorkForce'])->name('master.work-forces.update');
+        Route::delete('master/work-forces/{workForce}', [MasterDataController::class, 'destroyWorkForce'])->name('master.work-forces.destroy');
 
-    // Structures
-    Route::post('master/structures',              [MasterDataController::class, 'storeStructure'])->name('master.structures.store');
-    Route::put('master/structures/{structure}',    [MasterDataController::class, 'updateStructure'])->name('master.structures.update');
-    Route::delete('master/structures/{structure}', [MasterDataController::class, 'destroyStructure'])->name('master.structures.destroy');
+        // Structures
+        Route::post('master/structures',              [MasterDataController::class, 'storeStructure'])->name('master.structures.store');
+        Route::put('master/structures/{structure}',    [MasterDataController::class, 'updateStructure'])->name('master.structures.update');
+        Route::delete('master/structures/{structure}', [MasterDataController::class, 'destroyStructure'])->name('master.structures.destroy');
+    });
+
+    // ── System Settings (admin only) ────────────────────────────────────────
+    Route::middleware(['role:admin'])->group(function () {
+        Route::get('system-settings', [SettingController::class, 'index'])->name('system-settings.index');
+        Route::patch('system-settings', [SettingController::class, 'update'])->name('system-settings.update');
+    });
 
 });
 

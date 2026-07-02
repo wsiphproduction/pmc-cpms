@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { useConfirm } from '@/components/useConfirm';
 
@@ -10,6 +10,13 @@ interface Attachment {
     filepath: string;
     description: string | null;
     url: string;
+}
+
+interface Comment {
+    id: number;
+    content: string;
+    author: string;
+    date: string;
 }
 
 interface User {
@@ -33,6 +40,12 @@ interface ProjectRequestData {
     project: { id: number; project_no: string } | null;
     attachments: Attachment[];
     created_at: string | null;
+    can: {
+        update: boolean;
+        delete: boolean;
+        decide: boolean;
+        canCreateProject: boolean;
+    };
 }
 
 interface Props {
@@ -211,6 +224,137 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
     );
 }
 
+// ── Comments Section ───────────────────────────────────────────────────────
+function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
+    const [comments, setComments] = useState<Comment[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [newComment, setNewComment] = useState('');
+    const [posting, setPosting] = useState(false);
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
+    const csrfToken = () =>
+        (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+
+    useEffect(() => {
+        setLoading(true);
+        fetch(route('comments.index', projectRequestId), {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+        })
+            .then(r => r.json())
+            .then(data => setComments(data))
+            .catch(console.error)
+            .finally(() => setLoading(false));
+    }, [projectRequestId]);
+
+    const postComment = async () => {
+        if (!newComment.trim()) return;
+        setPosting(true);
+        try {
+            const res = await fetch(route('comments.store', projectRequestId), {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken(),
+                },
+                body: JSON.stringify({ content: newComment.trim() }),
+            });
+            if (res.ok) {
+                const comment = await res.json();
+                setComments(prev => [...prev, comment]);
+                setNewComment('');
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setPosting(false);
+        }
+    };
+
+    const deleteComment = (id: number) => {
+        showConfirm('Delete this comment?', async () => {
+            try {
+                const res = await fetch(route('comments.destroy', id), {
+                    method: 'DELETE',
+                    headers: { 'X-CSRF-TOKEN': csrfToken(), 'Accept': 'application/json' },
+                });
+                if (res.ok) setComments(prev => prev.filter(c => c.id !== id));
+            } catch (err) {
+                console.error(err);
+            }
+        }, { title: 'Delete Comment', confirmLabel: 'Delete', variant: 'danger' });
+    };
+
+    return (
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', marginTop: '20px' }}>
+            {confirmDialog}
+            <div style={{ padding: '18px 28px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>
+                    Comments{comments.length > 0 && ` (${comments.length})`}
+                </span>
+            </div>
+
+            <div style={{ padding: '20px 28px' }}>
+                {loading ? (
+                    <div style={{ textAlign: 'center', padding: '20px 0', color: '#9ca3af', fontSize: '13px' }}>Loading…</div>
+                ) : comments.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                        <p style={{ fontSize: '12.5px', color: '#9ca3af', margin: 0 }}>No comments yet. Be the first!</p>
+                    </div>
+                ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '18px' }}>
+                        {comments.map(c => (
+                            <div key={c.id} style={{ background: '#f8fafc', borderRadius: '8px', padding: '12px 14px', border: '1px solid #f0f2f5' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                                            {c.author?.slice(0, 2).toUpperCase()}
+                                        </div>
+                                        <span style={{ fontSize: '13px', fontWeight: 700, color: '#374151' }}>{c.author}</span>
+                                        <span style={{ fontSize: '11.5px', color: '#9ca3af' }}>{c.date}</span>
+                                    </div>
+                                    <button
+                                        onClick={() => deleteComment(c.id)}
+                                        title="Delete comment"
+                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', display: 'flex', padding: '2px', borderRadius: '4px' }}
+                                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                                        onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
+                                    >
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                    </button>
+                                </div>
+                                <p style={{ fontSize: '13px', color: '#334155', margin: 0, lineHeight: 1.6, paddingLeft: '34px' }}>{c.content}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                <div>
+                    <textarea
+                        rows={3}
+                        value={newComment}
+                        onChange={e => setNewComment(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postComment(); }}
+                        placeholder="Write a comment… (Ctrl+Enter to submit)"
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e5e7eb', fontSize: '13px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
+                        onFocus={e => (e.target.style.borderColor = '#2563eb')}
+                        onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
+                    />
+                    <button
+                        onClick={postComment}
+                        disabled={posting || !newComment.trim()}
+                        style={{ marginTop: '8px', padding: '9px 20px', borderRadius: '8px', background: posting || !newComment.trim() ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: posting || !newComment.trim() ? 'not-allowed' : 'pointer', transition: 'background 0.15s', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        {posting ? 'Posting…' : 'Post Comment'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Show Page ──────────────────────────────────────────────────────────────
 export default function Show({ projectRequest }: Props) {
     if (!projectRequest) return null;
@@ -260,16 +404,18 @@ export default function Show({ projectRequest }: Props) {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                         Add Feedback
                     </button>
-                    {projectRequest.status === 'approved' && !projectRequest.project && (
+                    {projectRequest.status === 'approved' && !projectRequest.project && projectRequest.can.canCreateProject && (
                         <Link href={`${route('projects.create')}?request_id=${projectRequest.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#16a34a', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                             Create Project
                         </Link>
                     )}
-                    <Link href={route('requests.edit', projectRequest.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        Edit Request
-                    </Link>
+                    {projectRequest.can.update && (
+                        <Link href={route('requests.edit', projectRequest.id)} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Edit Request
+                        </Link>
+                    )}
                 </div>
             </div>
 
@@ -393,12 +539,14 @@ export default function Show({ projectRequest }: Props) {
 
                 {/* Footer */}
                 <div style={{ borderTop: '1px solid #f3f4f6', padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafbfc' }}>
-                    <button onClick={handleDelete} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 16px', borderRadius: '7px', border: '1px solid #fca5a5', background: '#fff', fontSize: '12.5px', fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                        Cancel Request
-                    </button>
+                    {projectRequest.can.delete ? (
+                        <button onClick={handleDelete} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 16px', borderRadius: '7px', border: '1px solid #fca5a5', background: '#fff', fontSize: '12.5px', fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                            Cancel Request
+                        </button>
+                    ) : <span />}
 
-                    {projectRequest.status === 'pending' && (
+                    {projectRequest.can.decide && (
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <button onClick={handleReject} style={{ padding: '8px 22px', borderRadius: '7px', border: '1.5px solid #fca5a5', background: '#fff', fontSize: '13px', fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>
                                 Reject
@@ -410,6 +558,8 @@ export default function Show({ projectRequest }: Props) {
                     )}
                 </div>
             </div>
+
+            <CommentsSection projectRequestId={projectRequest.id} />
         </AuthenticatedLayout>
     );
 }

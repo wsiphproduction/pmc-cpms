@@ -6,6 +6,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 interface SelectOption {
     value: string;
     label: string;
+    displayLabel?: string;
 }
 
 interface Props {
@@ -115,11 +116,11 @@ function SelectField({
 }) {
     const [open, setOpen] = useState(false);
     const selectedOption = options.find(option => option.value === value);
-    const [inputValue, setInputValue] = useState(selectedOption?.label ?? value);
+    const [inputValue, setInputValue] = useState(selectedOption?.displayLabel ?? selectedOption?.label ?? value);
 
     useEffect(() => {
         const selected = options.find(option => option.value === value);
-        setInputValue(selected?.label ?? value);
+        setInputValue(selected?.displayLabel ?? selected?.label ?? value);
     }, [options, value]);
 
     const filtered = useMemo(() => {
@@ -160,7 +161,7 @@ function SelectField({
                             key={option.value}
                             type="button"
                             onMouseDown={e => e.preventDefault()}
-                            onClick={() => { onChange(option.value); setInputValue(option.label); setOpen(false); }}
+                            onClick={() => { onChange(option.value); setInputValue(option.displayLabel ?? option.label); setOpen(false); }}
                             style={{ width: '100%', border: 'none', background: option.value === value ? '#eff6ff' : '#fff', padding: '9px 12px', textAlign: 'left', fontSize: '13px', color: '#334155', cursor: 'pointer' }}
                         >
                             {option.label}
@@ -234,7 +235,7 @@ export default function ProjectCreate({
         asset_id:        project?.asset_id ?? '',
         cls:             project?.cls ?? '',
         priority:        project?.priority ?? '',
-        status:          project?.status ?? '',
+        status:          project?.status ?? 'PLANNING',
         work_force:      project?.work_force ?? '',
         wr_no:           project?.wr_no ?? '',
         wr_date:         project?.wr_date ?? '',

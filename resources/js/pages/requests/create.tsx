@@ -176,6 +176,7 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
     const [processing,      setProcessing]      = useState(false);
     const [errors,          setErrors]          = useState<Partial<Record<keyof FormData, string>>>({});
     const [attachmentError, setAttachmentError] = useState('');
+    const [fundingError,    setFundingError]    = useState('');
 
     let _nextId = 1;
     const makeRow = (type: UploadRow['type']): UploadRow => ({ id: _nextId++, file: null, description: '', type });
@@ -192,11 +193,13 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
     const set = (field: keyof FormData, value: string | boolean) =>
         setForm(p => ({ ...p, [field]: value }));
 
-    const setFunding = (field: 'opex' | 'capex' | 'for_budgeting', value: boolean) =>
+    const setFunding = (field: 'opex' | 'capex' | 'for_budgeting', value: boolean) => {
+        setFundingError('');
         setForm(p => {
             const next = { ...p, [field]: value };
             return next.opex && next.capex ? next : { ...next, costcode: '' };
         });
+    };
 
     const requiresCostCode = form.opex && form.capex;
 
@@ -208,6 +211,12 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
             return;
         }
         setErrors({});
+
+        if (!form.opex && !form.capex && !form.for_budgeting) {
+            setFundingError('Select at least one funding classification (OPEX, CAPEX, or For Budgeting).');
+            return;
+        }
+        setFundingError('');
 
         const totalFiles = [...pictureRows, ...drawingRows, ...reportRows].filter(r => r.file).length;
         if (totalFiles === 0) {
@@ -297,8 +306,8 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                 <SectionTitle>Financials &amp; Budgeting</SectionTitle>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
-                        <FormLabel>Funding Classification</FormLabel>
-                        <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-around', height: 'calc(100% - 22px)' }}>
+                        <FormLabel required>Funding Classification</FormLabel>
+                        <div style={{ background: '#f8fafc', border: `1.5px solid ${fundingError ? '#fca5a5' : '#e5e7eb'}`, borderRadius: '8px', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-around', height: 'calc(100% - 22px)' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
                                 <input type="checkbox" checked={form.opex} onChange={e => setFunding('opex', e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
                                 OPEX
@@ -312,6 +321,12 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                                 For Budgeting
                             </label>
                         </div>
+                        {fundingError && (
+                            <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '5px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                {fundingError}
+                            </p>
+                        )}
                     </div>
                     <div>
                         {requiresCostCode && (

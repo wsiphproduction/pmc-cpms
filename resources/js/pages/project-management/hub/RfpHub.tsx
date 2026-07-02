@@ -23,6 +23,7 @@ interface BillingRow {
     summary: string | null;
     remarks: string | null;
     attachments: string[];
+    recommendation: string | null;
     status: string;
     status_raw: string;
     filename: string | null;
@@ -45,7 +46,8 @@ const MINOR_DOCS: Record<string, string[]> = {
     'Retention/Others': ['Billing Reconciliation', 'Approved NTP'],
 };
 
-function CheckGroup({ label, items, checked, onToggle }: {
+function CheckGroup({ category, label, items, checked, onToggle }: {
+    category: string;
     label: string;
     items: string[];
     checked: string[];
@@ -54,15 +56,20 @@ function CheckGroup({ label, items, checked, onToggle }: {
     return (
         <div>
             <div style={{ fontWeight: 800, fontSize: '11px', borderBottom: '1px solid #000', paddingBottom: '3px', marginBottom: '6px' }}>{label}</div>
-            {items.map(item => (
-                <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', marginBottom: '3px', cursor: 'pointer' }}>
-                    <input
-                        type="checkbox"
-                        checked={checked.includes(item)}
-                        onChange={() => onToggle(item)}
-                    /> {item}
-                </label>
-            ))}
+            {items.map(item => {
+                // Prefixed with category since the same label (e.g. "Billing Summary") appears
+                // under multiple categories and would otherwise share checked state between them.
+                const key = `${category}: ${item}`;
+                return (
+                    <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', marginBottom: '3px', cursor: 'pointer' }}>
+                        <input
+                            type="checkbox"
+                            checked={checked.includes(key)}
+                            onChange={() => onToggle(key)}
+                        /> {item}
+                    </label>
+                );
+            })}
         </div>
     );
 }
@@ -154,7 +161,9 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
     const [attachments,  setAttachments]  = useState<string[]>([]);
     const [file,         setFile]         = useState<File | null>(null);
     const [othersBilling,setOthersBilling]= useState(false);
+    const [recommendation, setRecommendation] = useState('For Payment');
     const [otherRec,     setOtherRec]     = useState(false);
+    const [otherRecText, setOtherRecText] = useState('');
     const [saving,       setSaving]       = useState(false);
     const [error,        setError]        = useState('');
 
@@ -198,6 +207,7 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
             summary:        summary    || null,
             remarks:        remarks    || null,
             attachments,
+            recommendation: recommendation === 'Others' && otherRecText.trim() ? otherRecText.trim() : recommendation,
             file,
         }, { preserveScroll: true, forceFormData: true, onSuccess: onClose, onFinish: () => setSaving(false) });
     };
@@ -352,11 +362,15 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
                         <td style={labelCell}>Recommendation</td>
                         <td style={valCell}>
                             <div style={{ display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}><input type="radio" name="rec" defaultChecked /> For Payment</label>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}><input type="radio" name="rec" /> Withhold (Pending Clarification)</label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}>
-                                    <input type="radio" name="rec" onChange={e => setOtherRec(e.target.checked)} /> Others:
-                                    {otherRec && <input type="text" style={{ ...inputStyle, width: '100px', padding: '3px 6px', fontSize: '12px' }} />}
+                                    <input type="radio" name="rec" checked={recommendation === 'For Payment'} onChange={() => { setRecommendation('For Payment'); setOtherRec(false); }} /> For Payment
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}>
+                                    <input type="radio" name="rec" checked={recommendation === 'Withhold (Pending Clarification)'} onChange={() => { setRecommendation('Withhold (Pending Clarification)'); setOtherRec(false); }} /> Withhold (Pending Clarification)
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}>
+                                    <input type="radio" name="rec" checked={recommendation === 'Others'} onChange={() => { setRecommendation('Others'); setOtherRec(true); }} /> Others:
+                                    {otherRec && <input type="text" style={{ ...inputStyle, width: '100px', padding: '3px 6px', fontSize: '12px' }} value={otherRecText} onChange={e => setOtherRecText(e.target.value)} />}
                                 </label>
                             </div>
                         </td>
@@ -372,7 +386,7 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
                         {Object.entries(MAJOR_DOCS).map(([cat, items], i) => (
                             <div key={cat} style={{ padding: '8px', borderRight: i < 2 ? '1px solid #000' : 'none' }}>
-                                <CheckGroup label={cat} items={items} checked={attachments} onToggle={toggleAttachment} />
+                                <CheckGroup category={cat} label={cat} items={items} checked={attachments} onToggle={toggleAttachment} />
                             </div>
                         ))}
                     </div>
@@ -382,7 +396,7 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                         {Object.entries(MINOR_DOCS).map(([cat, items], i) => (
                             <div key={cat} style={{ padding: '8px', borderRight: i === 0 ? '1px solid #000' : 'none' }}>
-                                <CheckGroup label={cat} items={items} checked={attachments} onToggle={toggleAttachment} />
+                                <CheckGroup category={cat} label={cat} items={items} checked={attachments} onToggle={toggleAttachment} />
                             </div>
                         ))}
                     </div>
@@ -405,7 +419,12 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
     const [attachments,   setAttachments]   = useState<string[]>(billing.attachments ?? []);
     const [file,          setFile]          = useState<File | null>(null);
     const [othersBilling, setOthersBilling] = useState(false);
-    const [otherRec,      setOtherRec]      = useState(false);
+    const KNOWN_RECS = ['For Payment', 'Withhold (Pending Clarification)'];
+    const [recommendation, setRecommendation] = useState(
+        billing.recommendation && KNOWN_RECS.includes(billing.recommendation) ? billing.recommendation : (billing.recommendation ? 'Others' : 'For Payment')
+    );
+    const [otherRec,      setOtherRec]      = useState(!!billing.recommendation && !KNOWN_RECS.includes(billing.recommendation));
+    const [otherRecText,  setOtherRecText]  = useState(!!billing.recommendation && !KNOWN_RECS.includes(billing.recommendation) ? billing.recommendation : '');
     const [saving,        setSaving]        = useState(false);
     const [error,         setError]         = useState('');
 
@@ -449,6 +468,7 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
             summary:       summary     || null,
             remarks:       remarks     || null,
             attachments,
+            recommendation: recommendation === 'Others' && otherRecText.trim() ? otherRecText.trim() : recommendation,
             status,
             file,
         }, { preserveScroll: true, forceFormData: true, onSuccess: onClose, onFinish: () => setSaving(false) });
@@ -596,11 +616,15 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
                         <td style={labelCell}>Recommendation</td>
                         <td style={valCell}>
                             <div style={{ display: 'flex', gap: '18px', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}><input type="radio" name="rec_edit" defaultChecked /> For Payment</label>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}><input type="radio" name="rec_edit" /> Withhold (Pending Clarification)</label>
                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}>
-                                    <input type="radio" name="rec_edit" onChange={e => setOtherRec(e.target.checked)} /> Others:
-                                    {otherRec && <input type="text" style={{ ...inputStyle, width: '100px', padding: '3px 6px', fontSize: '12px' }} />}
+                                    <input type="radio" name="rec_edit" checked={recommendation === 'For Payment'} onChange={() => { setRecommendation('For Payment'); setOtherRec(false); }} /> For Payment
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}>
+                                    <input type="radio" name="rec_edit" checked={recommendation === 'Withhold (Pending Clarification)'} onChange={() => { setRecommendation('Withhold (Pending Clarification)'); setOtherRec(false); }} /> Withhold (Pending Clarification)
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontWeight: 600 }}>
+                                    <input type="radio" name="rec_edit" checked={recommendation === 'Others'} onChange={() => { setRecommendation('Others'); setOtherRec(true); }} /> Others:
+                                    {otherRec && <input type="text" style={{ ...inputStyle, width: '100px', padding: '3px 6px', fontSize: '12px' }} value={otherRecText} onChange={e => setOtherRecText(e.target.value)} />}
                                 </label>
                             </div>
                         </td>
@@ -628,7 +652,7 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
                         {Object.entries(MAJOR_DOCS).map(([cat, items], i) => (
                             <div key={cat} style={{ padding: '8px', borderRight: i < 2 ? '1px solid #000' : 'none' }}>
-                                <CheckGroup label={cat} items={items} checked={attachments} onToggle={toggleAttachment} />
+                                <CheckGroup category={cat} label={cat} items={items} checked={attachments} onToggle={toggleAttachment} />
                             </div>
                         ))}
                     </div>
@@ -638,7 +662,7 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
                         {Object.entries(MINOR_DOCS).map(([cat, items], i) => (
                             <div key={cat} style={{ padding: '8px', borderRight: i === 0 ? '1px solid #000' : 'none' }}>
-                                <CheckGroup label={cat} items={items} checked={attachments} onToggle={toggleAttachment} />
+                                <CheckGroup category={cat} label={cat} items={items} checked={attachments} onToggle={toggleAttachment} />
                             </div>
                         ))}
                     </div>
@@ -648,26 +672,71 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
     );
 }
 
+// ── Read-only attachments checklist (View modal) ───────────────────────────
+function ReadOnlyCheckGroup({ category, label, items, checked }: {
+    category: string;
+    label: string;
+    items: string[];
+    checked: string[];
+}) {
+    return (
+        <div>
+            <div style={{ fontWeight: 800, fontSize: '11px', borderBottom: '1px solid #000', paddingBottom: '3px', marginBottom: '6px' }}>{label}</div>
+            {items.map(item => {
+                const key = `${category}: ${item}`;
+                const isChecked = checked.includes(key);
+                return (
+                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '12px', marginBottom: '3px', color: isChecked ? '#0f172a' : '#94a3b8' }}>
+                        <span>{isChecked ? '☑' : '☐'}</span> {item}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 // ── View Billing Modal ─────────────────────────────────────────────────────
-function ViewBillingModal({ billing, onClose, onEdit }: { billing: BillingRow; onClose: () => void; onEdit: () => void }) {
+function ViewBillingModal({ billing, onClose, onEdit, canEdit = true }: { billing: BillingRow; onClose: () => void; onEdit: () => void; canEdit?: boolean }) {
     const ro: React.CSSProperties = { padding: '8px 10px', verticalAlign: 'top', fontSize: '13px', color: '#0f172a' };
     return (
-        <Modal title={`Billing — ${billing.stmt_no}`} onClose={onClose} size="860px"
+        <Modal title={`Billing — ${billing.stmt_no}`} onClose={onClose} size="900px"
             footer={<>
                 <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Close</button>
-                {billing.status_raw === 'pending' && (
+                {canEdit && billing.status_raw === 'pending' && (
                     <button type="button" onClick={onEdit} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
                 )}
             </>}
         >
-            {billing.ntp_contractor && (
-                <div style={{ padding: '8px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '7px', marginBottom: '14px', fontSize: '12.5px', color: '#1e40af' }}>
-                    NTP: <strong>{billing.ntp_no}</strong> — {billing.ntp_contractor}
-                </div>
-            )}
             <div style={{ background: '#ffff00', textAlign: 'center', fontWeight: 900, padding: '6px', border: '1px solid #000', marginBottom: 0, textTransform: 'uppercase' }}>Billing Details</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', borderTop: 'none', marginBottom: '20px', fontSize: '12.5px' }}>
                 <tbody>
+                    {/* NTP card */}
+                    <tr style={rowStyle}>
+                        <td style={labelCell}>Notice to Proceed</td>
+                        <td style={ro}>
+                            {billing.ntp_contractor ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', padding: '10px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '7px' }}>
+                                    <div>
+                                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', marginBottom: '2px' }}>NTP No.</div>
+                                        <div style={{ fontWeight: 700, color: '#1e3a8a' }}>{billing.ntp_no}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', marginBottom: '2px' }}>Contractor</div>
+                                        <div style={{ fontWeight: 700, color: '#1e3a8a' }}>{billing.ntp_contractor}</div>
+                                    </div>
+                                    <div>
+                                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', marginBottom: '2px' }}>Contract Value</div>
+                                        <div style={{ fontWeight: 700, color: '#1e3a8a' }}>
+                                            {billing.ntp_approved_cost != null ? money(billing.ntp_approved_cost) : '—'}
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <span style={{ color: '#94a3b8', fontSize: '12px' }}>No NTP linked to this billing.</span>
+                            )}
+                        </td>
+                    </tr>
+
                     {([
                         ['Type of Billing',       billing.billing_type],
                         ['Billing Statement No.', billing.stmt_no],
@@ -677,6 +746,7 @@ function ViewBillingModal({ billing, onClose, onEdit }: { billing: BillingRow; o
                         ['Project Progress (%)',  billing.progress_pct != null ? `${billing.progress_pct}%` : '—'],
                         ['Summary of Work Done',  billing.summary ?? '—'],
                         ['Remarks',               billing.remarks ?? '—'],
+                        ['Recommendation',        billing.recommendation ?? '—'],
                         ['Status',                billing.status],
                     ] as [string, string][]).map(([lbl, val]) => (
                         <tr key={lbl} style={rowStyle}>
@@ -696,6 +766,31 @@ function ViewBillingModal({ billing, onClose, onEdit }: { billing: BillingRow; o
                     )}
                 </tbody>
             </table>
+
+            {/* Attachments checklist */}
+            <div style={{ background: '#ffff00', textAlign: 'center', fontWeight: 900, padding: '6px', border: '1px solid #000', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Attachments</div>
+            <div style={{ display: 'flex', border: '1px solid #000', borderTop: 'none', fontSize: '12px' }}>
+                <div style={{ flex: '1', borderRight: '1px solid #000' }}>
+                    <div style={{ background: '#ffff00', textAlign: 'center', fontWeight: 700, padding: '4px', borderBottom: '1px solid #000' }}>Major Projects</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr' }}>
+                        {Object.entries(MAJOR_DOCS).map(([cat, items], i) => (
+                            <div key={cat} style={{ padding: '8px', borderRight: i < 2 ? '1px solid #000' : 'none' }}>
+                                <ReadOnlyCheckGroup category={cat} label={cat} items={items} checked={billing.attachments ?? []} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                <div style={{ width: '38%' }}>
+                    <div style={{ background: '#ffff00', textAlign: 'center', fontWeight: 700, padding: '4px', borderBottom: '1px solid #000' }}>Minor Projects</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                        {Object.entries(MINOR_DOCS).map(([cat, items], i) => (
+                            <div key={cat} style={{ padding: '8px', borderRight: i === 0 ? '1px solid #000' : 'none' }}>
+                                <ReadOnlyCheckGroup category={cat} label={cat} items={items} checked={billing.attachments ?? []} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
         </Modal>
     );
 }
@@ -705,7 +800,7 @@ const STATUS_TONE: Record<string, 'blue' | 'green' | 'yellow' | 'slate'> = {
 };
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function RfpHub({ project, billings, ntps }: { project: HubProject; billings: BillingRow[]; ntps: NtpOption[] }) {
+export default function RfpHub({ project, billings, ntps, canEdit = true }: { project: HubProject; billings: BillingRow[]; ntps: NtpOption[]; canEdit?: boolean }) {
     const [showNew, setShowNew] = useState(false);
     const [viewing, setViewing] = useState<BillingRow | null>(null);
     const [editing, setEditing] = useState<BillingRow | null>(null);
@@ -721,21 +816,37 @@ export default function RfpHub({ project, billings, ntps }: { project: HubProjec
         }, { title: 'Delete Billing', confirmLabel: 'Delete', variant: 'danger' });
     };
 
+    const handleStatusChange = (b: BillingRow, status: string) => {
+        router.patch(route('hub.rfp.update-status', [project.id, b.id]), { status }, { preserveScroll: true });
+    };
+
     const actionCell = (b: BillingRow) => {
         const isPending = b.status_raw === 'pending';
         return (
-            <div style={{ display: 'flex', gap: '4px' }}>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 <button type="button" title="View" onClick={() => setViewing(b)}
                     style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fff', border: '1px solid #e2e8f0', color: '#475569' }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
-                {isPending && (
+                {canEdit && isPending && (
                     <button type="button" title="Edit" onClick={() => setEditing(b)}
                         style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
                 )}
-                {isPending && (
+                {canEdit && (
+                    <select
+                        title="Update Status"
+                        value={b.status_raw}
+                        onChange={e => handleStatusChange(b, e.target.value)}
+                        style={{ padding: '4px 6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '11.5px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
+                    >
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                )}
+                {canEdit && isPending && (
                     <button type="button" title="Delete" onClick={() => handleDelete(b)}
                         style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
@@ -754,6 +865,7 @@ export default function RfpHub({ project, billings, ntps }: { project: HubProjec
                     billing={viewing}
                     onClose={() => setViewing(null)}
                     onEdit={() => { setEditing(viewing); setViewing(null); }}
+                    canEdit={canEdit}
                 />
             )}
             {editing && (
@@ -778,7 +890,7 @@ export default function RfpHub({ project, billings, ntps }: { project: HubProjec
                 <div>
                     <h4 style={{ margin: '0 0 12px', fontSize: '15px' }}>Quick Actions</h4>
                     <div style={{ display: 'grid', gap: '8px' }}>
-                        <Button variant="dark" onClick={() => setShowNew(true)}>Add New Billing</Button>
+                        {canEdit && <Button variant="dark" onClick={() => setShowNew(true)}>Add New Billing</Button>}
                         <Button variant="outline">Statement of Account</Button>
                     </div>
                 </div>

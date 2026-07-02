@@ -68,6 +68,10 @@ interface Project {
     status_logs: StatusLog[];
     project_type: 'major' | 'minor';
     proposal_document_url: string | null;
+    can: {
+        update: boolean;
+        delete: boolean;
+    };
 }
 
 interface Props {
@@ -126,21 +130,22 @@ function renderHubSection(
     section: string,
     hubProject: import('./hub/Common').HubProject,
     hubData: Record<string, any>,
+    canEdit: boolean,
 ) {
     switch (section) {
-        case 'rfq':     return <RfqHub     project={hubProject} rfqs={hubData.rfqs ?? []} />;
-        case 'ntp':     return <NtpHub     project={hubProject} ntps={hubData.ntps ?? []} />;
-        case 'permits': return <PermitsHub project={hubProject} permits={hubData.permits ?? []} />;
-        case 'vof':     return <VofHub     project={hubProject} vofs={hubData.vofs ?? []} />;
-        case 'qpp':     return <QppHub     project={hubProject} qpps={hubData.qpps ?? []} />;
-        case 'mtr':     return <MtrHub     project={hubProject} mtrs={hubData.mtrs ?? []} />;
-        case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} ntps={hubData.ntps ?? []} />;
-        case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} costCodes={hubData.cost_codes ?? []} />;
-        case 'acr':     return <AcrHub     project={hubProject} iocs={hubData.iocs ?? []} />;
-        case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} />;
+        case 'rfq':     return <RfqHub     project={hubProject} rfqs={hubData.rfqs ?? []} canEdit={canEdit} />;
+        case 'ntp':     return <NtpHub     project={hubProject} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
+        case 'permits': return <PermitsHub project={hubProject} permits={hubData.permits ?? []} canEdit={canEdit} />;
+        case 'vof':     return <VofHub     project={hubProject} vofs={hubData.vofs ?? []} canEdit={canEdit} />;
+        case 'qpp':     return <QppHub     project={hubProject} qpps={hubData.qpps ?? []} canEdit={canEdit} />;
+        case 'mtr':     return <MtrHub     project={hubProject} mtrs={hubData.mtrs ?? []} canEdit={canEdit} />;
+        case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
+        case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} costCodes={hubData.cost_codes ?? []} canEdit={canEdit} />;
+        case 'acr':     return <AcrHub     project={hubProject} iocs={hubData.iocs ?? []} canEdit={canEdit} />;
+        case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} canEdit={canEdit} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
-        case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} />;
-        default:        return <RfqHub     project={hubProject} rfqs={[]} />;
+        case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} canEdit={canEdit} />;
+        default:        return <RfqHub     project={hubProject} rfqs={[]} canEdit={canEdit} />;
     }
 }
 
@@ -284,7 +289,7 @@ function StatusUpdateModal({
             }}>
                 {/* Header */}
                 <div style={{ padding: '12px 20px', background: '#1e293b', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                    <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#fff' }}>Update Project Phase</span>
+                    <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#fff' }}>Update Project Status</span>
                     <button onClick={onClose} style={{ width: '26px', height: '26px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -374,7 +379,7 @@ function StatusUpdateModal({
                         disabled={posting || !selectedKey}
                         style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: posting || !selectedKey ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: posting || !selectedKey ? 'not-allowed' : 'pointer' }}
                     >
-                        {posting ? 'Updating…' : 'Update Phase'}
+                        {posting ? 'Updating…' : 'Update Status'}
                     </button>
                 </div>
             </div>
@@ -444,7 +449,7 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
             )}
 
             {/* Breadcrumb / Top Bar */}
-            <div style={{ background: '#fff', padding: '10px 0', borderBottom: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div className="print-hide" style={{ background: '#fff', padding: '10px 0', borderBottom: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
                     Projects / View / <span style={{ color: '#1e293b', fontWeight: 700 }}>{project.project_no}</span>
                 </div>
@@ -456,13 +461,15 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Export PDF
                     </button>
-                    <button
-                        onClick={() => router.visit(route('projects.edit', project.id))}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 18px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}
-                    >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        Edit Project
-                    </button>
+                    {project.can.update && (
+                        <button
+                            onClick={() => router.visit(route('projects.edit', project.id))}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 18px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Edit Project
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -499,24 +506,40 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
                     </div>
                     <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Current Lifecycle Status</div>
-                        <button
-                            onClick={() => setShowStatusModal(true)}
-                            style={{
-                                padding: '8px 18px', borderRadius: '50px', fontWeight: 700, fontSize: '13px',
-                                cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                background: currentMeta.bg, color: currentMeta.color,
-                                border: `1px solid ${currentMeta.border}`,
-                                transition: 'box-shadow 0.2s',
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)')}
-                            onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-                        >
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" strokeWidth="2"/></svg>
-                            {currentMeta.text}
-                        </button>
-                        <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>
-                            ℹ️ Click to update project phase
-                        </div>
+                        {project.can.update ? (
+                            <button
+                                onClick={() => setShowStatusModal(true)}
+                                style={{
+                                    padding: '8px 18px', borderRadius: '50px', fontWeight: 700, fontSize: '13px',
+                                    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                    background: currentMeta.bg, color: currentMeta.color,
+                                    border: `1px solid ${currentMeta.border}`,
+                                    transition: 'box-shadow 0.2s',
+                                }}
+                                onMouseEnter={e => (e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)')}
+                                onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" strokeWidth="2"/></svg>
+                                {currentMeta.text}
+                            </button>
+                        ) : (
+                            <span
+                                style={{
+                                    padding: '8px 18px', borderRadius: '50px', fontWeight: 700, fontSize: '13px',
+                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                    background: currentMeta.bg, color: currentMeta.color,
+                                    border: `1px solid ${currentMeta.border}`,
+                                }}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" strokeWidth="2"/></svg>
+                                {currentMeta.text}
+                            </span>
+                        )}
+                        {project.can.update && (
+                            <div className="print-hide" style={{ fontSize: '11px', color: '#9ca3af', marginTop: '8px' }}>
+                                ℹ️ Click to update project status
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -650,7 +673,7 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
             </div>
 
             {/* Operations Hub */}
-            <div style={{ marginBottom: '32px' }}>
+            <div className="print-hide" style={{ marginBottom: '32px' }}>
                 <h5 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
                     Project Operations Hub
@@ -697,7 +720,7 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
                             <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>Workspace</span>
                         </div>
                         {activeMenu
-                            ? renderHubSection(activeMenu, hubProject, hub_data)
+                            ? renderHubSection(activeMenu, hubProject, hub_data, project.can.update)
                             : (
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 32px', color: '#94a3b8', textAlign: 'center', gap: '12px' }}>
                                     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>

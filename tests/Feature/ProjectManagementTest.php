@@ -13,8 +13,19 @@ use App\Models\Structure;
 use App\Models\User;
 use App\Models\WorkForce;
 use Inertia\Testing\AssertableInertia as Assert;
+use Spatie\Permission\Models\Role;
 
 uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
+
+function makeApproverUser(): User
+{
+    Role::firstOrCreate(['name' => 'approver']);
+
+    $user = User::factory()->create();
+    $user->assignRole('approver');
+
+    return $user;
+}
 
 function seedProjectMasterData(): void
 {
@@ -33,6 +44,7 @@ function seedProjectMasterData(): void
 function projectPayload(User $manager, array $overrides = []): array
 {
     return array_merge([
+        'project_type' => 'minor',
         'title' => 'Cooling Tower Upgrade',
         'project_manager' => (string) $manager->id,
         'site' => 'Main Plant',
@@ -59,7 +71,7 @@ function projectPayload(User $manager, array $overrides = []): array
 }
 
 it('renders project create with master data options', function () {
-    $user = User::factory()->create();
+    $user = makeApproverUser();
     seedProjectMasterData();
 
     $this->actingAs($user)
@@ -74,7 +86,7 @@ it('renders project create with master data options', function () {
 });
 
 it('stores and shows a project', function () {
-    $user = User::factory()->create();
+    $user = makeApproverUser();
     $manager = User::factory()->create(['name' => 'PM Engineer']);
     seedProjectMasterData();
 
@@ -98,7 +110,7 @@ it('stores and shows a project', function () {
 });
 
 it('updates project status and writes a log', function () {
-    $user = User::factory()->create();
+    $user = makeApproverUser();
     $manager = User::factory()->create();
     seedProjectMasterData();
 
@@ -122,4 +134,42 @@ it('updates project status and writes a log', function () {
         'status_key' => 'ONGOING',
         'remarks' => 'Work started.',
     ]);
+});
+
+it('lets an approver edit only the projects they created', function () {
+    $creator = makeApproverUser();
+    $otherApprover = makeApproverUser();
+    $manager = User::factory()->create();
+    seedProjectMasterData();
+
+    $this->actingAs($creator)->post(route('projects.store'), projectPayload($manager));
+    $project = Project::firstOrFail();
+
+    $this->actingAs($creator)
+        ->get(route('projects.edit', $project))
+        ->assertOk();
+
+    $this->actingAs($otherApprover)
+        ->get(route('projects.edit', $project))
+        ->assertForbidden();
+
+    $this->actingAs($otherApprover)
+        ->patch(route('projects.update-status', $project), ['status_key' => 'ONGOING'])
+        ->assertForbidden();
+});
+
+it('lets an admin edit any project regardless of creator', function () {
+    Role::firstOrCreate(['name' => 'admin']);
+    $creator = makeApproverUser();
+    $admin   = User::factory()->create();
+    $admin->assignRole('admin');
+    $manager = User::factory()->create();
+    seedProjectMasterData();
+
+    $this->actingAs($creator)->post(route('projects.store'), projectPayload($manager));
+    $project = Project::firstOrFail();
+
+    $this->actingAs($admin)
+        ->get(route('projects.edit', $project))
+        ->assertOk();
 });
