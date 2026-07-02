@@ -78,6 +78,7 @@ interface Props {
     project: Project;
     active_section?: string;
     hub_data?: Record<string, any>;
+    hub_counts?: Record<string, number>;
 }
 
 // ── Status Meta ────────────────────────────────────────────────────────────
@@ -388,7 +389,7 @@ function StatusUpdateModal({
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function ProjectShow({ project, active_section, hub_data = {} }: Props) {
+export default function ProjectShow({ project, active_section, hub_data = {}, hub_counts = {} }: Props) {
     const [showStatusModal, setShowStatusModal] = useState(false);
     const [currentStatusKey, setCurrentStatusKey] = useState(project.status_key);
     const [logs, setLogs] = useState<StatusLog[]>(project.status_logs ?? []);
@@ -687,13 +688,14 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
                         </div>
                         {OPS_MENU.map(item => {
                             const isActive = activeMenu === item.key;
+                            const count = hub_counts[item.key] ?? 0;
                             return (
                                 <button
                                     key={item.key}
                                     onClick={() => router.visit(route('projects.hub.' + item.key, project.id), { preserveScroll: true })}
                                     style={{
                                         width: '100%', padding: '13px 18px',
-                                        display: 'flex', alignItems: 'center', gap: '10px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
                                         fontSize: '13px', fontWeight: isActive ? 600 : 500,
                                         color: isActive ? '#2563eb' : '#475569',
                                         background: isActive ? '#eff6ff' : 'transparent',
@@ -705,7 +707,19 @@ export default function ProjectShow({ project, active_section, hub_data = {} }: 
                                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc'; }}
                                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
                                 >
-                                    {item.label}
+                                    <span>{item.label}</span>
+                                    {count > 0 && (
+                                        <span style={{
+                                            minWidth: '20px', height: '20px', padding: '0 6px',
+                                            borderRadius: '10px', fontSize: '11px', fontWeight: 700,
+                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                            background: isActive ? '#2563eb' : '#e2e8f0',
+                                            color: isActive ? '#fff' : '#475569',
+                                            flexShrink: 0,
+                                        }}>
+                                            {count}
+                                        </span>
+                                    )}
                                 </button>
                             );
                         })}

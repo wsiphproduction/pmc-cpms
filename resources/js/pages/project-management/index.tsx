@@ -65,7 +65,27 @@ interface Filters extends AdvancedFilters {
     search?: string;
 }
 
-interface Props {
+interface SelectOption {
+    value: string;
+    label: string;
+    displayLabel?: string;
+}
+
+interface MasterData {
+    managers: SelectOption[];
+    sites: SelectOption[];
+    assets: SelectOption[];
+    departments: SelectOption[];
+    classes: SelectOption[];
+    priorities: SelectOption[];
+    statuses: SelectOption[];
+    workForces: SelectOption[];
+    categories: SelectOption[];
+    serviceTypes: SelectOption[];
+    structures: SelectOption[];
+}
+
+interface Props extends MasterData {
     projects: Paginated<Project>;
     filters: Filters;
     canCreate: boolean;
@@ -152,7 +172,10 @@ function IconBtn({ onClick, title, children }: {
 }
 
 // ── Advanced Filter Modal ──────────────────────────────────────────────────
-function AdvancedFilterModal({ filters, onClose }: { filters: Filters; onClose: () => void }) {
+function AdvancedFilterModal({
+    filters, onClose,
+    managers, sites, assets, departments, classes, priorities, statuses, workForces, categories, serviceTypes, structures,
+}: MasterData & { filters: Filters; onClose: () => void }) {
     const [form, setForm] = useState<AdvancedFilters>({
         project_no:        filters.project_no ?? '',
         project_manager:   filters.project_manager ?? '',
@@ -235,6 +258,7 @@ function AdvancedFilterModal({ filters, onClose }: { filters: Filters; onClose: 
                             <label style={labelStyle}>Project Manager</label>
                             <select value={form.project_manager} onChange={e => set('project_manager', e.target.value)} style={inputStyle}>
                                 <option value="">All Managers</option>
+                                {managers.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div style={{ gridColumn: 'span 2' }}>
@@ -245,42 +269,43 @@ function AdvancedFilterModal({ filters, onClose }: { filters: Filters; onClose: 
                             <label style={labelStyle}>Project Type</label>
                             <select value={form.project_type} onChange={e => set('project_type', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
-                                <option>Major</option>
-                                <option>Minor</option>
+                                <option value="major">Major</option>
+                                <option value="minor">Minor</option>
                             </select>
                         </div>
                         <div>
                             <label style={labelStyle}>Site</label>
                             <select value={form.site} onChange={e => set('site', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
+                                {sites.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={labelStyle}>Asset ID</label>
                             <select value={form.asset_id} onChange={e => set('asset_id', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
+                                {assets.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={labelStyle}>Class</label>
                             <select value={form.cls} onChange={e => set('cls', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
+                                {classes.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={labelStyle}>Priority No.</label>
                             <select value={form.priority_no} onChange={e => set('priority_no', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
+                                {priorities.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={labelStyle}>Project Status</label>
                             <select value={form.status} onChange={e => set('status', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
-                                <option>Ongoing</option>
-                                <option>For Planning</option>
-                                <option>On Hold</option>
-                                <option>Proposal Under Review</option>
+                                {statuses.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div>
@@ -295,6 +320,7 @@ function AdvancedFilterModal({ filters, onClose }: { filters: Filters; onClose: 
                             <label style={labelStyle}>Department Owner</label>
                             <select value={form.dept_owner} onChange={e => set('dept_owner', e.target.value)} style={inputStyle}>
                                 <option value="">All Departments</option>
+                                {departments.map(opt => <option key={opt.value} value={opt.value}>{opt.displayLabel ?? opt.label}</option>)}
                             </select>
                         </div>
                         <div>
@@ -305,26 +331,28 @@ function AdvancedFilterModal({ filters, onClose }: { filters: Filters; onClose: 
                             <label style={labelStyle}>Category</label>
                             <select value={form.category} onChange={e => set('category', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
+                                {categories.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={labelStyle}>Service Type</label>
                             <select value={form.service_type} onChange={e => set('service_type', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
+                                {serviceTypes.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={labelStyle}>Work Force</label>
                             <select value={form.work_force} onChange={e => set('work_force', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
-                                <option>In-House</option>
-                                <option>Contracted</option>
+                                {workForces.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                         <div>
                             <label style={labelStyle}>Structure Type</label>
                             <select value={form.structure_type} onChange={e => set('structure_type', e.target.value)} style={inputStyle}>
                                 <option value="">All</option>
+                                {structures.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
                     </div>
@@ -405,7 +433,10 @@ function Pagination({ data }: { data: Paginated<unknown> }) {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function ProjectsIndex({ projects, filters, canCreate }: Props) {
+export default function ProjectsIndex({
+    projects, filters, canCreate,
+    managers, sites, assets, departments, classes, priorities, statuses, workForces, categories, serviceTypes, structures,
+}: Props) {
     const [search,         setSearch]         = useState(filters.search ?? '');
     const [showAdvFilter,  setShowAdvFilter]   = useState(false);
 
@@ -418,7 +449,13 @@ export default function ProjectsIndex({ projects, filters, canCreate }: Props) {
             <Head title="Project Management" />
 
             {showAdvFilter && (
-                <AdvancedFilterModal filters={filters} onClose={() => setShowAdvFilter(false)} />
+                <AdvancedFilterModal
+                    filters={filters}
+                    onClose={() => setShowAdvFilter(false)}
+                    managers={managers} sites={sites} assets={assets} departments={departments}
+                    classes={classes} priorities={priorities} statuses={statuses} workForces={workForces}
+                    categories={categories} serviceTypes={serviceTypes} structures={structures}
+                />
             )}
 
             {/* Page Title */}

@@ -86,6 +86,10 @@ class ProjectController extends Controller
                 'need_mechanical',
             ]),
             'canCreate' => $request->user()->can('create', Project::class),
+            ...$this->masterDataOptions(),
+            // Advanced search filters by the denormalized project_manager_name column, not the user id.
+            'managers' => User::orderBy('name')->get(['name'])
+                ->map(fn (User $user) => ['value' => (string) $user->name, 'label' => $user->name]),
         ]);
     }
 
@@ -182,7 +186,8 @@ class ProjectController extends Controller
         $this->authorize('view', $project);
 
         return Inertia::render('project-management/show', [
-            'project' => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user'])),
+            'project'    => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user'])),
+            'hub_counts' => $this->hubCounts($project),
         ]);
     }
 
@@ -302,7 +307,26 @@ class ProjectController extends Controller
             'project'        => $this->projectDetailData($project),
             'active_section' => $section,
             'hub_data'       => $this->hubSectionData($project, $section),
+            'hub_counts'     => $this->hubCounts($project),
         ]);
+    }
+
+    private function hubCounts(Project $project): array
+    {
+        return [
+            'rfq'     => $project->rfqs()->count(),
+            'ntp'     => $project->ntps()->count(),
+            'permits' => $project->permits()->count(),
+            'vof'     => $project->variationOrders()->count(),
+            'qpp'     => $project->qualityDocs()->count(),
+            'mtr'     => $project->mtrDocs()->count(),
+            'rfp'     => $project->billings()->count(),
+            'ioc'     => $project->iocItems()->count(),
+            'acr'     => $project->iocItems()->count(),
+            'psr'     => $project->weeklyReports()->count(),
+            'at'      => AuditTrail::where('reference_type', Project::class)->where('reference_id', $project->id)->count(),
+            'todo'    => $project->tasks()->count(),
+        ];
     }
 
     private function hubSectionData(Project $project, string $section): array
@@ -578,7 +602,7 @@ class ProjectController extends Controller
             'project_no' => 'project_no',
             'project_manager' => 'project_manager_name',
             'title' => 'title',
-            'project_type' => 'class_name',
+            'project_type' => 'project_type',
             'site' => 'site',
             'asset_id' => 'asset_id',
             'cls' => 'class_name',
