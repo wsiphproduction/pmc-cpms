@@ -2,11 +2,18 @@ import { Head, router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
-interface Props {
-    projectCompletionKpi: number;
+interface Signatory {
+    key:   string;
+    label: string;
+    name:  string;
 }
 
-export default function SystemSettingsIndex({ projectCompletionKpi }: Props) {
+interface Props {
+    projectCompletionKpi: number;
+    signatories: Signatory[];
+}
+
+export default function SystemSettingsIndex({ projectCompletionKpi, signatories = [] }: Props) {
     const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string> }>();
     const flash  = props.flash;
     const errors = props.errors ?? {};
@@ -14,11 +21,26 @@ export default function SystemSettingsIndex({ projectCompletionKpi }: Props) {
     const [kpi, setKpi] = useState(String(projectCompletionKpi));
     const [submitting, setSubmitting] = useState(false);
 
+    const [sigNames, setSigNames] = useState<Record<string, string>>(
+        () => Object.fromEntries(signatories.map(s => [s.key, s.name])),
+    );
+    const [sigSubmitting, setSigSubmitting] = useState(false);
+
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         setSubmitting(true);
         router.patch(route('system-settings.update'), { project_completion_kpi: kpi }, {
+            preserveScroll: true,
             onFinish: () => setSubmitting(false),
+        });
+    };
+
+    const handleSignatorySubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setSigSubmitting(true);
+        router.patch(route('system-settings.update'), sigNames, {
+            preserveScroll: true,
+            onFinish: () => setSigSubmitting(false),
         });
     };
 
@@ -87,6 +109,52 @@ export default function SystemSettingsIndex({ projectCompletionKpi }: Props) {
                             }}
                         >
                             {submitting ? 'Saving…' : 'Save Settings'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            {/* Report Signatories */}
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', maxWidth: '640px', marginTop: '18px' }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '18px' }}>
+                    Report Signatories
+                </div>
+
+                <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 18px', lineHeight: 1.6, maxWidth: '520px' }}>
+                    Assign the person who signs off for each role. These names are printed as the
+                    signatories on generated reports.
+                </p>
+
+                <form onSubmit={handleSignatorySubmit}>
+                    {signatories.map(sig => (
+                        <div key={sig.key} style={{ marginBottom: '16px' }}>
+                            <label style={{ fontSize: '12.5px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '6px' }}>
+                                {sig.label}
+                            </label>
+                            <input
+                                type="text"
+                                value={sigNames[sig.key] ?? ''}
+                                onChange={e => setSigNames(prev => ({ ...prev, [sig.key]: e.target.value }))}
+                                placeholder="Enter signatory name…"
+                                style={{ ...inputStyle, width: '100%', maxWidth: '420px', borderColor: errors[sig.key] ? '#dc2626' : undefined }}
+                            />
+                            {errors[sig.key] && (
+                                <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '6px 0 0' }}>{errors[sig.key]}</p>
+                            )}
+                        </div>
+                    ))}
+
+                    <div style={{ marginTop: '20px', borderTop: '1px solid #f3f4f6', paddingTop: '18px' }}>
+                        <button
+                            type="submit"
+                            disabled={sigSubmitting}
+                            style={{
+                                padding: '9px 22px', borderRadius: '8px', border: 'none',
+                                background: sigSubmitting ? '#93c5fd' : '#2563eb', color: '#fff',
+                                fontSize: '13px', fontWeight: 700, cursor: sigSubmitting ? 'not-allowed' : 'pointer',
+                            }}
+                        >
+                            {sigSubmitting ? 'Saving…' : 'Save Signatories'}
                         </button>
                     </div>
                 </form>

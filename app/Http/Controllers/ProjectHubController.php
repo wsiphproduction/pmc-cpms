@@ -580,13 +580,30 @@ class ProjectHubController extends Controller
     {
         abort_unless((int) $billing->project_id === (int) $project->id, 403);
 
+        // A paid billing is locked — its status can be viewed but not changed.
+        if ($billing->status === 'paid') {
+            return back()->with('error', 'This billing is already paid and can no longer be changed.');
+        }
+
         $data = $request->validate([
-            'status' => ['required', 'in:pending,approved,paid'],
+            'status'  => ['required', 'in:pending,approved,paid'],
+            'remarks' => ['nullable', 'string', 'max:500'],
         ]);
 
-        $billing->update($data);
+        $billing->update(['status' => $data['status']]);
 
-        AuditTrail::log("Billing {$billing->stmt_no} status changed to {$data['status']}", $project, ['module' => 'RFP', 'type' => 'finance']);
+        $remarks = trim($data['remarks'] ?? '');
+
+        $billing->statusLogs()->create([
+            'user_id' => auth()->id(),
+            'status'  => $data['status'],
+            'remarks' => $remarks !== '' ? $remarks : null,
+        ]);
+
+        $message = "Billing {$billing->stmt_no} status changed to {$data['status']}"
+            . ($remarks !== '' ? " — {$remarks}" : '');
+
+        AuditTrail::log($message, $project, ['module' => 'RFP', 'type' => 'finance']);
 
         $this->recalculateBudgetPaid($project);
 

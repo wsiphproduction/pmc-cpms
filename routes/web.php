@@ -45,6 +45,8 @@ Route::middleware(['auth'])->group(function () {
     // Project Management
     Route::get('projects/{project}/status', [ProjectController::class, 'status'])->name('projects.status');
     Route::patch('projects/{project}/status', [ProjectController::class, 'updateStatus'])->name('projects.update-status');
+    Route::post('projects/{project}/completion', [ProjectController::class, 'saveCompletion'])
+        ->middleware('can:update,project')->name('projects.completion.save');
 
     foreach (['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'] as $section) {
         Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])

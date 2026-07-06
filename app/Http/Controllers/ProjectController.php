@@ -11,8 +11,10 @@ use App\Models\MasterStatus;
 use App\Models\Notification;
 use App\Models\Priority;
 use App\Models\Project;
+use App\Models\ProjectCompletion;
 use App\Models\ProjectRequest;
 use App\Models\ServiceType;
+use App\Models\Setting;
 use App\Models\Site;
 use App\Models\Structure;
 use App\Models\User;
@@ -186,7 +188,7 @@ class ProjectController extends Controller
         $this->authorize('view', $project);
 
         return Inertia::render('project-management/show', [
-            'project'    => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user'])),
+            'project'    => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user', 'completion'])),
             'hub_counts' => $this->hubCounts($project),
         ]);
     }
@@ -294,6 +296,68 @@ class ProjectController extends Controller
         return back()->with('success', 'Project status updated.');
     }
 
+    /**
+     * Store/update the completion details used to print the Project Completion
+     * & Acceptance Certificate (FRM-06) and Project Completion Summary (FRM-12).
+     */
+    public function saveCompletion(Request $request, Project $project): RedirectResponse
+    {
+        $this->authorize('update', $project);
+
+        $data = $request->validate([
+            'reference_no'        => ['nullable', 'string', 'max:100'],
+            'sub_project_title'   => ['nullable', 'string', 'max:191'],
+            'classification'      => ['nullable', 'string', 'max:100'],
+            'plan_baseline_start' => ['nullable', 'date'],
+            'plan_baseline_end'   => ['nullable', 'date'],
+            'plan_actual_start'   => ['nullable', 'date'],
+            'plan_actual_end'     => ['nullable', 'date'],
+            'con_baseline_start'  => ['nullable', 'date'],
+            'con_baseline_end'    => ['nullable', 'date'],
+            'con_actual_start'    => ['nullable', 'date'],
+            'con_actual_end'      => ['nullable', 'date'],
+            'contractor'          => ['nullable', 'string', 'max:191'],
+            'baseline_amount'     => ['nullable', 'numeric'],
+            'actual_amount'       => ['nullable', 'numeric'],
+            'payment_status'      => ['nullable', 'string', 'max:100'],
+            'completion_status'   => ['nullable', 'string', 'max:100'],
+            'request_date'        => ['nullable', 'date'],
+            'date_prepared'       => ['nullable', 'date'],
+            'issued_on'           => ['nullable', 'date'],
+            'received_by'         => ['nullable', 'string', 'max:191'],
+            'accepted_by'         => ['nullable', 'string', 'max:191'],
+            'acknowledged_by'     => ['nullable', 'string', 'max:191'],
+            'keep_photos'         => ['nullable', 'array'],
+            'keep_photos.*'       => ['string'],
+            'photos'              => ['nullable', 'array', 'max:12'],
+            'photos.*'            => ['image', 'max:5120'],
+        ]);
+
+        $existing = $project->completion;
+
+        // Reconcile photos: keep the paths the client kept, delete the rest, add uploads.
+        $keep    = $data['keep_photos'] ?? [];
+        $current = $existing?->photos ?? [];
+        foreach (array_diff($current, $keep) as $removed) {
+            Storage::disk('public')->delete($removed);
+        }
+        $photos = array_values(array_intersect($current, $keep));
+
+        foreach ($request->file('photos', []) as $file) {
+            $photos[] = $file->store("projects/{$project->id}/completion", 'public');
+        }
+
+        $payload = collect($data)->except(['keep_photos', 'photos'])->all();
+        $payload['photos']   = $photos;
+        $payload['saved_by'] = auth()->id();
+
+        $project->completion()->updateOrCreate(['project_id' => $project->id], $payload);
+
+        AuditTrail::log('Completion certificate details saved', $project, ['module' => 'Project', 'type' => 'update']);
+
+        return back()->with('success', 'Completion details saved.');
+    }
+
     public function hub(Project $project, string $section): Response
     {
         $this->authorize('view', $project);
@@ -301,7 +365,7 @@ class ProjectController extends Controller
         $validSections = ['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
-        $project->load(['manager', 'creator', 'statusLogs.user']);
+        $project->load(['manager', 'creator', 'statusLogs.user', 'completion']);
 
         return Inertia::render('project-management/show', [
             'project'        => $this->projectDetailData($project),
@@ -450,7 +514,7 @@ class ProjectController extends Controller
                     'contractor'    => $n->contractor_name,
                     'approved_cost' => (float) $n->approved_cost,
                 ])->values(),
-                'billings' => $project->billings()->with('ntp')->get()->map(fn ($b) => [
+                'billings' => $project->billings()->with(['ntp', 'statusLogs.user'])->get()->map(fn ($b) => [
                     'id'              => $b->id,
                     'stmt_no'         => $b->stmt_no,
                     'billing_type'    => $b->billing_type,
@@ -472,6 +536,14 @@ class ProjectController extends Controller
                     'ntp_no'              => $b->ntp?->ntp_no,
                     'ntp_contractor'      => $b->ntp?->contractor_name,
                     'ntp_approved_cost'   => $b->ntp ? (float) $b->ntp->approved_cost : null,
+                    'status_logs'         => $b->statusLogs->map(fn ($log) => [
+                        'id'      => $log->id,
+                        'date'    => $log->created_at?->format('M d, Y') ?? '-',
+                        'time'    => $log->created_at?->format('h:i A') ?? '-',
+                        'user'    => $log->user?->name ?? 'System',
+                        'status'  => ucfirst($log->status),
+                        'remarks' => $log->remarks ?? '—',
+                    ])->values(),
                 ])->values(),
             ],
 
@@ -706,10 +778,69 @@ class ProjectController extends Controller
                 'status_key' => $log->status_key,
                 'remarks' => $log->remarks ?? '',
             ]),
+            'completion'  => $this->completionData($project),
+            'signatories' => $this->signatoryData($project),
             'can' => [
                 'update' => auth()->user()->can('update', $project),
                 'delete' => auth()->user()->can('delete', $project),
             ],
+        ];
+    }
+
+    /**
+     * Serialize the saved completion record (dates as Y-m-d for form inputs),
+     * or null if the project has not been completed/filled yet.
+     */
+    private function completionData(Project $project): ?array
+    {
+        $c = $project->completion;
+        if (! $c) {
+            return null;
+        }
+
+        $d = fn ($date) => optional($date)->format('Y-m-d');
+
+        return [
+            'reference_no'        => $c->reference_no,
+            'sub_project_title'   => $c->sub_project_title,
+            'classification'      => $c->classification,
+            'plan_baseline_start' => $d($c->plan_baseline_start),
+            'plan_baseline_end'   => $d($c->plan_baseline_end),
+            'plan_actual_start'   => $d($c->plan_actual_start),
+            'plan_actual_end'     => $d($c->plan_actual_end),
+            'con_baseline_start'  => $d($c->con_baseline_start),
+            'con_baseline_end'    => $d($c->con_baseline_end),
+            'con_actual_start'    => $d($c->con_actual_start),
+            'con_actual_end'      => $d($c->con_actual_end),
+            'contractor'          => $c->contractor,
+            'baseline_amount'     => $c->baseline_amount !== null ? (float) $c->baseline_amount : null,
+            'actual_amount'       => $c->actual_amount !== null ? (float) $c->actual_amount : null,
+            'payment_status'      => $c->payment_status,
+            'completion_status'   => $c->completion_status,
+            'request_date'        => $d($c->request_date),
+            'date_prepared'       => $d($c->date_prepared),
+            'issued_on'           => $d($c->issued_on),
+            'received_by'         => $c->received_by,
+            'accepted_by'         => $c->accepted_by,
+            'acknowledged_by'     => $c->acknowledged_by,
+            'photos'              => collect($c->photos ?? [])
+                ->map(fn ($p) => ['path' => $p, 'url' => Storage::disk('public')->url($p)])
+                ->values()
+                ->all(),
+        ];
+    }
+
+    /**
+     * Names printed on the completion certificates. The three PMD-side roles
+     * come from Signatory Settings; "Prepared by" is always the project creator.
+     */
+    private function signatoryData(Project $project): array
+    {
+        return [
+            'prepared_by'           => $project->creator?->name ?? '',
+            'pmd_assistant_manager' => (string) Setting::get('signatory_pmd_assistant_manager', ''),
+            'pmd_manager'           => (string) Setting::get('signatory_pmd_manager', ''),
+            'ecs_division_manager'  => (string) Setting::get('signatory_ecs_division_manager', ''),
         ];
     }
 

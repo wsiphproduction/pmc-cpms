@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ProjectBilling extends Model
@@ -50,5 +51,10 @@ class ProjectBilling extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function statusLogs(): HasMany
+    {
+        return $this->hasMany(BillingStatusLog::class)->latest();
     }
 }

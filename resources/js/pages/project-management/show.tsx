@@ -14,6 +14,7 @@ import RfpHub from './hub/RfpHub';
 import RfqHub from './hub/RfqHub';
 import TodoHub from './hub/TodoHub';
 import VofHub from './hub/VofHub';
+import { CompletionPanel, type CompletionData, type Signatories } from './CompletionCertificate';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface StatusLog {
@@ -68,6 +69,8 @@ interface Project {
     status_logs: StatusLog[];
     project_type: 'major' | 'minor';
     proposal_document_url: string | null;
+    completion: CompletionData | null;
+    signatories: Signatories;
     can: {
         update: boolean;
         delete: boolean;
@@ -544,6 +547,26 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                     </div>
                 </div>
 
+                {/* Completion documents (only when project is completed) */}
+                {currentStatusKey === 'COMPLETED' && (
+                    <CompletionPanel
+                        project={{
+                            id: project.id,
+                            project_no: project.project_no,
+                            title: project.title,
+                            site: project.site,
+                            dept_owner: project.dept_owner,
+                            cost_code: project.cost_code,
+                            budget_total: project.budget_total,
+                            budget_paid: project.budget_paid,
+                            project_type: project.project_type,
+                        }}
+                        completion={project.completion}
+                        signatories={project.signatories}
+                        canEdit={project.can.update}
+                    />
+                )}
+
                 {/* Analytics Strip */}
                 <div style={{ padding: '24px 30px', borderBottom: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '12px', margin: '20px 30px' }}>
                     {/* Timeline */}
@@ -688,7 +711,8 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                         </div>
                         {OPS_MENU.map(item => {
                             const isActive = activeMenu === item.key;
-                            const count = hub_counts[item.key] ?? 0;
+                            // Audit Trail has no meaningful "pending" count — hide its badge.
+                            const count = item.key === 'at' ? 0 : (hub_counts[item.key] ?? 0);
                             return (
                                 <button
                                     key={item.key}

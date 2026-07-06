@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -79,6 +80,11 @@ class Project extends Model
     public function statusLogs(): HasMany
     {
         return $this->hasMany(ProjectStatusLog::class)->latest();
+    }
+
+    public function completion(): HasOne
+    {
+        return $this->hasOne(ProjectCompletion::class);
     }
 
     // ── Hub relations ─────────────────────────────────────────────────────

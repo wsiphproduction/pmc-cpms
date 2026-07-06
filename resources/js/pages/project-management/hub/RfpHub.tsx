@@ -32,6 +32,16 @@ interface BillingRow {
     ntp_no: string | null;
     ntp_contractor: string | null;
     ntp_approved_cost: number | null;
+    status_logs?: BillingStatusLog[];
+}
+
+interface BillingStatusLog {
+    id: number;
+    date: string;
+    time: string;
+    user: string;
+    status: string;
+    remarks: string;
 }
 
 const BILLING_TYPES = ['Down Payment', 'Retention', 'Milestone (Progress)', 'Variation', 'Final / Full Payment'];
@@ -799,11 +809,174 @@ const STATUS_TONE: Record<string, 'blue' | 'green' | 'yellow' | 'slate'> = {
     Paid: 'blue', Approved: 'green', Pending: 'yellow',
 };
 
+// ── Billing Status Meta ────────────────────────────────────────────────────
+const BILLING_STATUS_META: Record<string, { label: string; bg: string; color: string; border: string; hint: string }> = {
+    pending:  { label: 'Pending',  bg: '#fffbeb', color: '#b45309', border: '#fde68a', hint: 'Awaiting review. The billing has been submitted but not yet approved for payment.' },
+    approved: { label: 'Approved', bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', hint: 'Reviewed and cleared for payment processing. Amount is not yet counted as paid.' },
+    paid:     { label: 'Paid',     bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', hint: 'Payment has been released. This amount is added to the project’s total paid.' },
+};
+
+// ── Billing Status Change Modal ────────────────────────────────────────────
+function StatusChangeModal({ project, billing, onClose }: { project: HubProject; billing: BillingRow; onClose: () => void }) {
+    const [selectedKey, setSelectedKey] = useState(billing.status_raw);
+    const [remarks, setRemarks]         = useState('');
+    const [posting, setPosting]         = useState(false);
+
+    const selectedMeta = BILLING_STATUS_META[selectedKey];
+    const changed      = selectedKey !== billing.status_raw;
+    const logs         = billing.status_logs ?? [];
+    const locked       = billing.status_raw === 'paid';
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedKey || locked) return;
+        setPosting(true);
+        router.patch(route('hub.rfp.update-status', [project.id, billing.id]), {
+            status: selectedKey,
+            remarks: remarks || null,
+        }, {
+            preserveScroll: true,
+            onSuccess: onClose,
+            onFinish: () => setPosting(false),
+        });
+    };
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} />
+            <div style={{ position: 'relative', background: '#fff', borderRadius: '12px', zIndex: 401, width: '100%', maxWidth: '560px', maxHeight: '90vh', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}>
+                {/* Header */}
+                <div style={{ padding: '12px 20px', background: '#1e293b', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#fff' }}>{locked ? 'Billing Status' : 'Update Billing Status'}</span>
+                    <button onClick={onClose} style={{ width: '26px', height: '26px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: '22px', overflowY: 'auto', flex: 1 }}>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px' }}>
+                        Billing <strong style={{ color: '#0f172a' }}>{billing.stmt_no}</strong>
+                        {billing.ntp_contractor && <> — {billing.ntp_contractor}</>}
+                    </div>
+
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: locked ? '#64748b' : '#2563eb', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                        {locked ? 'Current Status' : 'Change Status Form'}
+                    </div>
+
+                    {locked ? (
+                        <div style={{ padding: '14px', borderRadius: '8px', background: selectedMeta?.bg, border: `1px solid ${selectedMeta?.border}`, color: selectedMeta?.color, fontSize: '12.5px' }}>
+                            <div style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.3px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>🔒</span> Status: {selectedMeta?.label}
+                            </div>
+                            <div>This billing is marked as paid and can no longer be changed. You can still review its status history below.</div>
+                        </div>
+                    ) : (
+                        <form id="billingStatusForm" onSubmit={handleSubmit}>
+                            <div style={{ marginBottom: '14px' }}>
+                                <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Select New Status</label>
+                                <select
+                                    value={selectedKey}
+                                    onChange={e => setSelectedKey(e.target.value)}
+                                    required
+                                    style={{ width: '100%', padding: '7px 10px', borderRadius: '7px', border: '1.5px solid #e5e7eb', fontSize: '13px', outline: 'none', fontFamily: 'inherit' }}
+                                >
+                                    {Object.entries(BILLING_STATUS_META).map(([k, v]) => (
+                                        <option key={k} value={k}>{v.label}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div style={{ marginBottom: '14px' }}>
+                                <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Modification Remarks</label>
+                                <textarea
+                                    rows={2}
+                                    value={remarks}
+                                    onChange={e => setRemarks(e.target.value)}
+                                    placeholder="Explain the status change..."
+                                    style={{ width: '100%', padding: '8px 12px', borderRadius: '7px', border: '1.5px solid #e5e7eb', fontSize: '13px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                                />
+                            </div>
+
+                            {selectedMeta && (
+                                <div style={{ padding: '14px', borderRadius: '8px', background: selectedMeta.bg, border: `1px solid ${selectedMeta.border}`, color: selectedMeta.color, fontSize: '12.5px' }}>
+                                    <div style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.3px', marginBottom: '4px' }}>
+                                        Status: {selectedMeta.label}
+                                    </div>
+                                    <div>{selectedMeta.hint}</div>
+                                </div>
+                            )}
+                        </form>
+                    )}
+
+                    {/* Status Log & Audit Trail */}
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#64748b', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: '26px' }}>
+                        Status Log & Audit Trail
+                    </div>
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
+                        {logs.length === 0 ? (
+                            <div style={{ padding: '22px', textAlign: 'center', fontSize: '12.5px', color: '#94a3b8' }}>
+                                No status changes recorded yet.
+                            </div>
+                        ) : (
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                                <thead>
+                                    <tr style={{ background: '#f8fafc' }}>
+                                        {['Date & Time', 'User', 'Status', 'Remarks'].map(h => (
+                                            <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e5e7eb' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {logs.map((log, i) => {
+                                        const meta = BILLING_STATUS_META[log.status.toLowerCase()];
+                                        return (
+                                            <tr key={log.id ?? i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                <td style={{ padding: '9px 12px' }}>
+                                                    <div style={{ fontWeight: 700, color: '#475569' }}>{log.date}</div>
+                                                    <div style={{ fontSize: '11px', color: '#9ca3af' }}>{log.time}</div>
+                                                </td>
+                                                <td style={{ padding: '9px 12px', fontWeight: 600, color: '#1e293b' }}>{log.user}</td>
+                                                <td style={{ padding: '9px 12px' }}>
+                                                    <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, background: meta?.bg ?? '#f1f5f9', color: meta?.color ?? '#475569' }}>
+                                                        {log.status}
+                                                    </span>
+                                                </td>
+                                                <td style={{ padding: '9px 12px', color: '#6b7280', fontSize: '12px' }}>{log.remarks}</td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', background: '#f8fafc', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer', color: '#374151' }}>Close</button>
+                    {!locked && (
+                        <button
+                            type="submit"
+                            form="billingStatusForm"
+                            disabled={posting || !changed}
+                            style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: posting || !changed ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: posting || !changed ? 'not-allowed' : 'pointer' }}
+                        >
+                            {posting ? 'Updating…' : 'Update Status'}
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function RfpHub({ project, billings, ntps, canEdit = true }: { project: HubProject; billings: BillingRow[]; ntps: NtpOption[]; canEdit?: boolean }) {
     const [showNew, setShowNew] = useState(false);
     const [viewing, setViewing] = useState<BillingRow | null>(null);
     const [editing, setEditing] = useState<BillingRow | null>(null);
+    const [statusTarget, setStatusTarget] = useState<BillingRow | null>(null);
 
     const budgetPaid = project.budget_paid ?? 0;
     const paidPct    = project.budget_total > 0 ? Math.round((budgetPaid / project.budget_total) * 100) : 0;
@@ -814,10 +987,6 @@ export default function RfpHub({ project, billings, ntps, canEdit = true }: { pr
         showConfirm(`Delete billing ${b.stmt_no}?`, () => {
             router.delete(route('hub.rfp.destroy', [project.id, b.id]), { preserveScroll: true });
         }, { title: 'Delete Billing', confirmLabel: 'Delete', variant: 'danger' });
-    };
-
-    const handleStatusChange = (b: BillingRow, status: string) => {
-        router.patch(route('hub.rfp.update-status', [project.id, b.id]), { status }, { preserveScroll: true });
     };
 
     const actionCell = (b: BillingRow) => {
@@ -833,18 +1002,6 @@ export default function RfpHub({ project, billings, ntps, canEdit = true }: { pr
                         style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
-                )}
-                {canEdit && (
-                    <select
-                        title="Update Status"
-                        value={b.status_raw}
-                        onChange={e => handleStatusChange(b, e.target.value)}
-                        style={{ padding: '4px 6px', borderRadius: '6px', border: '1px solid #e2e8f0', fontSize: '11.5px', fontWeight: 700, color: '#475569', cursor: 'pointer' }}
-                    >
-                        <option value="pending">Pending</option>
-                        <option value="approved">Approved</option>
-                        <option value="paid">Paid</option>
-                    </select>
                 )}
                 {canEdit && isPending && (
                     <button type="button" title="Delete" onClick={() => handleDelete(b)}
@@ -870,6 +1027,9 @@ export default function RfpHub({ project, billings, ntps, canEdit = true }: { pr
             )}
             {editing && (
                 <EditBillingModal project={project} billing={editing} onClose={() => setEditing(null)} />
+            )}
+            {statusTarget && (
+                <StatusChangeModal project={project} billing={statusTarget} onClose={() => setStatusTarget(null)} />
             )}
 
             {/* Summary card */}
@@ -907,7 +1067,14 @@ export default function RfpHub({ project, billings, ntps, canEdit = true }: { pr
                     b.billing_type,
                     <strong>PhP {b.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                     b.progress_pct != null ? `${b.progress_pct}%` : '—',
-                    <Badge tone={STATUS_TONE[b.status] ?? 'slate'}>{b.status}</Badge>,
+                    canEdit ? (
+                        <button type="button" title={b.status_raw === 'paid' ? 'View status log' : 'Click to change status'} onClick={() => setStatusTarget(b)}
+                            style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}>
+                            <Badge tone={STATUS_TONE[b.status] ?? 'slate'}>{b.status} {b.status_raw === 'paid' ? '🔒' : '✎'}</Badge>
+                        </button>
+                    ) : (
+                        <Badge tone={STATUS_TONE[b.status] ?? 'slate'}>{b.status}</Badge>
+                    ),
                     actionCell(b),
                 ])}
             />
