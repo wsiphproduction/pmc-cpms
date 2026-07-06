@@ -20,7 +20,7 @@ interface ProjectRequest {
     status: 'approved' | 'pending' | 'ongoing' | 'rejected' | 'completed';
     costcode: string | null;
     created_at: string | null;
-    requester?: { name: string };
+    requester?: { name: string; department?: string | null };
     project?: { id: number; project_no: string } | null;
     unread_comments?: number;
     comments?: Comment[];
@@ -509,8 +509,8 @@ export default function RequestsIndex({ requests, filters }: Props) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['Request ID', 'Title', 'Job Type', 'Location', 'Requester', 'Cost Code', 'Created At', 'Status', 'Project No', 'Actions'].map((h, i) => (
-                                    <th key={h} style={{ padding: '10px 16px', textAlign: i === 9 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                {['Request ID', 'Title', 'Requester', 'Created At', 'Status', 'Project No', 'Actions'].map((h, i, arr) => (
+                                    <th key={h} style={{ padding: '10px 16px', textAlign: i === arr.length - 1 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
                                         {h}
                                     </th>
                                 ))}
@@ -519,7 +519,7 @@ export default function RequestsIndex({ requests, filters }: Props) {
                         <tbody>
                             {requests.data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={10} style={{ padding: '48px', textAlign: 'center' }}>
+                                    <td colSpan={7} style={{ padding: '48px', textAlign: 'center' }}>
                                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 10px' }}>
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                                         </svg>
@@ -532,17 +532,14 @@ export default function RequestsIndex({ requests, filters }: Props) {
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
                                     <td style={{ padding: '12px 16px', color: '#9ca3af', fontSize: '11.5px', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{req.request_no ?? `#${req.id}`}</td>
-                                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0f172a', maxWidth: '220px' }}>{req.title}</td>
-                                    <td style={{ padding: '12px 16px', color: '#6b7280' }}>{req.job_type}</td>
-                                    <td style={{ padding: '12px 16px', color: '#6b7280', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{req.job_location}</td>
-                                    <td style={{ padding: '12px 16px', color: '#6b7280' }}>{req.requester?.name ?? '—'}</td>
-                                    <td style={{ padding: '12px 16px' }}>
-                                        {req.costcode
-                                            ? <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#374151' }}>{req.costcode}</span>
-                                            : <span style={{ color: '#d1d5db', fontSize: '12px' }}>—</span>
-                                        }
+                                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0f172a', minWidth: '300px' }}>{req.title}</td>
+                                    <td style={{ padding: '12px 16px', color: '#6b7280' }}>
+                                        <div>{req.requester?.name ?? '—'}</div>
+                                        {req.requester?.department && (
+                                            <div style={{ fontSize: '11.5px', color: '#9ca3af', marginTop: '2px' }}>{req.requester.department}</div>
+                                        )}
                                     </td>
-                                    <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{req.created_at ?? 'â€”'}</td>
+                                    <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{req.created_at ?? '—'}</td>
                                     <td style={{ padding: '12px 16px' }}><StatusBadge status={req.status} /></td>
                                     <td style={{ padding: '12px 16px' }}>
                                         {req.project?.project_no

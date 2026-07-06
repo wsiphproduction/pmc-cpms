@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Department;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Spatie\Permission\Models\Role;
@@ -18,6 +20,7 @@ class UserController extends Controller
                 'id'         => $user->id,
                 'name'       => $user->name,
                 'email'      => $user->email,
+                'department' => $user->department,
                 'role'       => $user->roles->first()?->name,
                 'created_at' => $user->created_at,
             ]),
@@ -29,22 +32,25 @@ class UserController extends Controller
                 'deleted_at' => $user->deleted_at,
             ]),
             'roles' => Role::orderBy('name')->pluck('name'),
+            'departments' => Department::orderBy('name')->pluck('name'),
         ]);
     }
 
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name'     => 'required|string|max:255',
-            'email'    => 'required|email|max:255|unique:users,email',
-            'password' => ['required', Password::min(8)],
-            'role'     => 'required|string|exists:roles,name',
+            'name'       => 'required|string|max:255',
+            'email'      => 'required|email|max:255|unique:users,email',
+            'password'   => ['required', Password::min(8)],
+            'role'       => 'required|string|exists:roles,name',
+            'department' => [Rule::requiredIf(fn () => $request->input('role') === 'requestor'), 'nullable', 'string', 'max:191'],
         ]);
 
         $user = User::create([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
-            'password' => Hash::make($data['password']),
+            'name'       => $data['name'],
+            'email'      => $data['email'],
+            'password'   => Hash::make($data['password']),
+            'department' => $data['role'] === 'requestor' ? ($data['department'] ?? null) : null,
         ]);
 
         $user->assignRole($data['role']);
@@ -55,14 +61,16 @@ class UserController extends Controller
     public function update(Request $request, User $user)
     {
         $data = $request->validate([
-            'name'  => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email,' . $user->id,
-            'role'  => 'required|string|exists:roles,name',
+            'name'       => 'required|string|max:255',
+            'email'      => 'required|email|max:255|unique:users,email,' . $user->id,
+            'role'       => 'required|string|exists:roles,name',
+            'department' => [Rule::requiredIf(fn () => $request->input('role') === 'requestor'), 'nullable', 'string', 'max:191'],
         ]);
 
         $user->update([
-            'name'  => $data['name'],
-            'email' => $data['email'],
+            'name'       => $data['name'],
+            'email'      => $data['email'],
+            'department' => $data['role'] === 'requestor' ? ($data['department'] ?? null) : null,
         ]);
 
         $user->syncRoles([$data['role']]);

@@ -60,7 +60,7 @@ class CommentController extends Controller
             ->where('reference_type', ProjectRequest::class)
             ->where('status', 'active')
             ->with('user')
-            ->latest()
+            ->oldest()
             ->get()
             ->map(fn($c) => [
                 'id'      => $c->id,

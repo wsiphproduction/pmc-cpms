@@ -136,6 +136,108 @@ class MasterDataController extends Controller
         return redirect()->back()->with('success', 'Cost code deleted.');
     }
 
+    /**
+     * Bulk-import cost codes from a CSV file.
+     *
+     * Expected columns (header row, case-insensitive): "Full_GL_Codes" for the
+     * code and "Cost_Center" for the description. Existing codes (matched by
+     * name) are updated; new ones are created. Chunked upsert keeps the query
+     * parameter count well under SQL Server's 2100 limit while staying fast on
+     * MySQL too.
+     */
+    public function importCostCodes(Request $request)
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ]);
+
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+        if ($handle === false) {
+            return redirect()->back()->with('error', 'Could not read the uploaded file.');
+        }
+
+        $header = fgetcsv($handle);
+        if ($header === false) {
+            fclose($handle);
+            return redirect()->back()->with('error', 'The CSV file is empty.');
+        }
+
+        // Strip a UTF-8 BOM from the first header cell, then normalise headers.
+        $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $header[0]);
+        $columns   = array_map(fn ($h) => strtolower(trim((string) $h)), $header);
+
+        $nameIdx = $this->findCsvColumn($columns, ['full_gl_codes', 'gl_code', 'gl_codes', 'code', 'name']);
+        $descIdx = $this->findCsvColumn($columns, ['cost_center', 'cost center', 'description']);
+
+        if ($nameIdx === null) {
+            fclose($handle);
+            return redirect()->back()->with('error', 'CSV must contain a "Full_GL_Codes" (code) column.');
+        }
+
+        $now      = now()->toDateTimeString();
+        $seen     = [];
+        $batch    = [];
+        $imported = 0;
+        $chunk    = 200; // 200 rows × 4 columns = 800 bind params — safe for SQL Server.
+
+        $flush = function () use (&$batch, &$imported) {
+            if ($batch) {
+                CostCode::upsert($batch, ['name'], ['description', 'updated_at']);
+                $imported += count($batch);
+                $batch = [];
+            }
+        };
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $name = trim((string) ($row[$nameIdx] ?? ''));
+            if ($name === '') {
+                continue;
+            }
+            $name = mb_substr($name, 0, 191);
+
+            // De-duplicate within the file (last value wins would need a map;
+            // first value wins is fine here since codes repeat identically).
+            if (isset($seen[$name])) {
+                continue;
+            }
+            $seen[$name] = true;
+
+            $desc = $descIdx !== null ? trim((string) ($row[$descIdx] ?? '')) : '';
+            $desc = $desc !== '' ? mb_substr($desc, 0, 500) : null;
+
+            $batch[] = [
+                'name'        => $name,
+                'description' => $desc,
+                'created_at'  => $now,
+                'updated_at'  => $now,
+            ];
+
+            if (count($batch) >= $chunk) {
+                $flush();
+            }
+        }
+        $flush();
+        fclose($handle);
+
+        if ($imported === 0) {
+            return redirect()->back()->with('error', 'No valid cost codes found in the CSV.');
+        }
+
+        return redirect()->back()->with('success', "Imported {$imported} cost code(s) from CSV.");
+    }
+
+    private function findCsvColumn(array $columns, array $candidates): ?int
+    {
+        foreach ($candidates as $candidate) {
+            $index = array_search($candidate, $columns, true);
+            if ($index !== false) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
     // Sites
     public function storeSite(Request $request)
     {

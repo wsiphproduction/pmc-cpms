@@ -717,6 +717,9 @@ class ProjectController extends Controller
             'dept_owner' => $project->dept_owner,
             'status' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
             'created_at' => $project->created_at?->format('M d, Y h:i A'),
+            'budget_total' => (float) $project->budget_total,
+            'budget_paid' => (float) $project->budget_paid,
+            'deadline' => optional($project->deadline)->format('M d, Y') ?? '—',
             'can' => [
                 'update' => auth()->user()->can('update', $project),
                 'delete' => auth()->user()->can('delete', $project),
@@ -765,6 +768,7 @@ class ProjectController extends Controller
                 'mechanical' => $project->need_mechanical,
             ],
             'admin_notes'          => $project->notes ?? 'No notes recorded.',
+            'owner_name'           => $project->projectRequest?->requester?->name ?? $project->dept_owner,
             'project_type'         => $project->project_type ?? 'minor',
             'proposal_document_url'=> $project->proposal_document
                 ? Storage::disk('public')->url($project->proposal_document)
@@ -887,12 +891,12 @@ class ProjectController extends Controller
             'asset_id' => '',
             'cls' => '',
             'priority' => '',
-            'status' => '',
+            'status' => 'PLANNING',
             'work_force' => '',
             'wr_no' => $request->request_no ?? '',
             'wr_date' => now()->format('Y-m-d'),
-            'dept_owner' => '',
-            'cost_code' => '',
+            'dept_owner' => $request->requester?->department ?? '',
+            'cost_code' => $request->costcode ?? '',
             'category' => '',
             'service_type' => '',
             'deadline' => now()->addDays(30)->format('Y-m-d'),

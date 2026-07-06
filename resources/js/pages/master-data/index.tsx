@@ -1,5 +1,5 @@
-import { Head, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { Head, router, usePage } from '@inertiajs/react';
+import { useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -389,7 +389,25 @@ function TabTable({
 }) {
     const config = TAB_CONFIG.find(t => t.key === tab)!;
     const isPriority = tab === 'priorities';
+    const isCostCode = tab === 'cost_codes';
     const headers = isPriority ? ['#', 'Sequence', 'Name / Label', 'Description', 'Created At', 'Actions'] : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [importing, setImporting] = useState(false);
+
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setImporting(true);
+        router.post(route('master.cost-codes.import'), { file }, {
+            forceFormData: true,
+            preserveScroll: true,
+            onFinish: () => {
+                setImporting(false);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+            },
+        });
+    };
 
     return (
         <div>
@@ -398,15 +416,37 @@ function TabTable({
                 <div style={{ fontSize: '13px', color: '#64748b' }}>
                     <strong style={{ color: '#0f172a' }}>{items.length}</strong> {items.length === 1 ? 'entry' : 'entries'}
                 </div>
-                <button
-                    onClick={onAdd}
-                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#1d4ed8')}
-                    onMouseLeave={e => (e.currentTarget.style.background = '#2563eb')}
-                >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    {config.addLabel}
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {isCostCode && (
+                        <>
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept=".csv,text/csv"
+                                onChange={handleImport}
+                                style={{ display: 'none' }}
+                            />
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={importing}
+                                title="Import cost codes from a CSV file (columns: Full_GL_Codes, Cost_Center)"
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#fff', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '12.5px', fontWeight: 600, cursor: importing ? 'wait' : 'pointer' }}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                {importing ? 'Uploading…' : 'Upload CSV'}
+                            </button>
+                        </>
+                    )}
+                    <button
+                        onClick={onAdd}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' }}
+                        onMouseEnter={e => (e.currentTarget.style.background = '#1d4ed8')}
+                        onMouseLeave={e => (e.currentTarget.style.background = '#2563eb')}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        {config.addLabel}
+                    </button>
+                </div>
             </div>
 
             {/* Table */}
@@ -492,6 +532,10 @@ export default function MasterData({
     const [deleteTarget, setDeleteTarget] = useState<MasterItem | null>(null);
     const [showModal,    setShowModal]    = useState(false);
 
+    const { props: pageProps } = usePage<{ flash?: { success?: string; error?: string }; errors?: Record<string, string> }>();
+    const flash = pageProps.flash;
+    const fileError = pageProps.errors?.file;
+
     const dataMap: Record<TabKey, MasterItem[]> = {
         job_types:     jobTypes,
         job_locations: jobLocations,
@@ -526,6 +570,17 @@ export default function MasterData({
             <Head title="Master Data" />
 
             <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+
+            {(flash?.success || flash?.error || fileError) && (
+                <div style={{
+                    background: flash?.success ? '#f0fdf4' : '#fef2f2',
+                    border: `1px solid ${flash?.success ? '#bbf7d0' : '#fecaca'}`,
+                    color: flash?.success ? '#15803d' : '#dc2626',
+                    borderRadius: '8px', padding: '10px 16px', marginBottom: '14px', fontSize: '13px', fontWeight: 500,
+                }}>
+                    {flash?.success || flash?.error || fileError}
+                </div>
+            )}
 
             {showModal && (
                 <RecordModal

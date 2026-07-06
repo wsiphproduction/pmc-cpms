@@ -7,6 +7,7 @@ interface UserRow {
     id: number;
     name: string;
     email: string;
+    department: string | null;
     role: string | null;
     created_at: string;
 }
@@ -23,6 +24,7 @@ interface Props {
     users: UserRow[];
     trashedUsers: TrashedUserRow[];
     roles: string[];
+    departments: string[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -122,7 +124,7 @@ const labelStyle: React.CSSProperties = {
 const fieldStyle: React.CSSProperties = { marginBottom: '14px' };
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function UsersIndex({ users, trashedUsers, roles }: Props) {
+export default function UsersIndex({ users, trashedUsers, roles, departments }: Props) {
     const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string> }>();
     const flash  = props.flash;
     const errors = props.errors ?? {};
@@ -137,8 +139,8 @@ export default function UsersIndex({ users, trashedUsers, roles }: Props) {
     const [filterRole, setFilterRole] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
-    const [addForm,  setAddForm]  = useState({ name: '', email: '', password: '', role: roles[0] ?? '' });
-    const [editForm, setEditForm] = useState({ name: '', email: '', role: '' });
+    const [addForm,  setAddForm]  = useState({ name: '', email: '', password: '', role: roles[0] ?? '', department: '' });
+    const [editForm, setEditForm] = useState({ name: '', email: '', role: '', department: '' });
     const [resetPw,  setResetPw]  = useState({ password: '', password_confirmation: '' });
 
     const filtered = users.filter(u => {
@@ -157,12 +159,12 @@ export default function UsersIndex({ users, trashedUsers, roles }: Props) {
         setSubmitting(true);
         router.post(route('users.store'), addForm, {
             onFinish:  () => setSubmitting(false),
-            onSuccess: () => { setShowAdd(false); setAddForm({ name: '', email: '', password: '', role: roles[0] ?? '' }); },
+            onSuccess: () => { setShowAdd(false); setAddForm({ name: '', email: '', password: '', role: roles[0] ?? '', department: '' }); },
         });
     };
 
     const openEdit = (u: UserRow) => {
-        setEditForm({ name: u.name, email: u.email, role: u.role ?? roles[0] ?? '' });
+        setEditForm({ name: u.name, email: u.email, role: u.role ?? roles[0] ?? '', department: u.department ?? '' });
         setEditUser(u);
     };
 
@@ -524,6 +526,16 @@ export default function UsersIndex({ users, trashedUsers, roles }: Props) {
                             </select>
                             {errors.role && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.role}</p>}
                         </div>
+                        {addForm.role === 'requestor' && (
+                            <div style={fieldStyle}>
+                                <label style={labelStyle}>Department</label>
+                                <select style={inputStyle} value={addForm.department} onChange={e => setAddForm(f => ({ ...f, department: e.target.value }))} required>
+                                    <option value="">Select department…</option>
+                                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                                {errors.department && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.department}</p>}
+                            </div>
+                        )}
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
                             <button type="button" style={btnSecondary} onClick={() => setShowAdd(false)}>Cancel</button>
                             <button type="submit" style={{ ...btnPrimary, opacity: submitting ? 0.7 : 1 }} disabled={submitting}>
@@ -557,6 +569,16 @@ export default function UsersIndex({ users, trashedUsers, roles }: Props) {
                             </select>
                             {errors.role && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.role}</p>}
                         </div>
+                        {editForm.role === 'requestor' && (
+                            <div style={fieldStyle}>
+                                <label style={labelStyle}>Department</label>
+                                <select style={inputStyle} value={editForm.department} onChange={e => setEditForm(f => ({ ...f, department: e.target.value }))} required>
+                                    <option value="">Select department…</option>
+                                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
+                                </select>
+                                {errors.department && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.department}</p>}
+                            </div>
+                        )}
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
                             <button type="button" style={btnSecondary} onClick={() => setEditUser(null)}>Cancel</button>
                             <button type="submit" style={{ ...btnPrimary, opacity: submitting ? 0.7 : 1 }} disabled={submitting}>

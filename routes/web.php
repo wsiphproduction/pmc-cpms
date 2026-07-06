@@ -123,6 +123,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('master/job-locations/{jobLocation}', [MasterDataController::class, 'destroyJobLocation'])->name('master.job-locations.destroy');
 
         // Cost Codes
+        Route::post('master/cost-codes/import',       [MasterDataController::class, 'importCostCodes'])->name('master.cost-codes.import');
         Route::post('master/cost-codes',              [MasterDataController::class, 'storeCostCode'])->name('master.cost-codes.store');
         Route::put('master/cost-codes/{costCode}',    [MasterDataController::class, 'updateCostCode'])->name('master.cost-codes.update');
         Route::delete('master/cost-codes/{costCode}', [MasterDataController::class, 'destroyCostCode'])->name('master.cost-codes.destroy');

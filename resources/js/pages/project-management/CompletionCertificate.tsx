@@ -43,6 +43,7 @@ interface ProjectLite {
     title: string;
     site: string;
     dept_owner: string;
+    owner_name: string;
     cost_code: string;
     budget_total: number;
     budget_paid: number;
@@ -359,7 +360,7 @@ function acceptanceHtml(project: ProjectLite, c: CompletionData | null, s: Signa
         ${row('Project Title', project.title)}
         ${row('Sub-Project Title', c?.sub_project_title || 'N/A')}
         ${row('Job Site/Location', project.site)}
-        ${row('Project Owner', project.dept_owner)}
+        ${row('Project Owner', project.owner_name)}
         ${row('Cost Code', project.cost_code)}
         ${row('Service Contractor', c?.contractor || '')}
         ${row('Actual Start Date', fmtShort(c?.con_actual_start))}
@@ -410,7 +411,7 @@ function summaryHtml(project: ProjectLite, c: CompletionData | null, s: Signator
 
     <table class="box" style="margin-bottom:12px;">
         <tr><td class="hd" style="width:140px;">Project Number</td><td>${escapeHtml(project.project_no)}</td><td class="hd" style="width:130px;">Job Site/Location</td><td>${escapeHtml(project.site)}</td></tr>
-        <tr><td class="hd">Project Title</td><td>${escapeHtml(project.title)}</td><td class="hd">Project Owner</td><td>${escapeHtml(project.dept_owner)}</td></tr>
+        <tr><td class="hd">Project Title</td><td>${escapeHtml(project.title)}</td><td class="hd">Project Owner</td><td>${escapeHtml(project.owner_name)}</td></tr>
         <tr><td class="hd">Sub-Project Title</td><td>${escapeHtml(c?.sub_project_title || 'N/A')}</td><td class="hd">Contractor</td><td>${escapeHtml(c?.contractor || '')}</td></tr>
         <tr><td class="hd">Project Classification</td><td>${escapeHtml(c?.classification || '')}</td><td class="hd">Request Date</td><td>${escapeHtml(fmtShort(c?.request_date))}</td></tr>
     </table>

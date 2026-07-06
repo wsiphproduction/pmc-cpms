@@ -1,4 +1,4 @@
-import { Head } from '@inertiajs/react';
+import { Head, router } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
@@ -203,7 +203,7 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
 
     const requiresCostCode = form.opex && form.capex;
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
         if (requiresCostCode && !form.costcode) {
@@ -226,44 +226,34 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
         setAttachmentError('');
         setProcessing(true);
 
-        const fd = new FormData();
-        fd.append('title',        form.title);
-        fd.append('job_type',     form.job_type);
-        fd.append('description',  form.description);
-        fd.append('job_location', form.job_location);
-        fd.append('costcode',     form.costcode);
-        fd.append('opex',         form.opex ? '1' : '0');
-        fd.append('capex',        form.capex ? '1' : '0');
-        fd.append('for_budgeting',form.for_budgeting ? '1' : '0');
+        const attachments = [...pictureRows, ...drawingRows, ...reportRows]
+            .filter(row => row.file)
+            .map(row => ({ file: row.file as File, type: row.type, description: row.description ?? '' }));
 
-        // ── Attachments — always append all three fields per row ──
-        let idx = 0;
-        [...pictureRows, ...drawingRows, ...reportRows].forEach(row => {
-            if (!row.file) return;
-            fd.append(`attachments[${idx}][file]`,        row.file);
-            fd.append(`attachments[${idx}][type]`,        row.type);
-            fd.append(`attachments[${idx}][description]`, row.description ?? '');
-            idx++;
+        // Submit through Inertia so success follows the controller's redirect and,
+        // crucially, a server error (422 validation / 419 session / 500) surfaces
+        // as visible errors instead of silently navigating to the index — the old
+        // fetch() ignored the response, which hid live-only failures.
+        router.post(route('requests.store'), {
+            title:         form.title,
+            job_type:      form.job_type,
+            description:   form.description,
+            job_location:  form.job_location,
+            costcode:      form.costcode,
+            opex:          form.opex ? '1' : '0',
+            capex:         form.capex ? '1' : '0',
+            for_budgeting: form.for_budgeting ? '1' : '0',
+            attachments,
+        }, {
+            forceFormData: true,
+            onError: (serverErrors) => {
+                setErrors(serverErrors as Partial<Record<keyof FormData, string>>);
+                if (serverErrors.opex) setFundingError(serverErrors.opex);
+                const attachmentKey = Object.keys(serverErrors).find(k => k.startsWith('attachments'));
+                if (attachmentKey) setAttachmentError(serverErrors[attachmentKey]);
+            },
+            onFinish: () => setProcessing(false),
         });
-
-        try {
-            const res = await fetch(route('requests.store'), {
-                method: 'POST',
-                headers: {
-                    'X-CSRF-TOKEN':     (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '',
-                    'X-Inertia':        'true',
-                    'X-Inertia-Version':(document.querySelector('meta[name="inertia-version"]') as HTMLMetaElement)?.content ?? '',
-                    'Accept':           'text/html, application/xhtml+xml',
-                },
-                body: fd,
-            });
-            if (res.redirected) window.location.href = res.url;
-            else window.location.href = route('requests.index');
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setProcessing(false);
-        }
     };
 
     return (

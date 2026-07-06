@@ -9,11 +9,11 @@ interface Project {
     title: string;
     type: 'Major' | 'Minor';
     progress: number;
-    project_manager: string;
-    encoded_by: string;
     dept_owner: string;
     status: 'Ongoing' | 'For Planning' | 'On Hold' | 'Proposal Under Review';
-    created_at: string | null;
+    budget_total: number;
+    budget_paid: number;
+    deadline: string | null;
     can: {
         update: boolean;
         delete: boolean;
@@ -144,6 +144,27 @@ function MiniProgress({ progress }: { progress: number }) {
             <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#334155' }}>{progress}%</span>
             <div style={{ height: '6px', borderRadius: '10px', background: '#e2e8f0', overflow: 'hidden', marginTop: '4px' }}>
                 <div style={{ height: '100%', borderRadius: '10px', width: `${progress}%`, background: color, transition: 'width 0.6s ease' }} />
+            </div>
+        </div>
+    );
+}
+
+// ── Payment Status (budget paid vs total) ──────────────────────────────────
+const fmtMoney = (n: number) =>
+    n >= 1_000_000 ? `₱${(n / 1_000_000).toFixed(1)}M`
+    : n >= 1_000   ? `₱${(n / 1_000).toFixed(0)}K`
+    : `₱${n.toFixed(0)}`;
+
+function MiniPayment({ paid, total }: { paid: number; total: number }) {
+    const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+    return (
+        <div style={{ width: '120px' }}>
+            <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#334155' }}>{pct}%</span>
+            <div style={{ height: '6px', borderRadius: '10px', background: '#e2e8f0', overflow: 'hidden', marginTop: '4px' }}>
+                <div style={{ height: '100%', borderRadius: '10px', width: `${pct}%`, background: '#2563eb', transition: 'width 0.6s ease' }} />
+            </div>
+            <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '3px', whiteSpace: 'nowrap' }}>
+                {fmtMoney(paid)} / {fmtMoney(total)}
             </div>
         </div>
     );
@@ -530,10 +551,10 @@ export default function ProjectsIndex({
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['Project #', 'Project Title', 'Completion (%)', 'Project Manager', 'Encoded By', 'Dept Owner', 'Created At', 'Status', 'Actions'].map((h, i) => (
+                                {['Project #', 'Project Title', 'Completion (%)', 'Payment Status', 'Dept Owner', 'Target Completion', 'Status', 'Actions'].map((h, i, arr) => (
                                     <th key={h} style={{
                                         padding: '10px 16px',
-                                        textAlign: i === 8 ? 'center' : 'left',
+                                        textAlign: i === arr.length - 1 ? 'center' : 'left',
                                         fontSize: '10.5px', fontWeight: 700,
                                         color: '#9ca3af', textTransform: 'uppercase',
                                         letterSpacing: '0.5px',
@@ -548,7 +569,7 @@ export default function ProjectsIndex({
                         <tbody>
                             {projects.data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} style={{ padding: '48px', textAlign: 'center' }}>
+                                    <td colSpan={8} style={{ padding: '48px', textAlign: 'center' }}>
                                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 10px' }}>
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                             <polyline points="14 2 14 8 20 8"/>
@@ -573,17 +594,14 @@ export default function ProjectsIndex({
                                     <td style={{ padding: '12px 16px' }}>
                                         <MiniProgress progress={proj.progress} />
                                     </td>
-                                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#374151', fontSize: '12.5px' }}>
-                                        {proj.project_manager}
-                                    </td>
-                                    <td style={{ padding: '12px 16px', color: '#374151', fontSize: '12.5px', fontWeight: 600 }}>
-                                        {proj.encoded_by}
+                                    <td style={{ padding: '12px 16px' }}>
+                                        <MiniPayment paid={proj.budget_paid} total={proj.budget_total} />
                                     </td>
                                     <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: '12.5px' }}>
                                         {proj.dept_owner}
                                     </td>
                                     <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                        {proj.created_at ?? 'â€”'}
+                                        {proj.deadline ?? '—'}
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
                                         <StatusBadge status={proj.status} />

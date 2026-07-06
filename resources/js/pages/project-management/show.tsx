@@ -66,6 +66,7 @@ interface Project {
     structure_type: string;
     technical_plans: TechnicalPlan;
     admin_notes: string;
+    owner_name: string;
     status_logs: StatusLog[];
     project_type: 'major' | 'minor';
     proposal_document_url: string | null;
@@ -556,6 +557,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                             title: project.title,
                             site: project.site,
                             dept_owner: project.dept_owner,
+                            owner_name: project.owner_name,
                             cost_code: project.cost_code,
                             budget_total: project.budget_total,
                             budget_paid: project.budget_paid,
@@ -584,8 +586,11 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                     {/* Budget */}
                     <div style={{ padding: '0 24px', borderRight: '1px solid #e5e7eb', textAlign: 'center' }}>
                         {sectionLabel('Financial Utilization')}
-                        <div style={{ margin: '8px 0' }}>
+                        <div style={{ position: 'relative', display: 'inline-block', margin: '8px 0' }}>
                             <DonutChart percent={budgetPct} color="#2563eb" size={110} />
+                            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', fontWeight: 800, fontSize: '20px', color: '#1e293b' }}>
+                                {budgetPct}%
+                            </div>
                         </div>
                         <div style={{ fontSize: '12px', color: '#6b7280' }}>
                             Paid: <strong style={{ color: '#2563eb' }}>{fmt(project.budget_paid)}</strong> / <strong>{fmt(project.budget_total)}</strong>

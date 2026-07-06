@@ -69,7 +69,8 @@ export default function SystemSettingsIndex({ projectCompletionKpi, signatories 
                 </p>
             </div>
 
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', maxWidth: '640px' }}>
+            <div style={{ display: 'flex', gap: '18px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', flex: '1 1 380px', minWidth: '320px' }}>
                 <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '18px' }}>
                     Project Completion KPI
                 </div>
@@ -115,7 +116,7 @@ export default function SystemSettingsIndex({ projectCompletionKpi, signatories 
             </div>
 
             {/* Report Signatories */}
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', maxWidth: '640px', marginTop: '18px' }}>
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', flex: '1 1 380px', minWidth: '320px' }}>
                 <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '18px' }}>
                     Report Signatories
                 </div>
@@ -158,6 +159,7 @@ export default function SystemSettingsIndex({ projectCompletionKpi, signatories 
                         </button>
                     </div>
                 </form>
+            </div>
             </div>
         </AuthenticatedLayout>
     );

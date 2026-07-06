@@ -290,6 +290,7 @@ class ProjectRequestController extends Controller
             'created_at' => $projectRequest->created_at?->format('M d, Y h:i A'),
             'requester' => $projectRequest->requester ? [
                 'name' => $projectRequest->requester->name,
+                'department' => $projectRequest->requester->department,
             ] : null,
             'project' => $projectRequest->project ? [
                 'id' => $projectRequest->project->id,
