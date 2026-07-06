@@ -11,6 +11,15 @@ interface MasterItem {
     created_at?: string;
 }
 
+interface Supplier {
+    id: number;
+    company: string;
+    email?: string | null;
+    telephone_no?: string | null;
+    mobile_no?: string | null;
+    created_at?: string;
+}
+
 interface Props {
     jobTypes:      MasterItem[];
     jobLocations:  MasterItem[];
@@ -24,6 +33,7 @@ interface Props {
     serviceTypes?: MasterItem[];
     workForces?:   MasterItem[];
     structures?:   MasterItem[];
+    suppliers?:    Supplier[];
 }
 
 type TabKey =
@@ -38,7 +48,8 @@ type TabKey =
     | 'categories'
     | 'service_types'
     | 'work_forces'
-    | 'structures';
+    | 'structures'
+    | 'suppliers';
 
 const formatDateTime = (value?: string | null) => {
     if (!value) return 'â€”';
@@ -176,6 +187,16 @@ const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode; addLabel:
             </svg>
         ),
     },
+    {
+        key: 'suppliers',
+        label: 'Suppliers',
+        addLabel: 'Add Supplier',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 9l1-5h16l1 5"/><path d="M4 9v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M9 21V12h6v9"/>
+            </svg>
+        ),
+    },
 ];
 
 // ── Route Map ──────────────────────────────────────────────────────────────
@@ -192,6 +213,7 @@ const ROUTE_MAP: Record<TabKey, string> = {
     service_types: 'master.service-types',
     work_forces:   'master.work-forces',
     structures:    'master.structures',
+    suppliers:     'master.suppliers',
 };
 
 // ── Modal ──────────────────────────────────────────────────────────────────
@@ -377,6 +399,42 @@ function IconBtn({ onClick, title, color = '#374151', children }: {
     );
 }
 
+// ── Pagination ───────────────────────────────────────────────────────────────
+const PER_PAGE = 10;
+
+const pageNumbers = (page: number, totalPages: number): (number | '…')[] => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (page <= 4) return [1, 2, 3, 4, 5, '…', totalPages];
+    if (page >= totalPages - 3) return [1, '…', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    return [1, '…', page - 1, page, page + 1, '…', totalPages];
+};
+
+function TablePagination({ page, totalPages, count, onPage }: { page: number; totalPages: number; count: number; onPage: (p: number) => void }) {
+    if (count === 0) return null;
+    const from = (page - 1) * PER_PAGE + 1;
+    const to = Math.min(page * PER_PAGE, count);
+    const btn = (disabled: boolean): React.CSSProperties => ({ padding: '4px 10px', borderRadius: '5px', border: '1px solid #e2e8f0', background: '#fff', color: disabled ? '#cbd5e1' : '#374151', cursor: disabled ? 'default' : 'pointer', fontSize: '12px' });
+    return (
+        <div style={{ padding: '10px 20px', background: '#f8fafc', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', color: '#64748b' }}>
+            <span>Showing <strong>{from}–{to}</strong> of <strong>{count}</strong></span>
+            {totalPages > 1 && (
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <button type="button" onClick={() => onPage(page - 1)} disabled={page === 1} style={btn(page === 1)}>‹ Prev</button>
+                    {pageNumbers(page, totalPages).map((n, i) =>
+                        n === '…'
+                            ? <span key={`e${i}`} style={{ padding: '4px 6px', color: '#94a3b8' }}>…</span>
+                            : <button key={n} type="button" onClick={() => onPage(n as number)}
+                                style={{ padding: '4px 10px', borderRadius: '5px', border: '1px solid #e2e8f0', background: n === page ? '#2563eb' : '#fff', color: n === page ? '#fff' : '#374151', cursor: 'pointer', fontSize: '12px', fontWeight: n === page ? 700 : 400 }}>
+                                {n}
+                              </button>
+                    )}
+                    <button type="button" onClick={() => onPage(page + 1)} disabled={page === totalPages} style={btn(page === totalPages)}>Next ›</button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── Tab Table ──────────────────────────────────────────────────────────────
 function TabTable({
     tab, items, onAdd, onEdit, onDelete,
@@ -391,6 +449,11 @@ function TabTable({
     const isPriority = tab === 'priorities';
     const isCostCode = tab === 'cost_codes';
     const headers = isPriority ? ['#', 'Sequence', 'Name / Label', 'Description', 'Created At', 'Actions'] : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
+
+    const [page, setPage] = useState(1);
+    const totalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = items.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [importing, setImporting] = useState(false);
@@ -473,13 +536,13 @@ function TabTable({
                                     </div>
                                 </td>
                             </tr>
-                        ) : items.map((item, idx) => (
+                        ) : paginated.map((item, idx) => (
                             <tr key={item.id}
                                 style={{ borderBottom: '1px solid #f8fafc', transition: 'background 0.1s' }}
                                 onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                             >
-                                <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{idx + 1}</td>
+                                <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{(safePage - 1) * PER_PAGE + idx + 1}</td>
                                 {isPriority && (
                                     <td style={{ padding: '12px 20px', color: '#334155', fontSize: '12px', fontWeight: 700, width: '90px' }}>
                                         {item.sequence_no ?? <span style={{ color: '#e2e8f0' }}>-</span>}
@@ -507,6 +570,199 @@ function TabTable({
                     </tbody>
                 </table>
             </div>
+
+            <TablePagination page={safePage} totalPages={totalPages} count={items.length} onPage={setPage} />
+        </div>
+    );
+}
+
+// ── Supplier Modal (add / edit) ─────────────────────────────────────────────
+function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClose: () => void }) {
+    const isEdit = !!supplier;
+    const [company,  setCompany]  = useState(supplier?.company ?? '');
+    const [email,    setEmail]    = useState(supplier?.email ?? '');
+    const [tel,      setTel]      = useState(supplier?.telephone_no ?? '');
+    const [mobile,   setMobile]   = useState(supplier?.mobile_no ?? '');
+    const [submitting, setSubmitting] = useState(false);
+
+    const field: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#0f172a' };
+    const lbl: React.CSSProperties = { fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' };
+
+    const handleSubmit = () => {
+        if (!company.trim()) return;
+        setSubmitting(true);
+        const data = { company: company.trim(), email: email.trim() || null, telephone_no: tel.trim() || null, mobile_no: mobile.trim() || null };
+        if (isEdit) {
+            router.put(route('master.suppliers.update', supplier!.id), data, { onFinish: () => { setSubmitting(false); onClose(); } });
+        } else {
+            router.post(route('master.suppliers.store'), data, { onFinish: () => { setSubmitting(false); onClose(); } });
+        }
+    };
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(2px)' }} />
+            <div style={{ position: 'relative', background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '460px', boxShadow: '0 24px 64px rgba(0,0,0,0.14)', zIndex: 201, overflow: 'hidden' }}>
+                <div style={{ padding: '18px 22px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{isEdit ? 'Edit Supplier' : 'Add New Supplier'}</div>
+                        <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>Suppliers Master List</div>
+                    </div>
+                    <button onClick={onClose} style={{ width: '30px', height: '30px', borderRadius: '7px', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+                <div style={{ padding: '20px 22px', display: 'grid', gap: '14px' }}>
+                    <div>
+                        <label style={lbl}>Company <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input type="text" value={company} onChange={e => setCompany(e.target.value)} autoFocus placeholder="Company name…" style={field} />
+                    </div>
+                    <div>
+                        <label style={lbl}>Email</label>
+                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" style={field} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                            <label style={lbl}>Telephone No.</label>
+                            <input type="text" value={tel} onChange={e => setTel(e.target.value)} placeholder="Landline" style={field} />
+                        </div>
+                        <div>
+                            <label style={lbl}>Mobile No.</label>
+                            <input type="text" value={mobile} onChange={e => setMobile(e.target.value)} placeholder="Mobile" style={field} />
+                        </div>
+                    </div>
+                </div>
+                <div style={{ padding: '14px 22px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12.5px', cursor: 'pointer', color: '#374151', fontWeight: 500 }}>Cancel</button>
+                    <button onClick={handleSubmit} disabled={submitting || !company.trim()}
+                        style={{ padding: '8px 20px', borderRadius: '7px', border: 'none', background: submitting || !company.trim() ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: submitting || !company.trim() ? 'not-allowed' : 'pointer' }}>
+                        {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Supplier'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Supplier Table ───────────────────────────────────────────────────────────
+function SupplierTable({ suppliers, onAdd, onEdit, onDelete }: {
+    suppliers: Supplier[];
+    onAdd: () => void;
+    onEdit: (s: Supplier) => void;
+    onDelete: (s: Supplier) => void;
+}) {
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [importing, setImporting] = useState(false);
+    const [page, setPage] = useState(1);
+
+    const totalPages = Math.max(1, Math.ceil(suppliers.length / PER_PAGE));
+    const safePage = Math.min(page, totalPages);
+    const paginated = suppliers.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+
+    const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setImporting(true);
+        router.post(route('master.suppliers.import'), { file }, {
+            forceFormData: true,
+            preserveScroll: true,
+            onFinish: () => { setImporting(false); if (fileInputRef.current) fileInputRef.current.value = ''; },
+        });
+    };
+
+    const headers = ['#', 'Company', 'Email', 'Telephone', 'Mobile', 'Created At', 'Actions'];
+
+    return (
+        <div>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontSize: '13px', color: '#64748b' }}>
+                    <strong style={{ color: '#0f172a' }}>{suppliers.length}</strong> {suppliers.length === 1 ? 'entry' : 'entries'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleImport} style={{ display: 'none' }} />
+                    <button onClick={() => fileInputRef.current?.click()} disabled={importing}
+                        title="Import suppliers from a CSV file (columns: company, email, telephone_no, mobile_no)"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#fff', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '12.5px', fontWeight: 600, cursor: importing ? 'wait' : 'pointer' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        {importing ? 'Uploading…' : 'Upload CSV'}
+                    </button>
+                    <button onClick={onAdd}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#2563eb', color: '#fff', border: 'none', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                        Add Supplier
+                    </button>
+                </div>
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                        <tr style={{ background: '#f8fafc' }}>
+                            {headers.map((h, i) => (
+                                <th key={h} style={{ padding: '10px 20px', textAlign: i === headers.length - 1 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>{h}</th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {suppliers.length === 0 ? (
+                            <tr>
+                                <td colSpan={headers.length} style={{ padding: '48px', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>
+                                    No suppliers yet. Add one or upload a CSV to get started.
+                                </td>
+                            </tr>
+                        ) : paginated.map((s, idx) => (
+                            <tr key={s.id} style={{ borderBottom: '1px solid #f8fafc' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                                <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{(safePage - 1) * PER_PAGE + idx + 1}</td>
+                                <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a' }}>{s.company}</td>
+                                <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px' }}>{s.email || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.telephone_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.mobile_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{formatDateTime(s.created_at)}</td>
+                                <td style={{ padding: '12px 20px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                        <IconBtn title="Edit" onClick={() => onEdit(s)}>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                        </IconBtn>
+                                        <IconBtn title="Delete" color="#dc2626" onClick={() => onDelete(s)}>
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                        </IconBtn>
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <TablePagination page={safePage} totalPages={totalPages} count={suppliers.length} onPage={setPage} />
+        </div>
+    );
+}
+
+// ── Supplier Delete Confirm ──────────────────────────────────────────────────
+function SupplierDeleteModal({ supplier, onClose }: { supplier: Supplier; onClose: () => void }) {
+    const [deleting, setDeleting] = useState(false);
+    const handleDelete = () => {
+        setDeleting(true);
+        router.delete(route('master.suppliers.destroy', supplier.id), { onFinish: () => { setDeleting(false); onClose(); } });
+    };
+    return (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(2px)' }} />
+            <div style={{ position: 'relative', background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '380px', boxShadow: '0 24px 64px rgba(0,0,0,0.14)', zIndex: 201, padding: '24px 24px 20px' }}>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>Delete Supplier</div>
+                <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
+                    Are you sure you want to delete <strong style={{ color: '#0f172a' }}>"{supplier.company}"</strong>? This action cannot be undone.
+                </div>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                    <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12.5px', cursor: 'pointer', color: '#374151', fontWeight: 500 }}>Cancel</button>
+                    <button onClick={handleDelete} disabled={deleting} style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', background: '#dc2626', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.7 : 1 }}>
+                        {deleting ? 'Deleting…' : 'Delete'}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
@@ -525,6 +781,7 @@ export default function MasterData({
     serviceTypes  = [],
     workForces    = [],
     structures    = [],
+    suppliers     = [],
 }: Props) {
     const [activeTab,    setActiveTab]    = useState<TabKey>('job_types');
     const [modalTab,     setModalTab]     = useState<TabKey>('job_types');
@@ -532,11 +789,16 @@ export default function MasterData({
     const [deleteTarget, setDeleteTarget] = useState<MasterItem | null>(null);
     const [showModal,    setShowModal]    = useState(false);
 
+    // Suppliers have their own record shape, so they get dedicated modals.
+    const [showSupplierModal, setShowSupplierModal] = useState(false);
+    const [editSupplier,      setEditSupplier]      = useState<Supplier | null>(null);
+    const [deleteSupplier,    setDeleteSupplier]    = useState<Supplier | null>(null);
+
     const { props: pageProps } = usePage<{ flash?: { success?: string; error?: string }; errors?: Record<string, string> }>();
     const flash = pageProps.flash;
     const fileError = pageProps.errors?.file;
 
-    const dataMap: Record<TabKey, MasterItem[]> = {
+    const dataMap: Record<Exclude<TabKey, 'suppliers'>, MasterItem[]> = {
         job_types:     jobTypes,
         job_locations: jobLocations,
         cost_codes:    costCodes,
@@ -563,7 +825,7 @@ export default function MasterData({
         setShowModal(true);
     };
 
-    const totalEntries = Object.values(dataMap).reduce((sum, arr) => sum + arr.length, 0);
+    const totalEntries = Object.values(dataMap).reduce((sum, arr) => sum + arr.length, 0) + suppliers.length;
 
     return (
         <AuthenticatedLayout>
@@ -598,6 +860,14 @@ export default function MasterData({
                 />
             )}
 
+            {showSupplierModal && (
+                <SupplierModal supplier={editSupplier} onClose={() => setShowSupplierModal(false)} />
+            )}
+
+            {deleteSupplier && (
+                <SupplierDeleteModal supplier={deleteSupplier} onClose={() => setDeleteSupplier(null)} />
+            )}
+
             {/* Page Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px' }}>
                 <div>
@@ -621,7 +891,7 @@ export default function MasterData({
                     <div style={{ display: 'flex', padding: '0 4px', gap: '2px', minWidth: 'max-content' }}>
                         {TAB_CONFIG.map(tab => {
                             const isActive = activeTab === tab.key;
-                            const count = dataMap[tab.key].length;
+                            const count = tab.key === 'suppliers' ? suppliers.length : dataMap[tab.key].length;
                             return (
                                 <button
                                     key={tab.key}
@@ -642,13 +912,23 @@ export default function MasterData({
                 </div>
 
                 {/* Tab content */}
-                <TabTable
-                    tab={activeTab}
-                    items={dataMap[activeTab]}
-                    onAdd={() => openAdd(activeTab)}
-                    onEdit={item => openEdit(activeTab, item)}
-                    onDelete={item => setDeleteTarget(item)}
-                />
+                {activeTab === 'suppliers' ? (
+                    <SupplierTable
+                        suppliers={suppliers}
+                        onAdd={() => { setEditSupplier(null); setShowSupplierModal(true); }}
+                        onEdit={s => { setEditSupplier(s); setShowSupplierModal(true); }}
+                        onDelete={s => setDeleteSupplier(s)}
+                    />
+                ) : (
+                    <TabTable
+                        key={activeTab}
+                        tab={activeTab}
+                        items={dataMap[activeTab]}
+                        onAdd={() => openAdd(activeTab)}
+                        onEdit={item => openEdit(activeTab, item)}
+                        onDelete={item => setDeleteTarget(item)}
+                    />
+                )}
             </div>
         </AuthenticatedLayout>
     );

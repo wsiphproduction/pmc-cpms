@@ -13,6 +13,7 @@ use App\Models\Priority;
 use App\Models\ServiceType;
 use App\Models\Site;
 use App\Models\Structure;
+use App\Models\Supplier;
 use App\Models\WorkForce;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -37,6 +38,7 @@ class MasterDataController extends Controller
             'serviceTypes' => ServiceType::latest()->get(['id', 'name', 'description', 'created_at']),
             'workForces'   => WorkForce::latest()->get(['id', 'name', 'description', 'created_at']),
             'structures'   => Structure::latest()->get(['id', 'name', 'description', 'created_at']),
+            'suppliers'    => Supplier::latest()->get(['id', 'company', 'email', 'telephone_no', 'mobile_no', 'created_at']),
         ]);
     }
 
@@ -134,6 +136,142 @@ class MasterDataController extends Controller
         $costCode->delete();
 
         return redirect()->back()->with('success', 'Cost code deleted.');
+    }
+
+    // ── Suppliers ─────────────────────────────────────────────────────────
+    public function storeSupplier(Request $request)
+    {
+        $data = $request->validate([
+            'company'      => 'required|string|max:191|unique:suppliers,company',
+            'email'        => 'nullable|email|max:191',
+            'telephone_no' => 'nullable|string|max:100',
+            'mobile_no'    => 'nullable|string|max:100',
+        ]);
+
+        Supplier::create($data);
+
+        return redirect()->back()->with('success', 'Supplier added.');
+    }
+
+    public function updateSupplier(Request $request, Supplier $supplier)
+    {
+        $data = $request->validate([
+            'company'      => 'required|string|max:191|unique:suppliers,company,' . $supplier->id,
+            'email'        => 'nullable|email|max:191',
+            'telephone_no' => 'nullable|string|max:100',
+            'mobile_no'    => 'nullable|string|max:100',
+        ]);
+
+        $supplier->update($data);
+
+        return redirect()->back()->with('success', 'Supplier updated.');
+    }
+
+    public function destroySupplier(Supplier $supplier)
+    {
+        $supplier->delete();
+
+        return redirect()->back()->with('success', 'Supplier deleted.');
+    }
+
+    /**
+     * Bulk-import suppliers from a CSV file.
+     *
+     * Expected columns (header row, case-insensitive): company, email,
+     * telephone_no, mobile_no. Existing suppliers (matched by company) are
+     * updated; new ones are created. Chunked upsert stays under SQL Server's
+     * 2100 bind-parameter limit and is fast on MySQL.
+     */
+    public function importSuppliers(Request $request)
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ]);
+
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+        if ($handle === false) {
+            return redirect()->back()->with('error', 'Could not read the uploaded file.');
+        }
+
+        $header = fgetcsv($handle);
+        if ($header === false) {
+            fclose($handle);
+            return redirect()->back()->with('error', 'The CSV file is empty.');
+        }
+
+        $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $header[0]);
+        $columns   = array_map(fn ($h) => strtolower(trim((string) $h)), $header);
+
+        $companyIdx = $this->findCsvColumn($columns, ['company', 'company_name', 'name', 'supplier']);
+        $emailIdx   = $this->findCsvColumn($columns, ['email', 'email_address']);
+        $telIdx     = $this->findCsvColumn($columns, ['telephone_no', 'telephone', 'tel', 'landline']);
+        $mobileIdx  = $this->findCsvColumn($columns, ['mobile_no', 'mobile', 'cellphone', 'cell']);
+
+        if ($companyIdx === null) {
+            fclose($handle);
+            return redirect()->back()->with('error', 'CSV must contain a "company" column.');
+        }
+
+        $now      = now()->toDateTimeString();
+        $seen     = [];
+        $batch    = [];
+        $imported = 0;
+        $chunk    = 100; // 100 rows × 6 columns = 600 bind params — safe for SQL Server.
+
+        $cell = function ($row, $idx) {
+            if ($idx === null) {
+                return null;
+            }
+            $v = trim((string) ($row[$idx] ?? ''));
+            // Common "empty" placeholders in the source data.
+            if ($v === '' || in_array(strtolower($v), ['na', 'n/a', 'none'], true)) {
+                return null;
+            }
+            return $v;
+        };
+
+        $flush = function () use (&$batch, &$imported) {
+            if ($batch) {
+                Supplier::upsert($batch, ['company'], ['email', 'telephone_no', 'mobile_no', 'updated_at']);
+                $imported += count($batch);
+                $batch = [];
+            }
+        };
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $company = trim((string) ($row[$companyIdx] ?? ''));
+            if ($company === '') {
+                continue;
+            }
+            $company = mb_substr($company, 0, 191);
+            if (isset($seen[$company])) {
+                continue;
+            }
+            $seen[$company] = true;
+
+            $email = $cell($row, $emailIdx);
+
+            $batch[] = [
+                'company'      => $company,
+                'email'        => $email !== null ? mb_substr($email, 0, 191) : null,
+                'telephone_no' => $cell($row, $telIdx) !== null ? mb_substr($cell($row, $telIdx), 0, 100) : null,
+                'mobile_no'    => $cell($row, $mobileIdx) !== null ? mb_substr($cell($row, $mobileIdx), 0, 100) : null,
+                'created_at'   => $now,
+                'updated_at'   => $now,
+            ];
+
+            if (count($batch) >= $chunk) {
+                $flush();
+            }
+        }
+        $flush();
+        fclose($handle);
+
+        if ($imported === 0) {
+            return redirect()->back()->with('error', 'No valid suppliers found in the CSV.');
+        }
+
+        return redirect()->back()->with('success', "Imported {$imported} supplier(s) from CSV.");
     }
 
     /**

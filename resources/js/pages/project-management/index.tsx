@@ -14,6 +14,7 @@ interface Project {
     budget_total: number;
     budget_paid: number;
     deadline: string | null;
+    days_remaining: number | null;
     can: {
         update: boolean;
         delete: boolean;
@@ -150,21 +151,13 @@ function MiniProgress({ progress }: { progress: number }) {
 }
 
 // ── Payment Status (budget paid vs total) ──────────────────────────────────
-const fmtMoney = (n: number) =>
-    n >= 1_000_000 ? `₱${(n / 1_000_000).toFixed(1)}M`
-    : n >= 1_000   ? `₱${(n / 1_000).toFixed(0)}K`
-    : `₱${n.toFixed(0)}`;
-
 function MiniPayment({ paid, total }: { paid: number; total: number }) {
     const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
     return (
-        <div style={{ width: '120px' }}>
+        <div style={{ width: '110px' }}>
             <span style={{ fontSize: '11.5px', fontWeight: 800, color: '#334155' }}>{pct}%</span>
             <div style={{ height: '6px', borderRadius: '10px', background: '#e2e8f0', overflow: 'hidden', marginTop: '4px' }}>
                 <div style={{ height: '100%', borderRadius: '10px', width: `${pct}%`, background: '#2563eb', transition: 'width 0.6s ease' }} />
-            </div>
-            <div style={{ fontSize: '10.5px', color: '#94a3b8', marginTop: '3px', whiteSpace: 'nowrap' }}>
-                {fmtMoney(paid)} / {fmtMoney(total)}
             </div>
         </div>
     );
@@ -601,7 +594,16 @@ export default function ProjectsIndex({
                                         {proj.dept_owner}
                                     </td>
                                     <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                        {proj.deadline ?? '—'}
+                                        <div>{proj.deadline ?? '—'}</div>
+                                        {proj.days_remaining !== null && (
+                                            <div style={{ fontSize: '10.5px', marginTop: '3px', fontWeight: 600, color: proj.days_remaining < 0 ? '#dc2626' : proj.days_remaining === 0 ? '#d97706' : '#94a3b8' }}>
+                                                {proj.days_remaining < 0
+                                                    ? `${Math.abs(proj.days_remaining)} day${Math.abs(proj.days_remaining) === 1 ? '' : 's'} overdue`
+                                                    : proj.days_remaining === 0
+                                                        ? 'Due today'
+                                                        : `${proj.days_remaining} day${proj.days_remaining === 1 ? '' : 's'} left`}
+                                            </div>
+                                        )}
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
                                         <StatusBadge status={proj.status} />

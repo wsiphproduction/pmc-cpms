@@ -1,7 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, inputStyle } from './Common';
-import { CONTRACTORS } from './contractors';
 import { useConfirm } from '@/components/useConfirm';
 
 type RfqStatus = 'Awarded' | 'Submitted' | 'Pending' | 'Expired';
@@ -448,7 +447,7 @@ function SuccessModal({ contractor, onClose }: { contractor: string; onClose: ()
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function RfqHub({ project, rfqs, canEdit = true }: { project: HubProject; rfqs: RfqRow[]; canEdit?: boolean }) {
+export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }: { project: HubProject; rfqs: RfqRow[]; suppliers?: { name: string; email: string }[]; canEdit?: boolean }) {
     const [dispatchContractor, setDispatchContractor] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [showSuccess, setShowSuccess]   = useState(false);
@@ -462,7 +461,7 @@ export default function RfqHub({ project, rfqs, canEdit = true }: { project: Hub
     // Set of contractors that already have an RFQ on this project
     const usedContractors = new Set(rfqs.map(r => r.contractor));
 
-    const selectedContractor = CONTRACTORS.find(c => c.name === dispatchContractor) ?? null;
+    const selectedContractor = suppliers.find(c => c.name === dispatchContractor) ?? null;
 
     const handleOpenSendModal = () => {
         if (!dispatchContractor) { setSendError('Please select a contractor before sending.'); return; }
@@ -649,10 +648,12 @@ export default function RfqHub({ project, rfqs, canEdit = true }: { project: Hub
 
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '18px', marginBottom: '22px' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 180px', gap: '14px', alignItems: 'start' }}>
-                            <Field label="Select Contractor">
+                            <Field label="Select Supplier">
                                 <select style={inputStyle} value={dispatchContractor} onChange={e => { setDispatchContractor(e.target.value); setSendError(''); }}>
-                                    <option value="" disabled>Choose from registered contractors...</option>
-                                    {CONTRACTORS.map(c => (
+                                    <option value="" disabled>
+                                        {suppliers.length ? 'Choose from registered suppliers...' : 'No suppliers in master data yet'}
+                                    </option>
+                                    {suppliers.map(c => (
                                         <option key={c.name} value={c.name} disabled={usedContractors.has(c.name)}>
                                             {c.name}
                                         </option>

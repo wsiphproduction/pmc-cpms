@@ -67,6 +67,7 @@ interface Project {
     technical_plans: TechnicalPlan;
     admin_notes: string;
     owner_name: string;
+    project_request_id: number | null;
     status_logs: StatusLog[];
     project_type: 'major' | 'minor';
     proposal_document_url: string | null;
@@ -138,7 +139,7 @@ function renderHubSection(
     canEdit: boolean,
 ) {
     switch (section) {
-        case 'rfq':     return <RfqHub     project={hubProject} rfqs={hubData.rfqs ?? []} canEdit={canEdit} />;
+        case 'rfq':     return <RfqHub     project={hubProject} rfqs={hubData.rfqs ?? []} suppliers={hubData.suppliers ?? []} canEdit={canEdit} />;
         case 'ntp':     return <NtpHub     project={hubProject} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
         case 'permits': return <PermitsHub project={hubProject} permits={hubData.permits ?? []} canEdit={canEdit} />;
         case 'vof':     return <VofHub     project={hubProject} vofs={hubData.vofs ?? []} canEdit={canEdit} />;
@@ -633,7 +634,19 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                         <InfoField label="Cost Code">{project.cost_code}</InfoField>
                         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '16px 0' }} />
                         <InfoField label="WR No. & Date">
-                            {project.wr_no} <span style={{ color: '#9ca3af', marginLeft: '8px' }}>(Received: {project.wr_date})</span>
+                            {project.project_request_id ? (
+                                <button
+                                    type="button"
+                                    onClick={() => router.visit(route('requests.show', project.project_request_id!))}
+                                    title="View originating request"
+                                    style={{ padding: 0, border: 'none', background: 'none', color: '#2563eb', fontWeight: 600, cursor: 'pointer', fontSize: 'inherit', textDecoration: 'underline', fontFamily: 'inherit' }}
+                                >
+                                    {project.wr_no}
+                                </button>
+                            ) : (
+                                project.wr_no
+                            )}
+                            <span style={{ color: '#9ca3af', marginLeft: '8px' }}>(Received: {project.wr_date})</span>
                         </InfoField>
                         <InfoField label="Priority Number">
                             <span style={{ background: '#1e293b', color: '#fff', padding: '2px 10px', borderRadius: '4px', fontSize: '12px', fontWeight: 700 }}>{project.priority}</span>

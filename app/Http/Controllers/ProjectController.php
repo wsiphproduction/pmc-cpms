@@ -17,6 +17,7 @@ use App\Models\ServiceType;
 use App\Models\Setting;
 use App\Models\Site;
 use App\Models\Structure;
+use App\Models\Supplier;
 use App\Models\User;
 use App\Models\WorkForce;
 use Illuminate\Http\RedirectResponse;
@@ -421,6 +422,9 @@ class ProjectController extends Controller
                         'total_cost' => $item->total_cost,
                     ]),
                 ])->values(),
+                'suppliers' => Supplier::orderBy('company')->get(['company', 'email'])
+                    ->map(fn ($s) => ['name' => $s->company, 'email' => $s->email ?? ''])
+                    ->values(),
             ],
 
             'ntp' => [
@@ -720,6 +724,7 @@ class ProjectController extends Controller
             'budget_total' => (float) $project->budget_total,
             'budget_paid' => (float) $project->budget_paid,
             'deadline' => optional($project->deadline)->format('M d, Y') ?? '—',
+            'days_remaining' => $project->deadline ? $project->daysRemaining() : null,
             'can' => [
                 'update' => auth()->user()->can('update', $project),
                 'delete' => auth()->user()->can('delete', $project),
@@ -769,6 +774,7 @@ class ProjectController extends Controller
             ],
             'admin_notes'          => $project->notes ?? 'No notes recorded.',
             'owner_name'           => $project->projectRequest?->requester?->name ?? $project->dept_owner,
+            'project_request_id'   => $project->project_request_id,
             'project_type'         => $project->project_type ?? 'minor',
             'proposal_document_url'=> $project->proposal_document
                 ? Storage::disk('public')->url($project->proposal_document)
