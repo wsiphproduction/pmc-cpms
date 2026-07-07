@@ -102,7 +102,7 @@ function Modal({ title, subtitle, onClose, children }: {
             <div style={{
                 position: 'relative', background: '#fff', borderRadius: '12px',
                 width: '100%', maxWidth: '440px',
-                boxShadow: '0 20px 60px rgba(15,23,42,0.25)', zIndex: 201, overflow: 'hidden',
+                boxShadow: '0 20px 60px rgba(15,23,42,0.25)', zIndex: 201,
             }}>
                 <div style={{ padding: '18px 20px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
@@ -129,7 +129,9 @@ const labelStyle: React.CSSProperties = {
 };
 const fieldStyle: React.CSSProperties = { marginBottom: '14px' };
 
-// Department picker: options show "name — description", but the selected box shows the name only.
+// Searchable department picker (select2-style): type to filter; options show
+// "name — description" while the selected box shows the name only. The stored
+// value only updates when an option is picked, so it stays a valid department.
 function DepartmentSelect({ value, options, onChange, required }: {
     value: string;
     options: DepartmentOption[];
@@ -137,38 +139,44 @@ function DepartmentSelect({ value, options, onChange, required }: {
     required?: boolean;
 }) {
     const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
     const wrapRef = useRef<HTMLDivElement>(null);
+
+    const selected = options.find(o => o.value === value);
+    const displayText = selected ? (selected.displayLabel ?? selected.value) : '';
 
     useEffect(() => {
         const onClickAway = (e: MouseEvent) => {
-            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQuery(''); }
         };
         document.addEventListener('mousedown', onClickAway);
         return () => document.removeEventListener('mousedown', onClickAway);
     }, []);
 
-    const selected = options.find(o => o.value === value);
-    const displayText = selected ? (selected.displayLabel ?? selected.value) : '';
+    const needle = query.trim().toLowerCase();
+    const filtered = needle
+        ? options.filter(o => o.label.toLowerCase().includes(needle) || o.value.toLowerCase().includes(needle))
+        : options;
+
+    const pick = (v: string) => { onChange(v); setOpen(false); setQuery(''); };
 
     return (
         <div ref={wrapRef} style={{ position: 'relative' }}>
-            <button
-                type="button"
-                onClick={() => setOpen(o => !o)}
-                style={{
-                    ...inputStyle, textAlign: 'left', background: '#fff', cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
-                    color: displayText ? '#111827' : '#9ca3af',
-                }}
-            >
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {displayText || 'Select department…'}
-                </span>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ flexShrink: 0 }}>
-                    <polyline points="6 9 12 15 18 9" />
-                </svg>
-            </button>
-            {/* Keeps the field required for native form validation */}
+            <input
+                value={open ? query : displayText}
+                placeholder="Select department…"
+                role="combobox"
+                aria-expanded={open}
+                autoComplete="off"
+                onFocus={() => setOpen(true)}
+                onChange={e => { setQuery(e.target.value); setOpen(true); }}
+                style={{ ...inputStyle, background: '#fff', paddingRight: '32px', cursor: 'text' }}
+            />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"
+                style={{ position: 'absolute', right: '11px', top: '11px', pointerEvents: 'none' }}>
+                <polyline points="6 9 12 15 18 9" />
+            </svg>
+            {/* Mirrors the chosen value so native "required" validation still works */}
             <input tabIndex={-1} value={value} required={required} onChange={() => {}} aria-hidden
                 style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} />
             {open && (
@@ -177,13 +185,14 @@ function DepartmentSelect({ value, options, onChange, required }: {
                     background: '#fff', border: '1px solid #e5e7eb', borderRadius: '7px',
                     boxShadow: '0 12px 28px rgba(15,23,42,0.14)', maxHeight: '220px', overflowY: 'auto',
                 }}>
-                    {options.length ? options.map(opt => (
+                    {filtered.length ? filtered.map(opt => (
                         <button
                             key={opt.value}
                             type="button"
                             role="option"
                             aria-selected={opt.value === value}
-                            onClick={() => { onChange(opt.value); setOpen(false); }}
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => pick(opt.value)}
                             style={{
                                 width: '100%', border: 'none', textAlign: 'left', cursor: 'pointer',
                                 padding: '9px 12px', fontSize: '13px', color: '#334155',
@@ -193,7 +202,7 @@ function DepartmentSelect({ value, options, onChange, required }: {
                             {opt.label}
                         </button>
                     )) : (
-                        <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No departments</div>
+                        <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No results found</div>
                     )}
                 </div>
             )}
