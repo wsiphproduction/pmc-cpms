@@ -75,14 +75,15 @@ class ProjectHubController extends Controller
     {
         abort_unless((int) $rfq->project_id === (int) $project->id, 403);
 
+        // All quotation fields are required except the file attachment.
         $data = $request->validate([
-            'scope_of_work'       => ['nullable', 'string'],
-            'due_date'            => ['nullable', 'date'],
-            'duration_days'       => ['nullable', 'integer', 'min:1'],
-            'terms_conditions'    => ['nullable', 'string'],
-            'inclusions'          => ['nullable', 'string'],
-            'exclusions'          => ['nullable', 'string'],
-            'items'               => ['nullable', 'array'],
+            'scope_of_work'       => ['required', 'string'],
+            'due_date'            => ['required', 'date'],
+            'duration_days'       => ['required', 'integer', 'min:1'],
+            'terms_conditions'    => ['required', 'string'],
+            'inclusions'          => ['required', 'string'],
+            'exclusions'          => ['required', 'string'],
+            'items'               => ['required', 'array', 'min:1'],
             'items.*.description' => ['nullable', 'string', 'max:500'],
             'items.*.qty'         => ['nullable', 'numeric', 'min:0'],
             'items.*.unit'        => ['nullable', 'string', 'max:50'],

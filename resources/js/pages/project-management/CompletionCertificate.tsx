@@ -35,6 +35,7 @@ export interface Signatories {
     pmd_assistant_manager: string;
     pmd_manager: string;
     ecs_division_manager: string;
+    operations_director: string;
 }
 
 interface ProjectLite {

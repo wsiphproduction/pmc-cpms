@@ -61,7 +61,7 @@ class ProjectRequestController extends Controller
         return Inertia::render('requests/create', [
             'jobTypes'     => JobType::orderBy('name')->get(['id', 'name']),
             'jobLocations' => JobLocation::orderBy('name')->get(['id', 'name']),
-            'costCodes'    => CostCode::orderBy('name')->get(['id', 'name']),
+            'costCodes'    => CostCode::orderBy('name')->get(['id', 'name', 'description']),
         ]);
     }
 

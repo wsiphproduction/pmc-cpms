@@ -1,5 +1,5 @@
 import { router, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
@@ -128,7 +128,16 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
     const thStyle: React.CSSProperties = { padding: '8px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', background: '#f1f5f9', borderBottom: '1px solid #e5e7eb' };
 
     const handleSave = () => {
-        if (!scope.trim()) { setError('Scope of Work is required.'); return; }
+        // All fields are required except the file attachment.
+        const filledItems = rows.filter(r => r.description?.trim());
+        const hasTotal = filledItems.some(r => Number(r.total_cost ?? 0) > 0);
+        if (!scope.trim())        { setError('Scope of Work is required.'); return; }
+        if (!due)                 { setError('Date Needed is required.'); return; }
+        if (filledItems.length === 0 || !hasTotal) { setError('An itemized quotation with at least one costed item is required.'); return; }
+        if (!duration || Number(duration) <= 0) { setError('Target Project Duration (calendar days) is required.'); return; }
+        if (!terms.trim())        { setError('Terms and Conditions are required.'); return; }
+        if (!inclusions.trim())   { setError('Inclusions are required.'); return; }
+        if (!exclusions.trim())   { setError('Exclusions are required.'); return; }
         setError('');
         setSaving(true);
 
@@ -139,7 +148,7 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
             terms_conditions: terms,
             inclusions,
             exclusions,
-            items: rows.filter(r => r.description?.trim()) as any,
+            items: filledItems as any,
         };
 
         const opts = { preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false) };
@@ -183,7 +192,7 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
                     </div>
                 ))}
                 <div>
-                    <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>Date Needed</div>
+                    <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>Date Needed *</div>
                     <input type="date" value={due} onChange={e => setDue(e.target.value)} style={{ ...inputStyle, fontSize: '13px', fontWeight: 700 }} />
                 </div>
                 <div style={{ gridColumn: '1/-1' }}>
@@ -214,7 +223,7 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '22px' }}>
                 <div>
                     <ModalSection>III. Execution Timeline</ModalSection>
-                    <Field label="Target Project Duration">
+                    <Field label="Target Project Duration *">
                         <div style={{ display: 'flex', gap: '0' }}>
                             <input type="number" value={duration} onChange={e => setDuration(e.target.value)} placeholder="e.g., 45" style={{ ...inputStyle, borderRadius: '7px 0 0 7px', borderRight: 'none' }} />
                             <span style={{ padding: '8px 12px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '0 7px 7px 0', fontSize: '12.5px', color: '#475569', whiteSpace: 'nowrap' }}>Calendar Days</span>
@@ -223,14 +232,14 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
                 </div>
                 <div>
                     <ModalSection>IV. Legal & Technical Provisions</ModalSection>
-                    <Field label="Terms and Conditions">
+                    <Field label="Terms and Conditions *">
                         <textarea rows={2} value={terms} onChange={e => setTerms(e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} />
                     </Field>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '10px' }}>
-                        <Field label="Inclusions">
+                        <Field label="Inclusions *">
                             <textarea rows={3} value={inclusions} onChange={e => setInclusions(e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} placeholder="What is included..." />
                         </Field>
-                        <Field label="Exclusions">
+                        <Field label="Exclusions *">
                             <textarea rows={3} value={exclusions} onChange={e => setExclusions(e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} placeholder="What is not included..." />
                         </Field>
                     </div>
@@ -380,15 +389,39 @@ function SendConfirmModal({ contractor, dueDate, email, onClose, onSend }: {
 }
 
 // ── NTP Modal ──────────────────────────────────────────────────────────────
+// Add N calendar days to a YYYY-MM-DD date, returning YYYY-MM-DD.
+// Number(days) guards against `days` arriving as a string (e.g. "30"), which
+// would otherwise make `getDate() + days` concatenate instead of add.
+function addDays(dateStr: string, days: number): string {
+    if (!dateStr) return '';
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + Number(days));
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+}
+
 function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject; onClose: () => void }) {
+    // Auto-fill the approved cost from the RFQ's itemized quotation total.
+    const rfqTotal = (row.items ?? []).reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
+    const calendarDays = row.duration_days ?? null;
+
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
-    const [cost, setCost] = useState(project.budget_total?.toString() ?? '');
+    const [cost, setCost] = useState((rfqTotal > 0 ? rfqTotal : (project.budget_total ?? 0)).toString());
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
 
+    // Baseline end date is auto-suggested from the start date + the RFQ's target
+    // duration (calendar days) whenever the start changes, but stays editable so
+    // the user can override it.
+    useEffect(() => {
+        if (calendarDays && start) setEnd(addDays(start, calendarDays));
+    }, [start, calendarDays]);
+
     const handleIssue = () => {
-        if (!start || !end) { setError('Baseline Start and End dates are required.'); return; }
+        if (!start) { setError('Baseline Start date is required.'); return; }
+        if (!end)   { setError('Baseline End date is required.'); return; }
         if (!cost || Number(cost) <= 0) { setError('Approved project cost must be greater than zero.'); return; }
         setError('');
         setSaving(true);
@@ -413,17 +446,30 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
             {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginBottom: '12px' }}>{error}</div>}
             <div style={{ padding: '10px 14px', background: '#e0f2fe', border: '1px solid #bae6fd', borderRadius: '8px', marginBottom: '18px', fontSize: '12.5px', color: '#075985' }}>
                 Issuing NTP for: <strong>{row.contractor}</strong>
+                {calendarDays != null && <> · Duration: <strong>{calendarDays} calendar day{calendarDays === 1 ? '' : 's'}</strong></>}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <Field label="Baseline Start Date"><input type="date" style={inputStyle} value={start} onChange={e => setStart(e.target.value)} /></Field>
-                <Field label="Baseline End Date"><input type="date" style={inputStyle} value={end} onChange={e => setEnd(e.target.value)} /></Field>
+                <Field label="Baseline End Date">
+                    <input
+                        type="date"
+                        style={inputStyle}
+                        value={end}
+                        onChange={e => setEnd(e.target.value)}
+                    />
+                    {calendarDays
+                        ? <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>Auto-filled from start + {calendarDays} calendar day{calendarDays === 1 ? '' : 's'} — you can adjust it.</div>
+                        : <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>No RFQ duration set — enter the end date manually.</div>}
+                </Field>
             </div>
             <Field label="Approved Project Cost">
                 <div style={{ display: 'flex', gap: '0' }}>
                     <span style={{ padding: '8px 12px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '7px 0 0 7px', fontSize: '13px', fontWeight: 700, color: '#475569' }}>Php</span>
                     <input type="number" step="0.01" value={cost} onChange={e => setCost(e.target.value)} style={{ ...inputStyle, borderRadius: '0 7px 7px 0', borderLeft: 'none', fontWeight: 700, color: '#2563eb' }} />
                 </div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>Default project budget assigned to this contract.</div>
+                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                    {rfqTotal > 0 ? 'Auto-filled from the RFQ itemized quotation total. You can override it.' : 'Default project budget assigned to this contract.'}
+                </div>
             </Field>
         </Modal>
     );
@@ -443,6 +489,72 @@ function SuccessModal({ contractor, onClose }: { contractor: string; onClose: ()
                 </p>
             </div>
         </Modal>
+    );
+}
+
+// ── Supplier Select (select2-style searchable dropdown) ────────────────────
+function SupplierSelect({ suppliers, value, onChange, usedContractors }: {
+    suppliers: { name: string; email: string }[];
+    value: string;
+    onChange: (name: string) => void;
+    usedContractors: Set<string>;
+}) {
+    const [open, setOpen] = useState(false);
+    const [query, setQuery] = useState('');
+    const wrapRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const onClickAway = (e: MouseEvent) => {
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setQuery(''); }
+        };
+        document.addEventListener('mousedown', onClickAway);
+        return () => document.removeEventListener('mousedown', onClickAway);
+    }, []);
+
+    const needle = query.trim().toLowerCase();
+    const filtered = needle
+        ? suppliers.filter(s => s.name.toLowerCase().includes(needle) || s.email.toLowerCase().includes(needle))
+        : suppliers;
+
+    return (
+        <div ref={wrapRef} style={{ position: 'relative' }}>
+            <input
+                value={open ? query : value}
+                placeholder={suppliers.length ? 'Search suppliers…' : 'No suppliers in master data yet'}
+                role="combobox"
+                aria-expanded={open}
+                autoComplete="off"
+                onFocus={() => setOpen(true)}
+                onChange={e => { setQuery(e.target.value); setOpen(true); }}
+                style={{ ...inputStyle, paddingRight: '30px', cursor: 'text' }}
+            />
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"
+                style={{ position: 'absolute', right: '11px', top: '11px', pointerEvents: 'none' }}>
+                <polyline points="6 9 12 15 18 9" />
+            </svg>
+            {open && (
+                <div role="listbox" style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 60, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '7px', boxShadow: '0 12px 28px rgba(15,23,42,0.14)', maxHeight: '240px', overflowY: 'auto' }}>
+                    {filtered.length ? filtered.map(s => {
+                        const used = usedContractors.has(s.name);
+                        return (
+                            <button
+                                key={s.name}
+                                type="button"
+                                disabled={used}
+                                onMouseDown={e => e.preventDefault()}
+                                onClick={() => { if (!used) { onChange(s.name); setOpen(false); setQuery(''); } }}
+                                style={{ width: '100%', border: 'none', textAlign: 'left', cursor: used ? 'not-allowed' : 'pointer', padding: '8px 12px', fontSize: '13px', background: s.name === value ? '#eff6ff' : '#fff', opacity: used ? 0.5 : 1 }}
+                            >
+                                <div style={{ fontWeight: 600, color: '#1e293b' }}>{s.name}{used && <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: '11.5px' }}> · RFQ already sent</span>}</div>
+                                {s.email && <div style={{ fontSize: '11px', color: '#94a3b8' }}>{s.email}</div>}
+                            </button>
+                        );
+                    }) : (
+                        <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No suppliers found</div>
+                    )}
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -589,7 +701,10 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                 {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
             </div>
         );
-        if (row.status === 'Pending') return (
+        if (row.status === 'Pending') {
+        const rfqTotal = (row.items ?? []).reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
+        const canReceive = rfqTotal > 0;
+        return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
@@ -597,9 +712,10 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                     <>
                         <button
                             type="button"
-                            title="Mark as Received / Submitted"
-                            onClick={() => handleStatus(row, 'submitted', 'Submitted')}
-                            style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#15803d', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                            disabled={!canReceive}
+                            title={canReceive ? 'Mark as Received / Submitted' : 'Add an itemized quotation with a total cost before marking as received'}
+                            onClick={() => canReceive && handleStatus(row, 'submitted', 'Submitted')}
+                            style={{ padding: '5px 10px', borderRadius: '6px', border: `1px solid ${canReceive ? '#bbf7d0' : '#e5e7eb'}`, background: canReceive ? '#f0fdf4' : '#f8fafc', color: canReceive ? '#15803d' : '#cbd5e1', fontSize: '11px', fontWeight: 700, cursor: canReceive ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}
                         >
                             ✓ Received
                         </button>
@@ -616,6 +732,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                 )}
             </div>
         );
+        }
         return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
@@ -649,16 +766,12 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                     <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '18px', marginBottom: '22px' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 180px', gap: '14px', alignItems: 'start' }}>
                             <Field label="Select Supplier">
-                                <select style={inputStyle} value={dispatchContractor} onChange={e => { setDispatchContractor(e.target.value); setSendError(''); }}>
-                                    <option value="" disabled>
-                                        {suppliers.length ? 'Choose from registered suppliers...' : 'No suppliers in master data yet'}
-                                    </option>
-                                    {suppliers.map(c => (
-                                        <option key={c.name} value={c.name} disabled={usedContractors.has(c.name)}>
-                                            {c.name}
-                                        </option>
-                                    ))}
-                                </select>
+                                <SupplierSelect
+                                    suppliers={suppliers}
+                                    value={dispatchContractor}
+                                    onChange={name => { setDispatchContractor(name); setSendError(''); }}
+                                    usedContractors={usedContractors}
+                                />
                                 <div style={{ marginTop: '5px', fontSize: '11.5px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '5px', minHeight: '15px' }}>
                                     {selectedContractor && (
                                         <>
@@ -699,7 +812,14 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                         row.due,
                         <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>,
                         grandTotal > 0
-                            ? <strong style={{ color: '#2563eb' }}>PhP {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+                            ? (
+                                <div>
+                                    <strong style={{ color: '#2563eb' }}>PhP {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+                                    <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                        {row.duration_days ? `${row.duration_days} calendar day${row.duration_days === 1 ? '' : 's'}` : 'No duration set'}
+                                    </div>
+                                </div>
+                            )
                             : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
                         filePreviewCell(row),
                         actionCell(row),

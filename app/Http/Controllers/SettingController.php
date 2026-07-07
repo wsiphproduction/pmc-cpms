@@ -18,6 +18,7 @@ class SettingController extends Controller
         'signatory_pmd_assistant_manager' => 'PMD Assistant Manager',
         'signatory_pmd_manager'           => 'PMD Manager',
         'signatory_ecs_division_manager'  => 'ECS Division Manager',
+        'signatory_operations_director'   => 'Operations Director',
     ];
 
     public function index(): Response

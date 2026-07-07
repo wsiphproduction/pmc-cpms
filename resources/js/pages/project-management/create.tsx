@@ -227,6 +227,9 @@ export default function ProjectCreate({
     project,
 }: Props) {
     const isEditing = Boolean(project?.id);
+    // When the project was started from a project request, its WR/request number
+    // is carried over and must not be changed. Editable only when none was passed.
+    const requestNoLocked = Boolean(project?.project_request_id);
     const { data, setData, processing, errors, setError, clearErrors } = useForm<ProjectFormData>({
         project_request_id: project?.project_request_id ?? '',
         title:           project?.title ?? '',
@@ -496,6 +499,7 @@ export default function ProjectCreate({
                                 onChange={set('wr_no')}
                                 placeholder="0000"
                                 required
+                                readOnly={requestNoLocked}
                                 error={errors.wr_no}
                             />
                         </div>

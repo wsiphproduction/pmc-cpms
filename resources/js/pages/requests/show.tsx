@@ -685,7 +685,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                                 <InfoLabel>Project No</InfoLabel>
                                 <InfoValue>
                                     {projectRequest.project?.project_no
-                                        ? <span style={{ fontFamily: 'monospace', fontSize: '13.5px' }}>{projectRequest.project.project_no}</span>
+                                        ? <Link href={route('projects.show', projectRequest.project.id)} style={{ fontFamily: 'monospace', fontSize: '13.5px', color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>{projectRequest.project.project_no}</Link>
                                         : <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Not created yet</span>
                                     }
                                 </InfoValue>

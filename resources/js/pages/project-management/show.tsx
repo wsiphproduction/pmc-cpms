@@ -416,6 +416,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
         deadline:           project.deadline,
         cost_code:          project.cost_code,
         owner_email:        project.owner_email,
+        signatories:        project.signatories,
     };
 
     const handleStatusUpdate = (key: string, text: string, remarks: string) => {

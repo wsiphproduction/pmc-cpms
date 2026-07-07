@@ -442,6 +442,8 @@ class ProjectController extends Controller
                             'description' => $item->description,
                             'qty'         => $item->qty,
                             'unit'        => $item->unit,
+                            'unit_cost'   => $item->unit_cost !== null ? (float) $item->unit_cost : null,
+                            'total_cost'  => $item->total_cost !== null ? (float) $item->total_cost : null,
                         ])->values()->all()
                         : [],
                 ])->values(),
@@ -851,6 +853,7 @@ class ProjectController extends Controller
             'pmd_assistant_manager' => (string) Setting::get('signatory_pmd_assistant_manager', ''),
             'pmd_manager'           => (string) Setting::get('signatory_pmd_manager', ''),
             'ecs_division_manager'  => (string) Setting::get('signatory_ecs_division_manager', ''),
+            'operations_director'   => (string) Setting::get('signatory_operations_director', ''),
         ];
     }
 
@@ -893,7 +896,7 @@ class ProjectController extends Controller
             'project_request_id' => (string) $request->id,
             'title' => $request->title,
             'project_manager' => '',
-            'site' => '',
+            'site' => $request->job_location ?? '',
             'asset_id' => '',
             'cls' => '',
             'priority' => '',

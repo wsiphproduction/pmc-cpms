@@ -1,3 +1,11 @@
+export interface HubSignatories {
+    prepared_by: string;
+    pmd_assistant_manager: string;
+    pmd_manager: string;
+    ecs_division_manager: string;
+    operations_director: string;
+}
+
 export interface HubProject {
     id: number;
     project_no: string;
@@ -10,6 +18,7 @@ export interface HubProject {
     deadline?: string;
     cost_code?: string;
     owner_email?: string;
+    signatories?: HubSignatories;
 }
 
 export function money(value: number) {

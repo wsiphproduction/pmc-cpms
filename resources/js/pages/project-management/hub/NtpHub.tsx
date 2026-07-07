@@ -6,7 +6,11 @@ interface ScopeItem {
     description: string;
     qty: string | null;
     unit: string | null;
+    unit_cost: number | null;
+    total_cost: number | null;
 }
+
+const peso = (n: number) => `Php ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 interface NtpData {
     id: number;
@@ -149,13 +153,27 @@ export default function NtpHub({ project, ntps }: { project: HubProject; ntps: N
                 <SectionTitle color="#059669">II. Scope of Work</SectionTitle>
                 {selected.scope_items.length > 0 ? (
                     <DataTable
-                        headers={['Seq No.', 'Scope of Work / Description', 'Quantity', 'Unit of Measurement']}
-                        rows={selected.scope_items.map(item => [
-                            <span style={{ fontWeight: 600 }}>{item.seq}</span>,
-                            item.description,
-                            item.qty ?? '—',
-                            item.unit ?? '—',
-                        ])}
+                        headers={['Seq No.', 'Scope of Work / Description', 'Quantity', 'Unit', 'Unit Cost', 'Total Cost']}
+                        rows={[
+                            ...selected.scope_items.map(item => [
+                                <span style={{ fontWeight: 600 }}>{item.seq}</span>,
+                                item.description,
+                                item.qty ?? '—',
+                                item.unit ?? '—',
+                                item.unit_cost != null ? peso(item.unit_cost) : '—',
+                                item.total_cost != null ? peso(item.total_cost) : '—',
+                            ]),
+                            [
+                                '',
+                                <strong>Total Cost</strong>,
+                                '',
+                                '',
+                                '',
+                                <strong style={{ color: '#059669' }}>
+                                    {peso(selected.scope_items.reduce((s, i) => s + Number(i.total_cost ?? 0), 0))}
+                                </strong>,
+                            ],
+                        ]}
                     />
                 ) : (
                     <div style={{ padding: '16px', background: '#f8fafc', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>
@@ -175,13 +193,22 @@ export default function NtpHub({ project, ntps }: { project: HubProject; ntps: N
                 />
 
                 {/* Signature block */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '24px', marginTop: '56px' }}>
-                    <div style={{ borderTop: '1px solid #334155', paddingTop: '8px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#334155' }}>
-                        Prepared By: Project Manager
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '48px', marginTop: '64px' }}>
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '2px', minHeight: '18px' }}>
+                            {project.project_manager || ' '}
+                        </div>
+                        <div style={{ borderTop: '1px solid #334155', paddingTop: '8px', fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                            Prepared By: Project Manager
+                        </div>
                     </div>
-                    <div />
-                    <div style={{ borderTop: '1px solid #334155', paddingTop: '8px', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#334155' }}>
-                        Approved By: Operations Director
+                    <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '2px', minHeight: '18px' }}>
+                            {project.signatories?.operations_director || ' '}
+                        </div>
+                        <div style={{ borderTop: '1px solid #334155', paddingTop: '8px', fontSize: '12px', fontWeight: 700, color: '#334155' }}>
+                            Approved By: Operations Director
+                        </div>
                     </div>
                 </div>
             </div>
