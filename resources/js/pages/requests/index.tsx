@@ -427,6 +427,15 @@ export default function RequestsIndex({ requests, filters }: Props) {
     const [showAdvSearch, setShowAdvSearch] = useState(false);
     const [decisionTarget, setDecisionTarget] = useState<{ request: ProjectRequest; decision: RequestDecision } | null>(null);
     const [decisionProcessing, setDecisionProcessing] = useState(false);
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
+    const deleteRequest = (req: ProjectRequest) => {
+        showConfirm(
+            `Delete request "${req.title}"? Its attachments will be permanently removed. This cannot be undone.`,
+            () => router.delete(route('requests.destroy', req.id), { preserveScroll: true }),
+            { title: 'Delete Request', confirmLabel: 'Delete', variant: 'danger' },
+        );
+    };
 
     const doSearch    = () => router.get(route('requests.index'), { search }, { preserveState: true });
     const clearFilters = () => router.get(route('requests.index'));
@@ -452,6 +461,7 @@ export default function RequestsIndex({ requests, filters }: Props) {
 
             <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
 
+            {confirmDialog}
             {commentTarget && <CommentModal request={commentTarget} onClose={() => setCommentTarget(null)} />}
             {showAdvSearch && <AdvancedSearchModal filters={filters} onClose={() => setShowAdvSearch(false)} />}
             {decisionTarget && (
@@ -562,6 +572,12 @@ export default function RequestsIndex({ requests, filters }: Props) {
                                             {req.can.update && (
                                                 <IconBtn title="Edit" onClick={() => router.visit(route('requests.edit', req.id))}>
                                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                                </IconBtn>
+                                            )}
+
+                                            {req.can.delete && (
+                                                <IconBtn title="Delete" color="#dc2626" onClick={() => deleteRequest(req)}>
+                                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
                                                 </IconBtn>
                                             )}
 

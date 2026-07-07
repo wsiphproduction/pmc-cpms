@@ -28,10 +28,9 @@ class ProjectRequestPolicy
 
     public function update(User $user, ProjectRequest $projectRequest): bool
     {
-        if ($user->hasRole(['approver', 'admin'])) {
-            return true;
-        }
-
+        // Editing a request is the department user's (requester's) responsibility,
+        // and only while it is still pending. Approvers/admins review, give
+        // technical feedback and decide — they do not edit the request content.
         return $projectRequest->requester_id === $user->id && $projectRequest->status === 'pending';
     }
 

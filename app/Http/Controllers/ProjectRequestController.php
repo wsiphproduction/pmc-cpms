@@ -80,7 +80,7 @@ class ProjectRequestController extends Controller
             'for_budgeting'   => ['boolean'],
 
             'attachments'               => ['required', 'array', 'min:1'],
-            'attachments.*.file'        => ['required', 'file', 'max:10240'],
+            'attachments.*.file'        => ['required', 'file'],
             'attachments.*.type'        => ['required', 'string', 'in:picture,drawing,report'],
             'attachments.*.description' => ['nullable', 'string', 'max:255'],
         ]);
@@ -119,6 +119,17 @@ class ProjectRequestController extends Controller
                 ...$projectRequest->load(['requester', 'attachments', 'project'])->toArray(),
                 'can' => $this->abilities($projectRequest),
             ],
+            'feedbacks' => $projectRequest->technicalFeedback()->with('user')->latest()->get()
+                ->map(fn (\App\Models\TechnicalFeedback $f) => [
+                    'id'          => $f->id,
+                    'can_edit'    => auth()->id() === $f->user_id,
+                    'author'      => $f->user->name ?? 'Unknown',
+                    'date'        => $f->created_at->format('M d, Y h:i A'),
+                    'priority'    => $f->priority,
+                    'disciplines' => $f->disciplines ?? [],
+                    'permits'     => $f->permits ?? [],
+                    'remarks'     => $f->remarks,
+                ]),
         ]);
     }
 
@@ -169,7 +180,7 @@ class ProjectRequestController extends Controller
             'for_budgeting'   => ['boolean'],
 
             'attachments'               => ['nullable', 'array'],
-            'attachments.*.file'        => ['nullable', 'file', 'max:10240'],
+            'attachments.*.file'        => ['nullable', 'file'],
             'attachments.*.type'        => ['required_with:attachments.*.file', 'string', 'in:picture,drawing,report'],
             'attachments.*.description' => ['nullable', 'string', 'max:255'],
 
@@ -239,12 +250,18 @@ class ProjectRequestController extends Controller
     {
         $attachments = $request->file('attachments') ?? [];
 
-        foreach ($attachments as $item) {
-            if (empty($item['file'])) continue;
+        foreach ($attachments as $index => $item) {
+            $file = is_array($item) ? ($item['file'] ?? null) : $item;
+            if (empty($file)) continue;
 
-            $file = $item['file'];
-            $type = $item['type'] ?? 'other';
-            $desc = $item['description'] ?? null;
+            // NOTE: $request->file() returns ONLY the uploaded-file elements of
+            // each row — the sibling 'type'/'description' keys are not files, so
+            // they must be read from the input bag by index, otherwise every
+            // attachment falls back to 'other'.
+            $type = $request->input("attachments.{$index}.type", 'other');
+            $desc = $request->input("attachments.{$index}.description");
+
+            $type = in_array($type, ['picture', 'drawing', 'report'], true) ? $type : 'other';
 
             $folder   = "requests/{$projectRequest->id}/{$type}s";
             $filepath = $file->store($folder, 'public');
@@ -252,6 +269,7 @@ class ProjectRequestController extends Controller
             Attachment::create([
                 'filename'       => $file->getClientOriginalName(),
                 'filepath'       => $filepath,
+                'type'           => $type,
                 'reference_id'   => $projectRequest->id,
                 'reference_type' => ProjectRequest::class,
                 'description'    => $desc,

@@ -9,6 +9,7 @@ use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectHubController;
 use App\Http\Controllers\ProjectRequestController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\TechnicalFeedbackController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -41,6 +42,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('requests/{projectRequest}/comments',  [CommentController::class, 'index'])->name('comments.index');
     Route::post('requests/{projectRequest}/comments', [CommentController::class, 'store'])->name('comments.store');
     Route::delete('comments/{comment}',               [CommentController::class, 'destroy'])->name('comments.destroy');
+
+    Route::post('requests/{projectRequest}/feedback', [TechnicalFeedbackController::class, 'store'])->name('requests.feedback.store');
+    Route::patch('feedback/{technicalFeedback}',      [TechnicalFeedbackController::class, 'update'])->name('requests.feedback.update');
+    Route::delete('feedback/{technicalFeedback}',     [TechnicalFeedbackController::class, 'destroy'])->name('requests.feedback.destroy');
 
     // Project Management
     Route::get('projects/{project}/status', [ProjectController::class, 'status'])->name('projects.status');

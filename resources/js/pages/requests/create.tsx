@@ -1,5 +1,5 @@
 import { Head, router } from '@inertiajs/react';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -178,12 +178,15 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
     const [attachmentError, setAttachmentError] = useState('');
     const [fundingError,    setFundingError]    = useState('');
 
-    let _nextId = 1;
-    const makeRow = (type: UploadRow['type']): UploadRow => ({ id: _nextId++, file: null, description: '', type });
+    // Persist the row-id counter across renders. A plain `let` reset to 1 every
+    // render, so newly added rows collided with the initial rows' ids — updating
+    // or removing one row then affected its duplicate. A ref keeps ids unique.
+    const nextId = useRef(1);
+    const makeRow = (type: UploadRow['type']): UploadRow => ({ id: nextId.current++, file: null, description: '', type });
 
-    const [pictureRows, setPictureRows] = useState<UploadRow[]>([makeRow('picture')]);
-    const [drawingRows, setDrawingRows] = useState<UploadRow[]>([makeRow('drawing')]);
-    const [reportRows,  setReportRows]  = useState<UploadRow[]>([makeRow('report')]);
+    const [pictureRows, setPictureRows] = useState<UploadRow[]>(() => [makeRow('picture')]);
+    const [drawingRows, setDrawingRows] = useState<UploadRow[]>(() => [makeRow('drawing')]);
+    const [reportRows,  setReportRows]  = useState<UploadRow[]>(() => [makeRow('report')]);
 
     const addRow     = (s: React.Dispatch<React.SetStateAction<UploadRow[]>>, t: UploadRow['type']) => s(p => [...p, makeRow(t)]);
     const removeRow  = (s: React.Dispatch<React.SetStateAction<UploadRow[]>>, id: number) => s(p => p.filter(r => r.id !== id));

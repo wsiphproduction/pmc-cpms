@@ -436,9 +436,9 @@ export default function UsersIndex({ users, trashedUsers, roles, departments }: 
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                             <thead>
                                 <tr style={{ background: '#f8fafc' }}>
-                                    {['Name', 'Email', 'Role', 'Created At', 'Actions'].map((h, i) => (
+                                    {['Name', 'Email', 'Role', 'Department', 'Created At', 'Actions'].map((h, i, arr) => (
                                         <th key={h} style={{
-                                            padding: '10px 16px', textAlign: i === 4 ? 'right' : 'left',
+                                            padding: '10px 16px', textAlign: i === arr.length - 1 ? 'right' : 'left',
                                             fontSize: '10.5px', fontWeight: 700, color: '#9ca3af',
                                             textTransform: 'uppercase', letterSpacing: '0.5px',
                                             borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap',
@@ -451,7 +451,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments }: 
                             <tbody>
                                 {filtered.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5} style={{ padding: '48px', textAlign: 'center' }}>
+                                        <td colSpan={6} style={{ padding: '48px', textAlign: 'center' }}>
                                             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 10px' }}>
                                                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
                                                 <circle cx="9" cy="7" r="4"/>
@@ -480,6 +480,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments }: 
                                         </td>
                                         <td style={{ padding: '12px 16px', color: '#6b7280' }}>{u.email}</td>
                                         <td style={{ padding: '12px 16px' }}><RoleBadge role={u.role} /></td>
+                                        <td style={{ padding: '12px 16px', color: u.department ? '#374151' : '#d1d5db' }}>{u.department ?? '—'}</td>
                                         <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{formatDate(u.created_at)}</td>
                                         <td style={{ padding: '12px 16px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>

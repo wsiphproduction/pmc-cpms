@@ -17,6 +17,7 @@ class Attachment extends Model
     protected $fillable = [
         'filename',
         'filepath',
+        'type',
         'reference_id',
         'reference_type',
         'description',

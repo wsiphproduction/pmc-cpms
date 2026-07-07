@@ -1,4 +1,4 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { useConfirm } from '@/components/useConfirm';
@@ -8,6 +8,7 @@ interface Attachment {
     id: number;
     filename: string;
     filepath: string;
+    type: 'picture' | 'drawing' | 'report' | null;
     description: string | null;
     url: string;
 }
@@ -48,8 +49,23 @@ interface ProjectRequestData {
     };
 }
 
+interface FeedbackEntry {
+    id: number;
+    can_edit: boolean;
+    author: string;
+    date: string;
+    priority: string | null;
+    disciplines: string[];
+    permits: string[];
+    remarks: string | null;
+}
+
+const DISCIPLINE_OPTIONS = ['Civil', 'Architectural', 'Electrical/Automation', 'Mechanical', 'Fire Protection'];
+const PERMIT_OPTIONS = ['Building Permit', 'Safety Permit', 'Environmental Permit', 'No Permits Needed'];
+
 interface Props {
     projectRequest: ProjectRequestData;
+    feedbacks: FeedbackEntry[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -147,37 +163,102 @@ function AttachmentItem({ att }: { att: Attachment }) {
 }
 
 // ── Feedback Modal ─────────────────────────────────────────────────────────
-function FeedbackModal({ onClose }: { onClose: () => void }) {
-    const [discOther,   setDiscOther]   = useState(false);
-    const [permitOther, setPermitOther] = useState(false);
-    const [priority,    setPriority]    = useState('');
-    const [remarks,     setRemarks]     = useState('');
+const feedbackInputStyle: React.CSSProperties = {
+    width: '100%', padding: '8px 12px', borderRadius: '8px',
+    border: '1.5px solid #e5e7eb', fontSize: '13px', outline: 'none',
+    fontFamily: 'inherit', color: '#374151', boxSizing: 'border-box',
+};
 
-    const inputStyle: React.CSSProperties = {
-        width: '100%', padding: '8px 12px', borderRadius: '8px',
-        border: '1.5px solid #e5e7eb', fontSize: '13px', outline: 'none',
-        fontFamily: 'inherit', color: '#374151', boxSizing: 'border-box',
-    };
-
-    const CheckGroup = ({ items, name, showOther, onToggleOther }: {
-        items: string[]; name: string; showOther: boolean; onToggleOther: (v: boolean) => void;
-    }) => (
+// Defined at module scope (not inside FeedbackModal) so it keeps a stable
+// component identity across re-renders — otherwise changing the priority select
+// remounted this subtree and wiped the checkbox selections.
+function CheckGroup({ items, selected, onToggle, showOther, onToggleOther, otherValue, onOtherChange }: {
+    items: string[];
+    selected: string[];
+    onToggle: (item: string) => void;
+    showOther: boolean;
+    onToggleOther: (v: boolean) => void;
+    otherValue: string;
+    onOtherChange: (v: string) => void;
+}) {
+    return (
         <div style={{ background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '12px 14px' }}>
             {items.map(item => (
                 <label key={item} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#374151', cursor: 'pointer', marginBottom: '6px' }}>
-                    <input type="checkbox" name={name} value={item} style={{ accentColor: '#2563eb', width: '14px', height: '14px', cursor: 'pointer' }} />
+                    <input type="checkbox" checked={selected.includes(item)} onChange={() => onToggle(item)} style={{ accentColor: '#2563eb', width: '14px', height: '14px', cursor: 'pointer' }} />
                     {item}
                 </label>
             ))}
             <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#374151', cursor: 'pointer', marginBottom: showOther ? '6px' : 0 }}>
-                <input type="checkbox" onChange={e => onToggleOther(e.target.checked)} style={{ accentColor: '#2563eb', width: '14px', height: '14px', cursor: 'pointer' }} />
+                <input type="checkbox" checked={showOther} onChange={e => onToggleOther(e.target.checked)} style={{ accentColor: '#2563eb', width: '14px', height: '14px', cursor: 'pointer' }} />
                 Others
             </label>
             {showOther && (
-                <input type="text" placeholder="Specify..." style={{ ...inputStyle, marginTop: '4px', borderColor: '#2563eb' }} />
+                <input type="text" value={otherValue} onChange={e => onOtherChange(e.target.value)} placeholder="Specify..." style={{ ...feedbackInputStyle, marginTop: '4px', borderColor: '#2563eb' }} />
             )}
         </div>
     );
+}
+
+// Split a saved list into the known checkbox items and any leftover free-text
+// "other" values (joined back into the single "Others" field).
+function splitKnown(values: string[], known: string[]): { selected: string[]; other: string } {
+    const selected = values.filter(v => known.includes(v));
+    const other = values.filter(v => !known.includes(v)).join(', ');
+    return { selected, other };
+}
+
+function FeedbackModal({ projectRequestId, feedback, onClose }: {
+    projectRequestId: number; feedback?: FeedbackEntry | null; onClose: () => void;
+}) {
+    const isEdit = !!feedback;
+    const initialDisc   = splitKnown(feedback?.disciplines ?? [], DISCIPLINE_OPTIONS);
+    const initialPermit = splitKnown(feedback?.permits ?? [], PERMIT_OPTIONS);
+
+    const [disciplines,     setDisciplines]     = useState<string[]>(initialDisc.selected);
+    const [permits,         setPermits]         = useState<string[]>(initialPermit.selected);
+    const [discOther,       setDiscOther]       = useState(!!initialDisc.other);
+    const [discOtherText,   setDiscOtherText]   = useState(initialDisc.other);
+    const [permitOther,     setPermitOther]     = useState(!!initialPermit.other);
+    const [permitOtherText, setPermitOtherText] = useState(initialPermit.other);
+    const [priority,        setPriority]        = useState(feedback?.priority ?? '');
+    const [remarks,         setRemarks]         = useState(feedback?.remarks ?? '');
+    const [submitting,      setSubmitting]      = useState(false);
+    const [error,           setError]           = useState('');
+
+    const toggle = (setter: React.Dispatch<React.SetStateAction<string[]>>) => (item: string) =>
+        setter(prev => prev.includes(item) ? prev.filter(x => x !== item) : [...prev, item]);
+
+    const submit = () => {
+        if (!remarks.trim()) { setError('Technical remarks are required.'); return; }
+        setError('');
+        setSubmitting(true);
+
+        const allDisciplines = [...disciplines, ...(discOther && discOtherText.trim() ? [discOtherText.trim()] : [])];
+        const allPermits     = [...permits,     ...(permitOther && permitOtherText.trim() ? [permitOtherText.trim()] : [])];
+
+        // Submit via Inertia's router (axios + fresh XSRF-TOKEN cookie) so it is
+        // never bitten by a stale meta CSRF token on a long-open page. The
+        // controller redirects back to the show page, refreshing the feedback list.
+        const payload = {
+            disciplines: allDisciplines,
+            permits:     allPermits,
+            priority:    priority || null,
+            remarks:     remarks.trim(),
+        };
+        const opts = {
+            preserveScroll: true,
+            onSuccess: () => onClose(),
+            onError:   (errors: Record<string, string>) => setError(errors.remarks ?? errors.priority ?? 'Failed to submit feedback. Please try again.'),
+            onFinish:  () => setSubmitting(false),
+        };
+
+        if (isEdit) {
+            router.patch(route('requests.feedback.update', feedback!.id), payload, opts);
+        } else {
+            router.post(route('requests.feedback.store', projectRequestId), payload, opts);
+        }
+    };
 
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -186,7 +267,7 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
                 <div style={{ padding: '16px 22px', background: '#0891b2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>Technical Feedback Form</span>
+                        <span style={{ fontSize: '14px', fontWeight: 700, color: '#fff' }}>{isEdit ? 'Edit Technical Feedback' : 'Technical Feedback Form'}</span>
                     </div>
                     <button onClick={onClose} style={{ width: '28px', height: '28px', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -196,29 +277,132 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '18px' }}>
                         <div>
                             <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '7px' }}>Involved Disciplines</label>
-                            <CheckGroup items={['Civil', 'Architectural', 'Electrical/Automation', 'Mechanical', 'Fire Protection']} name="discipline" showOther={discOther} onToggleOther={setDiscOther} />
+                            <CheckGroup
+                                items={DISCIPLINE_OPTIONS}
+                                selected={disciplines} onToggle={toggle(setDisciplines)}
+                                showOther={discOther} onToggleOther={setDiscOther}
+                                otherValue={discOtherText} onOtherChange={setDiscOtherText}
+                            />
                         </div>
                         <div>
                             <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '7px' }}>Required Permits</label>
-                            <CheckGroup items={['Building Permit', 'Safety Permit', 'Environmental Permit', 'No Permits Needed']} name="permit" showOther={permitOther} onToggleOther={setPermitOther} />
+                            <CheckGroup
+                                items={PERMIT_OPTIONS}
+                                selected={permits} onToggle={toggle(setPermits)}
+                                showOther={permitOther} onToggleOther={setPermitOther}
+                                otherValue={permitOtherText} onOtherChange={setPermitOtherText}
+                            />
                         </div>
                     </div>
                     <div style={{ marginBottom: '16px' }}>
                         <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px' }}>Priority Level</label>
-                        <select value={priority} onChange={e => setPriority(e.target.value)} style={{ ...inputStyle, borderColor: '#06b6d4' }}>
-                            <option value="" disabled>Select priority…</option>
+                        <select value={priority} onChange={e => setPriority(e.target.value)} style={{ ...feedbackInputStyle, borderColor: '#06b6d4' }}>
+                            <option value="">Select priority…</option>
                             {['Critical', 'High', 'Medium', 'Low'].map(p => <option key={p}>{p}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px' }}>Technical Remarks / Comments</label>
-                        <textarea rows={4} value={remarks} onChange={e => setRemarks(e.target.value)} placeholder="Enter detailed feedback or technical requirements..." style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
+                        <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px' }}>Technical Remarks / Comments <span style={{ color: '#ef4444' }}>*</span></label>
+                        <textarea rows={4} value={remarks} onChange={e => { setRemarks(e.target.value); if (error) setError(''); }} placeholder="Enter detailed feedback or technical requirements..." style={{ ...feedbackInputStyle, resize: 'vertical', lineHeight: 1.6 }} />
                     </div>
+                    {error && (
+                        <p style={{ fontSize: '12px', color: '#dc2626', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {error}
+                        </p>
+                    )}
                 </div>
                 <div style={{ padding: '14px 22px', borderTop: '1px solid #f3f4f6', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-                    <button onClick={onClose} style={{ padding: '8px 20px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '13px', cursor: 'pointer', color: '#374151' }}>Close</button>
-                    <button style={{ padding: '8px 20px', borderRadius: '7px', border: 'none', background: '#0891b2', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>Submit Feedback</button>
+                    <button onClick={onClose} disabled={submitting} style={{ padding: '8px 20px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '13px', cursor: submitting ? 'not-allowed' : 'pointer', color: '#374151' }}>Close</button>
+                    <button onClick={submit} disabled={submitting} style={{ padding: '8px 20px', borderRadius: '7px', border: 'none', background: submitting ? '#67c8db' : '#0891b2', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: submitting ? 'not-allowed' : 'pointer' }}>
+                        {submitting ? 'Saving…' : isEdit ? 'Update Feedback' : 'Submit Feedback'}
+                    </button>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Priority Badge ─────────────────────────────────────────────────────────
+function PriorityBadge({ priority }: { priority: string | null }) {
+    if (!priority) return null;
+    const map: Record<string, { bg: string; color: string }> = {
+        Critical: { bg: '#fee2e2', color: '#991b1b' },
+        High:     { bg: '#ffedd5', color: '#9a3412' },
+        Medium:   { bg: '#fef9c3', color: '#854d0e' },
+        Low:      { bg: '#dcfce7', color: '#166534' },
+    };
+    const s = map[priority] ?? { bg: '#f3f4f6', color: '#374151' };
+    return (
+        <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', background: s.bg, color: s.color }}>
+            {priority}
+        </span>
+    );
+}
+
+// ── Feedback Section ───────────────────────────────────────────────────────
+function FeedbackSection({ feedbacks, onEdit, onDelete }: {
+    feedbacks: FeedbackEntry[];
+    onEdit: (f: FeedbackEntry) => void;
+    onDelete: (f: FeedbackEntry) => void;
+}) {
+    if (feedbacks.length === 0) return null;
+
+    const Chips = ({ label, items }: { label: string; items: string[] }) => (
+        items.length === 0 ? null : (
+            <div style={{ marginTop: '8px' }}>
+                <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginRight: '6px' }}>{label}:</span>
+                {items.map(i => (
+                    <span key={i} style={{ display: 'inline-block', padding: '2px 9px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: '#ecfeff', color: '#0e7490', border: '1px solid #a5f3fc', marginRight: '5px', marginTop: '4px' }}>{i}</span>
+                ))}
+            </div>
+        )
+    );
+
+    return (
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', marginTop: '20px' }}>
+            <div style={{ padding: '18px 28px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0891b2" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>Technical Feedback ({feedbacks.length})</span>
+            </div>
+            <div style={{ padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {feedbacks.map(f => (
+                    <div key={f.id} style={{ background: '#f8fafc', borderRadius: '8px', padding: '14px 16px', border: '1px solid #f0f2f5' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', gap: '8px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <div style={{ width: '26px', height: '26px', borderRadius: '7px', background: '#0891b2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 700, color: '#fff', flexShrink: 0 }}>
+                                    {f.author?.slice(0, 2).toUpperCase()}
+                                </div>
+                                <span style={{ fontSize: '13px', fontWeight: 700, color: '#374151' }}>{f.author}</span>
+                                <span style={{ fontSize: '11.5px', color: '#9ca3af' }}>{f.date}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <PriorityBadge priority={f.priority} />
+                                {f.can_edit && (
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                        <button
+                                            onClick={() => onEdit(f)}
+                                            title="Edit feedback"
+                                            style={{ width: '26px', height: '26px', borderRadius: '6px', border: '1px solid #e5e7eb', background: '#fff', color: '#0891b2', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                        >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                        </button>
+                                        <button
+                                            onClick={() => onDelete(f)}
+                                            title="Delete feedback"
+                                            style={{ width: '26px', height: '26px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fff7f7', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                                        >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        {f.remarks && <p style={{ fontSize: '13px', color: '#334155', margin: '4px 0 0', lineHeight: 1.6 }}>{f.remarks}</p>}
+                        <Chips label="Disciplines" items={f.disciplines} />
+                        <Chips label="Permits" items={f.permits} />
+                    </div>
+                ))}
             </div>
         </div>
     );
@@ -356,18 +540,37 @@ function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
 }
 
 // ── Show Page ──────────────────────────────────────────────────────────────
-export default function Show({ projectRequest }: Props) {
+export default function Show({ projectRequest, feedbacks = [] }: Props) {
     if (!projectRequest) return null;
 
+    const { auth } = usePage().props as unknown as { auth: { user: { id: number; role: string | null } | null } };
+    const role = auth?.user?.role ?? null;
+    // Technical feedback is an engineer/approver responsibility — department
+    // users (requestors) submit and edit requests, they don't review them.
+    const canGiveFeedback = role === 'approver' || role === 'admin';
+
     const [showFeedback, setShowFeedback] = useState(false);
+    const [editingFeedback, setEditingFeedback] = useState<FeedbackEntry | null>(null);
 
     const attachments = projectRequest.attachments ?? [];
     const getExt = (filename: string) => filename.split('.').pop()?.toLowerCase() ?? '';
 
-    const pictures = attachments.filter(a => ['jpg','jpeg','png','gif','webp'].includes(getExt(a.filename)));
-    const drawings = attachments.filter(a => ['pdf','dwg'].includes(getExt(a.filename)));
-    const reports  = attachments.filter(a => ['doc','docx'].includes(getExt(a.filename)));
-    const others   = attachments.filter(a => !['jpg','jpeg','png','gif','webp','pdf','dwg','doc','docx'].includes(getExt(a.filename)));
+    // Categorize by the type chosen at upload. Fall back to extension for legacy
+    // rows that predate the `type` column (a PDF report used to be mis-bucketed
+    // as a drawing because both share the .pdf extension).
+    const bucketOf = (a: Attachment): 'picture' | 'drawing' | 'report' | 'other' => {
+        if (a.type === 'picture' || a.type === 'drawing' || a.type === 'report') return a.type;
+        const ext = getExt(a.filename);
+        if (['jpg','jpeg','png','gif','webp'].includes(ext)) return 'picture';
+        if (['pdf','dwg'].includes(ext)) return 'drawing';
+        if (['doc','docx'].includes(ext)) return 'report';
+        return 'other';
+    };
+
+    const pictures = attachments.filter(a => bucketOf(a) === 'picture');
+    const drawings = attachments.filter(a => bucketOf(a) === 'drawing');
+    const reports  = attachments.filter(a => bucketOf(a) === 'report');
+    const others   = attachments.filter(a => bucketOf(a) === 'other');
 
     const handleApprove = () => router.patch(route('requests.update', projectRequest.id), { status: 'approved' });
     const handleReject  = () => router.patch(route('requests.update', projectRequest.id), { status: 'rejected' });
@@ -379,12 +582,27 @@ export default function Show({ projectRequest }: Props) {
         }, { title: 'Cancel Request', confirmLabel: 'Yes, Cancel', variant: 'warning' });
     };
 
+    const openNewFeedback  = () => { setEditingFeedback(null); setShowFeedback(true); };
+    const openEditFeedback = (f: FeedbackEntry) => { setEditingFeedback(f); setShowFeedback(true); };
+    const closeFeedback    = () => { setShowFeedback(false); setEditingFeedback(null); };
+    const deleteFeedback   = (f: FeedbackEntry) => {
+        showConfirm('Delete this technical feedback?', () => {
+            router.delete(route('requests.feedback.destroy', f.id), { preserveScroll: true });
+        }, { title: 'Delete Feedback', confirmLabel: 'Delete', variant: 'danger' });
+    };
+
     return (
         <AuthenticatedLayout>
             <Head title={`View Request — ${projectRequest.title}`} />
 
             {confirmDialog}
-            {showFeedback && <FeedbackModal onClose={() => setShowFeedback(false)} />}
+            {showFeedback && (
+                <FeedbackModal
+                    projectRequestId={projectRequest.id}
+                    feedback={editingFeedback}
+                    onClose={closeFeedback}
+                />
+            )}
 
             {/* Breadcrumb + actions */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
@@ -400,10 +618,12 @@ export default function Show({ projectRequest }: Props) {
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Print
                     </button>
-                    <button onClick={() => setShowFeedback(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#0891b2', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                        Add Feedback
-                    </button>
+                    {canGiveFeedback && (
+                        <button onClick={openNewFeedback} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#0891b2', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            Add Feedback
+                        </button>
+                    )}
                     {projectRequest.status === 'approved' && !projectRequest.project && projectRequest.can.canCreateProject && (
                         <Link href={`${route('projects.create')}?request_id=${projectRequest.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#16a34a', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -558,6 +778,8 @@ export default function Show({ projectRequest }: Props) {
                     )}
                 </div>
             </div>
+
+            <FeedbackSection feedbacks={feedbacks} onEdit={openEditFeedback} onDelete={deleteFeedback} />
 
             <CommentsSection projectRequestId={projectRequest.id} />
         </AuthenticatedLayout>
