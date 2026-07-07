@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -20,11 +20,17 @@ interface TrashedUserRow {
     deleted_at: string;
 }
 
+interface DepartmentOption {
+    value: string;
+    label: string;
+    displayLabel?: string;
+}
+
 interface Props {
     users: UserRow[];
     trashedUsers: TrashedUserRow[];
     roles: string[];
-    departments: string[];
+    departments: DepartmentOption[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -122,6 +128,78 @@ const labelStyle: React.CSSProperties = {
     display: 'block', fontSize: '11.5px', fontWeight: 700, color: '#374151', marginBottom: '5px',
 };
 const fieldStyle: React.CSSProperties = { marginBottom: '14px' };
+
+// Department picker: options show "name — description", but the selected box shows the name only.
+function DepartmentSelect({ value, options, onChange, required }: {
+    value: string;
+    options: DepartmentOption[];
+    onChange: (value: string) => void;
+    required?: boolean;
+}) {
+    const [open, setOpen] = useState(false);
+    const wrapRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const onClickAway = (e: MouseEvent) => {
+            if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', onClickAway);
+        return () => document.removeEventListener('mousedown', onClickAway);
+    }, []);
+
+    const selected = options.find(o => o.value === value);
+    const displayText = selected ? (selected.displayLabel ?? selected.value) : '';
+
+    return (
+        <div ref={wrapRef} style={{ position: 'relative' }}>
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                style={{
+                    ...inputStyle, textAlign: 'left', background: '#fff', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px',
+                    color: displayText ? '#111827' : '#9ca3af',
+                }}
+            >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {displayText || 'Select department…'}
+                </span>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ flexShrink: 0 }}>
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </button>
+            {/* Keeps the field required for native form validation */}
+            <input tabIndex={-1} value={value} required={required} onChange={() => {}} aria-hidden
+                style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} />
+            {open && (
+                <div role="listbox" style={{
+                    position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 60,
+                    background: '#fff', border: '1px solid #e5e7eb', borderRadius: '7px',
+                    boxShadow: '0 12px 28px rgba(15,23,42,0.14)', maxHeight: '220px', overflowY: 'auto',
+                }}>
+                    {options.length ? options.map(opt => (
+                        <button
+                            key={opt.value}
+                            type="button"
+                            role="option"
+                            aria-selected={opt.value === value}
+                            onClick={() => { onChange(opt.value); setOpen(false); }}
+                            style={{
+                                width: '100%', border: 'none', textAlign: 'left', cursor: 'pointer',
+                                padding: '9px 12px', fontSize: '13px', color: '#334155',
+                                background: opt.value === value ? '#eff6ff' : '#fff',
+                            }}
+                        >
+                            {opt.label}
+                        </button>
+                    )) : (
+                        <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No departments</div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 export default function UsersIndex({ users, trashedUsers, roles, departments }: Props) {
@@ -529,10 +607,12 @@ export default function UsersIndex({ users, trashedUsers, roles, departments }: 
                         {addForm.role === 'requestor' && (
                             <div style={fieldStyle}>
                                 <label style={labelStyle}>Department</label>
-                                <select style={inputStyle} value={addForm.department} onChange={e => setAddForm(f => ({ ...f, department: e.target.value }))} required>
-                                    <option value="">Select department…</option>
-                                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                                </select>
+                                <DepartmentSelect
+                                    value={addForm.department}
+                                    options={departments}
+                                    onChange={v => setAddForm(f => ({ ...f, department: v }))}
+                                    required
+                                />
                                 {errors.department && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.department}</p>}
                             </div>
                         )}
@@ -572,10 +652,12 @@ export default function UsersIndex({ users, trashedUsers, roles, departments }: 
                         {editForm.role === 'requestor' && (
                             <div style={fieldStyle}>
                                 <label style={labelStyle}>Department</label>
-                                <select style={inputStyle} value={editForm.department} onChange={e => setEditForm(f => ({ ...f, department: e.target.value }))} required>
-                                    <option value="">Select department…</option>
-                                    {departments.map(d => <option key={d} value={d}>{d}</option>)}
-                                </select>
+                                <DepartmentSelect
+                                    value={editForm.department}
+                                    options={departments}
+                                    onChange={v => setEditForm(f => ({ ...f, department: v }))}
+                                    required
+                                />
                                 {errors.department && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.department}</p>}
                             </div>
                         )}
