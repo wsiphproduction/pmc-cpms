@@ -9,14 +9,24 @@ interface AuthLayoutProps {
 
 export default function AuthSimpleLayout({ children, title, description }: AuthLayoutProps) {
     return (
-        <div style={{
+        <div className="auth-simple-root" style={{
             minHeight: '100vh',
             display: 'flex',
             fontFamily: "'Inter', sans-serif",
             background: '#f8fafc',
         }}>
+            <style>{`
+                @media (max-width: 900px) {
+                    .auth-simple-brand { display: none !important; }
+                    .auth-simple-form { padding: 32px 20px !important; }
+                }
+                @media (max-width: 480px) {
+                    .auth-simple-form { padding: 24px 16px !important; }
+                }
+            `}</style>
+
             {/* ── Left panel — branding ── */}
-            <div style={{
+            <div className="auth-simple-brand" style={{
                 width: '420px',
                 flexShrink: 0,
                 background: 'linear-gradient(160deg, #1d4ed8 0%, #1e40af 50%, #1e3a8a 100%)',
@@ -115,7 +125,7 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
             </div>
 
             {/* ── Right panel — form ── */}
-            <div style={{
+            <div className="auth-simple-form" style={{
                 flex: 1,
                 display: 'flex',
                 alignItems: 'center',

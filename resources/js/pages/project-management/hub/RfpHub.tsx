@@ -30,6 +30,7 @@ interface BillingRow {
     url: string | null;
     ntp_id: number | null;
     ntp_no: string | null;
+    ntp_date: string | null;
     ntp_contractor: string | null;
     ntp_approved_cost: number | null;
     status_logs?: BillingStatusLog[];
@@ -338,7 +339,7 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
                         </td>
                     </tr>
                     <tr style={rowStyle}>
-                        <td style={labelCell}>Project Progress (%)</td>
+                        <td style={labelCell}>Percent of Project Cost</td>
                         <td style={valCell}>
                             <div style={{ display: 'flex', gap: '0' }}>
                                 <input
@@ -425,7 +426,6 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
     const [periodTo,      setPeriodTo]      = useState(billing.period_to_raw   ?? '');
     const [summary,       setSummary]       = useState(billing.summary  ?? '');
     const [remarks,       setRemarks]       = useState(billing.remarks  ?? '');
-    const [status,        setStatus]        = useState(billing.status_raw);
     const [attachments,   setAttachments]   = useState<string[]>(billing.attachments ?? []);
     const [file,          setFile]          = useState<File | null>(null);
     const [othersBilling, setOthersBilling] = useState(false);
@@ -479,7 +479,6 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
             remarks:       remarks     || null,
             attachments,
             recommendation: recommendation === 'Others' && otherRecText.trim() ? otherRecText.trim() : recommendation,
-            status,
             file,
         }, { preserveScroll: true, forceFormData: true, onSuccess: onClose, onFinish: () => setSaving(false) });
     };
@@ -585,7 +584,7 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
                         </td>
                     </tr>
                     <tr style={rowStyle}>
-                        <td style={labelCell}>Project Progress (%)</td>
+                        <td style={labelCell}>Percent of Project Cost</td>
                         <td style={valCell}>
                             <div style={{ display: 'flex', gap: '0' }}>
                                 <input
@@ -640,17 +639,6 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
                         </td>
                     </tr>
 
-                    {/* Status */}
-                    <tr>
-                        <td style={labelCell}>Status</td>
-                        <td style={valCell}>
-                            <select value={status} onChange={e => setStatus(e.target.value)} style={{ ...inputStyle, padding: '5px 8px' }}>
-                                <option value="pending">Pending</option>
-                                <option value="approved">Approved</option>
-                                <option value="paid">Paid</option>
-                            </select>
-                        </td>
-                    </tr>
                 </tbody>
             </table>
 
@@ -712,7 +700,7 @@ function ViewBillingModal({ billing, onClose, onEdit, canEdit = true }: { billin
         <Modal title={`Billing — ${billing.stmt_no}`} onClose={onClose} size="900px"
             footer={<>
                 <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Close</button>
-                {canEdit && billing.status_raw === 'pending' && (
+                {canEdit && (
                     <button type="button" onClick={onEdit} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Edit</button>
                 )}
             </>}
@@ -753,7 +741,7 @@ function ViewBillingModal({ billing, onClose, onEdit, canEdit = true }: { billin
                         ['Period From',           billing.period_from],
                         ['Period To',             billing.period_to],
                         ['Billed Amount',         `PhP ${billing.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
-                        ['Project Progress (%)',  billing.progress_pct != null ? `${billing.progress_pct}%` : '—'],
+                        ['Percent of Project Cost',  billing.progress_pct != null ? `${billing.progress_pct}%` : '—'],
                         ['Summary of Work Done',  billing.summary ?? '—'],
                         ['Remarks',               billing.remarks ?? '—'],
                         ['Recommendation',        billing.recommendation ?? '—'],
@@ -806,14 +794,13 @@ function ViewBillingModal({ billing, onClose, onEdit, canEdit = true }: { billin
 }
 
 const STATUS_TONE: Record<string, 'blue' | 'green' | 'yellow' | 'slate'> = {
-    Paid: 'blue', Approved: 'green', Pending: 'yellow',
+    Approved: 'green', Pending: 'yellow',
 };
 
 // ── Billing Status Meta ────────────────────────────────────────────────────
 const BILLING_STATUS_META: Record<string, { label: string; bg: string; color: string; border: string; hint: string }> = {
     pending:  { label: 'Pending',  bg: '#fffbeb', color: '#b45309', border: '#fde68a', hint: 'Awaiting review. The billing has been submitted but not yet approved for payment.' },
-    approved: { label: 'Approved', bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', hint: 'Reviewed and cleared for payment processing. Amount is not yet counted as paid.' },
-    paid:     { label: 'Paid',     bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe', hint: 'Payment has been released. This amount is added to the project’s total paid.' },
+    approved: { label: 'Approved', bg: '#f0fdf4', color: '#15803d', border: '#bbf7d0', hint: 'Reviewed and cleared for payment. This amount is added to the project’s total paid.' },
 };
 
 // ── Billing Status Change Modal ────────────────────────────────────────────
@@ -825,11 +812,10 @@ function StatusChangeModal({ project, billing, onClose }: { project: HubProject;
     const selectedMeta = BILLING_STATUS_META[selectedKey];
     const changed      = selectedKey !== billing.status_raw;
     const logs         = billing.status_logs ?? [];
-    const locked       = billing.status_raw === 'paid';
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedKey || locked) return;
+        if (!selectedKey) return;
         setPosting(true);
         router.patch(route('hub.rfp.update-status', [project.id, billing.id]), {
             status: selectedKey,
@@ -847,7 +833,7 @@ function StatusChangeModal({ project, billing, onClose }: { project: HubProject;
             <div style={{ position: 'relative', background: '#fff', borderRadius: '12px', zIndex: 401, width: '100%', maxWidth: '560px', maxHeight: '90vh', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', display: 'flex', flexDirection: 'column' }}>
                 {/* Header */}
                 <div style={{ padding: '12px 20px', background: '#1e293b', borderRadius: '12px 12px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#fff' }}>{locked ? 'Billing Status' : 'Update Billing Status'}</span>
+                    <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#fff' }}>Update Billing Status</span>
                     <button onClick={onClose} style={{ width: '26px', height: '26px', borderRadius: '5px', border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                     </button>
@@ -860,18 +846,11 @@ function StatusChangeModal({ project, billing, onClose }: { project: HubProject;
                         {billing.ntp_contractor && <> — {billing.ntp_contractor}</>}
                     </div>
 
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: locked ? '#64748b' : '#2563eb', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                        {locked ? 'Current Status' : 'Change Status Form'}
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#2563eb', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px', marginBottom: '16px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                        Change Status Form
                     </div>
 
-                    {locked ? (
-                        <div style={{ padding: '14px', borderRadius: '8px', background: selectedMeta?.bg, border: `1px solid ${selectedMeta?.border}`, color: selectedMeta?.color, fontSize: '12.5px' }}>
-                            <div style={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '11px', letterSpacing: '0.3px', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span>🔒</span> Status: {selectedMeta?.label}
-                            </div>
-                            <div>This billing is marked as paid and can no longer be changed. You can still review its status history below.</div>
-                        </div>
-                    ) : (
+                    {(
                         <form id="billingStatusForm" onSubmit={handleSubmit}>
                             <div style={{ marginBottom: '14px' }}>
                                 <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Select New Status</label>
@@ -955,16 +934,14 @@ function StatusChangeModal({ project, billing, onClose }: { project: HubProject;
                 {/* Footer */}
                 <div style={{ padding: '12px 20px', borderTop: '1px solid #e5e7eb', background: '#f8fafc', borderRadius: '0 0 12px 12px', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                     <button onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer', color: '#374151' }}>Close</button>
-                    {!locked && (
-                        <button
-                            type="submit"
-                            form="billingStatusForm"
-                            disabled={posting || !changed}
-                            style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: posting || !changed ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: posting || !changed ? 'not-allowed' : 'pointer' }}
-                        >
-                            {posting ? 'Updating…' : 'Update Status'}
-                        </button>
-                    )}
+                    <button
+                        type="submit"
+                        form="billingStatusForm"
+                        disabled={posting || !changed}
+                        style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: posting || !changed ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: posting || !changed ? 'not-allowed' : 'pointer' }}
+                    >
+                        {posting ? 'Updating…' : 'Update Status'}
+                    </button>
                 </div>
             </div>
         </div>
@@ -972,11 +949,22 @@ function StatusChangeModal({ project, billing, onClose }: { project: HubProject;
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function RfpHub({ project, billings, ntps, canEdit = true }: { project: HubProject; billings: BillingRow[]; ntps: NtpOption[]; canEdit?: boolean }) {
+export default function RfpHub({ project, billings, ntps, canEdit = true, canManageStatus = false }: { project: HubProject; billings: BillingRow[]; ntps: NtpOption[]; canEdit?: boolean; canManageStatus?: boolean }) {
     const [showNew, setShowNew] = useState(false);
     const [viewing, setViewing] = useState<BillingRow | null>(null);
     const [editing, setEditing] = useState<BillingRow | null>(null);
     const [statusTarget, setStatusTarget] = useState<BillingRow | null>(null);
+    const [ntpFilter, setNtpFilter] = useState('');
+    const [contractorFilter, setContractorFilter] = useState('');
+
+    // Distinct NTP numbers / contractors present on this project's billings.
+    const ntpOptions        = Array.from(new Set(billings.map(b => b.ntp_no).filter((v): v is string => !!v))).sort();
+    const contractorOptions = Array.from(new Set(billings.map(b => b.ntp_contractor).filter((v): v is string => !!v))).sort();
+
+    const filteredBillings = billings.filter(b =>
+        (!ntpFilter        || b.ntp_no === ntpFilter) &&
+        (!contractorFilter || b.ntp_contractor === contractorFilter)
+    );
 
     const budgetPaid = project.budget_paid ?? 0;
     const paidPct    = project.budget_total > 0 ? Math.round((budgetPaid / project.budget_total) * 100) : 0;
@@ -990,20 +978,19 @@ export default function RfpHub({ project, billings, ntps, canEdit = true }: { pr
     };
 
     const actionCell = (b: BillingRow) => {
-        const isPending = b.status_raw === 'pending';
         return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 <button type="button" title="View" onClick={() => setViewing(b)}
                     style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fff', border: '1px solid #e2e8f0', color: '#475569' }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                 </button>
-                {canEdit && isPending && (
+                {canEdit && (
                     <button type="button" title="Edit" onClick={() => setEditing(b)}
                         style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#eff6ff', border: '1px solid #bfdbfe', color: '#2563eb' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
                 )}
-                {canEdit && isPending && (
+                {canEdit && (
                     <button type="button" title="Delete" onClick={() => handleDelete(b)}
                         style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
@@ -1056,21 +1043,54 @@ export default function RfpHub({ project, billings, ntps, canEdit = true }: { pr
                 </div>
             </div>
 
+            {/* Filters */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-end', marginBottom: '12px' }}>
+                <div>
+                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>NTP No.</label>
+                    <select value={ntpFilter} onChange={e => setNtpFilter(e.target.value)}
+                        style={{ ...inputStyle, padding: '6px 8px', minWidth: '180px' }}>
+                        <option value="">All NTPs</option>
+                        {ntpOptions.map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label style={{ display: 'block', fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>Contractor</label>
+                    <select value={contractorFilter} onChange={e => setContractorFilter(e.target.value)}
+                        style={{ ...inputStyle, padding: '6px 8px', minWidth: '200px' }}>
+                        <option value="">All Contractors</option>
+                        {contractorOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                </div>
+                {(ntpFilter || contractorFilter) && (
+                    <button type="button" onClick={() => { setNtpFilter(''); setContractorFilter(''); }}
+                        style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12px', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
+                        Clear filters
+                    </button>
+                )}
+                <div style={{ marginLeft: 'auto', fontSize: '12px', color: '#64748b', paddingBottom: '7px' }}>
+                    Showing <strong>{filteredBillings.length}</strong> of {billings.length}
+                </div>
+            </div>
+
             <DataTable
-                headers={['Seq#', 'Control#', 'Contractor (NTP)', 'Billing Type', 'Billed Amount', 'Progress %', 'Status', 'Actions']}
-                rows={billings.map((b, idx) => [
+                headers={['Seq#', 'Control#', 'NTP No.', 'NTP Date', 'Contractor (NTP)', 'Billing Type', 'Billed Amount', 'Progress %', 'Status', 'Actions']}
+                rows={filteredBillings.map((b, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
                     <strong>{b.stmt_no}</strong>,
+                    b.ntp_no
+                        ? <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>{b.ntp_no}</span>
+                        : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
+                    <span style={{ fontSize: '12px', color: b.ntp_date ? '#475569' : '#cbd5e1' }}>{b.ntp_date ?? '—'}</span>,
                     b.ntp_contractor
                         ? <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>{b.ntp_contractor}</span>
                         : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
                     b.billing_type,
                     <strong>PhP {b.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                     b.progress_pct != null ? `${b.progress_pct}%` : '—',
-                    canEdit ? (
-                        <button type="button" title={b.status_raw === 'paid' ? 'View status log' : 'Click to change status'} onClick={() => setStatusTarget(b)}
+                    canManageStatus ? (
+                        <button type="button" title="Click to change status" onClick={() => setStatusTarget(b)}
                             style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}>
-                            <Badge tone={STATUS_TONE[b.status] ?? 'slate'}>{b.status} {b.status_raw === 'paid' ? '🔒' : '✎'}</Badge>
+                            <Badge tone={STATUS_TONE[b.status] ?? 'slate'}>{b.status} ✎</Badge>
                         </button>
                     ) : (
                         <Badge tone={STATUS_TONE[b.status] ?? 'slate'}>{b.status}</Badge>

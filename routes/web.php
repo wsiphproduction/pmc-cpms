@@ -5,6 +5,7 @@ use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\NtpReviewController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectHubController;
 use App\Http\Controllers\ProjectRequestController;
@@ -47,6 +48,11 @@ Route::middleware(['auth'])->group(function () {
     Route::patch('feedback/{technicalFeedback}',      [TechnicalFeedbackController::class, 'update'])->name('requests.feedback.update');
     Route::delete('feedback/{technicalFeedback}',     [TechnicalFeedbackController::class, 'destroy'])->name('requests.feedback.destroy');
 
+    // ── NTP Reviews (department-user approval of NTPs) ─────────────────────
+    Route::get('ntp-reviews',                 [NtpReviewController::class, 'index'])->name('ntp-reviews.index');
+    Route::patch('ntp-reviews/{ntp}/approve', [NtpReviewController::class, 'approve'])->name('ntp-reviews.approve');
+    Route::patch('ntp-reviews/{ntp}/reject',  [NtpReviewController::class, 'reject'])->name('ntp-reviews.reject');
+
     // Project Management
     Route::get('projects/{project}/status', [ProjectController::class, 'status'])->name('projects.status');
     Route::patch('projects/{project}/status', [ProjectController::class, 'updateStatus'])->name('projects.update-status');
@@ -87,7 +93,6 @@ Route::middleware(['auth'])->group(function () {
         // Billing (RFP)
         Route::post('rfp',                     [ProjectHubController::class, 'storeBilling'])->name('hub.rfp.store');
         Route::patch('rfp/{billing}',          [ProjectHubController::class, 'updateBilling'])->name('hub.rfp.update');
-        Route::patch('rfp/{billing}/status',   [ProjectHubController::class, 'updateBillingStatus'])->name('hub.rfp.update-status');
         Route::delete('rfp/{billing}',         [ProjectHubController::class, 'destroyBilling'])->name('hub.rfp.destroy');
         // IOC / ACR
         Route::post('ioc',                     [ProjectHubController::class, 'storeIoc'])->name('hub.ioc.store');
@@ -95,6 +100,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('ioc/{ioc}',             [ProjectHubController::class, 'destroyIoc'])->name('hub.ioc.destroy');
         // PSR
         Route::post('psr',                     [ProjectHubController::class, 'storePsr'])->name('hub.psr.store');
+        Route::post('psr/import',              [ProjectHubController::class, 'importPsr'])->name('hub.psr.import');
         Route::delete('psr/{psr}',             [ProjectHubController::class, 'destroyPsr'])->name('hub.psr.destroy');
         // Todo
         Route::post('todo',                    [ProjectHubController::class, 'storeTodo'])->name('hub.todo.store');
@@ -102,20 +108,32 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('todo/{task}',           [ProjectHubController::class, 'destroyTodo'])->name('hub.todo.destroy');
     });
 
+    // Billing status is editable by the assigned project manager or the
+    // engineer who created the project — a different (and broader) set than the
+    // general hub-edit (can:update) permission, so it lives outside that group.
+    Route::patch('projects/{project}/hub/rfp/{billing}/status', [ProjectHubController::class, 'updateBillingStatus'])
+        ->middleware('can:manageBillingStatus,project')
+        ->name('hub.rfp.update-status');
+
     Route::resource('projects', ProjectController::class);
 
-    Route::middleware(['role:approver|admin'])->group(function () {
-        // ── Users ─────────────────────────────────────────────────────────────
-        Route::get('users', [UserController::class, 'index'])->name('users.index');
-        Route::post('users', [UserController::class, 'store'])->name('users.store');
-        Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
-        Route::patch('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
-        Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
-        Route::patch('users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
-        Route::delete('users/{id}/force-delete', [UserController::class, 'forceDelete'])->name('users.force-delete');
+    Route::middleware(['role:approver|assistant_manager|admin'])->group(function () {
+        // ── Users (admin only) ────────────────────────────────────────────────
+        Route::middleware(['role:admin'])->group(function () {
+            Route::get('users', [UserController::class, 'index'])->name('users.index');
+            Route::post('users', [UserController::class, 'store'])->name('users.store');
+            Route::put('users/{user}', [UserController::class, 'update'])->name('users.update');
+            Route::patch('users/{user}/reset-password', [UserController::class, 'resetPassword'])->name('users.reset-password');
+            Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
+            Route::patch('users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
+            Route::delete('users/{id}/force-delete', [UserController::class, 'forceDelete'])->name('users.force-delete');
+        });
 
         // ── Master Data ───────────────────────────────────────────────────────
         Route::get('master-data', [MasterDataController::class, 'index'])->name('master.index');
+
+        // Generic active/inactive toggle for any master resource ({type} = slug).
+        Route::patch('master/{type}/{id}/toggle', [MasterDataController::class, 'toggleActive'])->name('master.toggle');
 
         // Job Types
         Route::post('master/job-types',           [MasterDataController::class, 'storeJobType'])->name('master.job-types.store');

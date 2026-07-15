@@ -18,8 +18,12 @@ class ProjectNtp extends Model
         'baseline_start',
         'baseline_end',
         'approved_cost',
+        'status',
         'issued_date',
         'issued_by',
+        'reviewed_by',
+        'reviewed_at',
+        'review_remarks',
         'created_by',
     ];
 
@@ -27,6 +31,7 @@ class ProjectNtp extends Model
         'baseline_start' => 'date',
         'baseline_end'   => 'date',
         'issued_date'    => 'date',
+        'reviewed_at'    => 'datetime',
         'approved_cost'  => 'decimal:2',
     ];
 
@@ -43,6 +48,11 @@ class ProjectNtp extends Model
     public function issuer(): BelongsTo
     {
         return $this->belongsTo(User::class, 'issued_by');
+    }
+
+    public function reviewer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'reviewed_by');
     }
 
     public function creator(): BelongsTo

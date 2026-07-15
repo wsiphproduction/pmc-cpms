@@ -16,6 +16,11 @@ class CommentController extends Controller
      */
     public function store(Request $request, ProjectRequest $projectRequest): JsonResponse
     {
+        // Only project engineers (approver) and admins may comment.
+        if (!auth()->user()->hasRole(['approver', 'admin'])) {
+            return response()->json(['error' => 'Unauthorized'], 403);
+        }
+
         $request->validate([
             'content' => ['required', 'string', 'max:2000'],
         ]);
@@ -35,12 +40,31 @@ class CommentController extends Controller
 
         if (auth()->id() === $projectRequest->requester_id) {
             Notification::notify(
-                User::whereHas('roles', fn ($q) => $q->where('name', 'approver'))->pluck('id'),
+                User::whereHas('roles', fn ($q) => $q->whereIn('name', ['approver', 'assistant_manager']))->pluck('id'),
                 $message,
                 $link
             );
         } else {
             Notification::notify($projectRequest->requester_id, $message, $link);
+        }
+
+        // Whenever a Project Engineer (approver role) comments, put the request
+        // ON HOLD so the requester knows action is needed — except when it is
+        // already in a final state (completed/rejected) or already on hold.
+        if (
+            auth()->user()->hasRole('approver')
+            && !in_array($projectRequest->status, ['completed', 'rejected', 'hold'], true)
+        ) {
+            $projectRequest->update([
+                'status_before_hold' => $projectRequest->status,
+                'status'             => 'hold',
+            ]);
+
+            Notification::notify(
+                $projectRequest->requester_id,
+                "Project Request #{$projectRequest->request_no} was put ON HOLD after a comment from the Project Engineer.",
+                $link
+            );
         }
 
         return response()->json([
@@ -77,8 +101,10 @@ class CommentController extends Controller
      */
     public function destroy(Comment $comment): JsonResponse
     {
-        // Only allow the owner to delete
-        if ($comment->user_id !== auth()->id()) {
+        // Project engineers (approver) and admins may delete any comment;
+        // otherwise only the comment's own author can delete it.
+        $user = auth()->user();
+        if (!$user->hasRole(['approver', 'admin']) && $comment->user_id !== $user->id) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 

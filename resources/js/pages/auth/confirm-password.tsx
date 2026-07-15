@@ -74,7 +74,6 @@ export default function ConfirmPassword() {
                                 onChange={e => setData('password', e.target.value)}
                                 onFocus={() => setFocused(true)}
                                 onBlur={() => setFocused(false)}
-                                placeholder="Enter your password"
                                 style={{
                                     width: '100%',
                                     padding: '10px 42px 10px 38px',

@@ -49,7 +49,11 @@ class AuditTrail extends Model
             'ip_address'     => request()->ip(),
         ]);
 
-        if ($model instanceof Project) {
+        // Department users (project requesters) should only be notified about
+        // RFQ activity on their project — every other hub module is internal to
+        // the project team. (Project-request notifications are sent separately by
+        // ProjectRequestController, and the NTP-review notice is sent explicitly.)
+        if ($model instanceof Project && ($context['module'] ?? null) === 'RFQ') {
             $model->notifyRequester($action);
         }
 

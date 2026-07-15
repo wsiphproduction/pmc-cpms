@@ -24,22 +24,60 @@ class MasterDataController extends Controller
     public function index()
     {
         return Inertia::render('master-data/index', [
-            'jobTypes'     => JobType::latest()->get(['id', 'name', 'description', 'created_at']),
-            'jobLocations' => JobLocation::latest()->get(['id', 'name', 'description', 'created_at']),
-            'costCodes'    => CostCode::latest()->get(['id', 'name', 'description', 'created_at']),
-            'sites'        => Site::latest()->get(['id', 'name', 'description', 'created_at']),
-            'classes'      => MasterClass::latest()->get(['id', 'name', 'description', 'created_at']),
+            'jobTypes'     => JobType::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'jobLocations' => JobLocation::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'costCodes'    => CostCode::latest()->get(['id', 'name', 'description', 'division', 'cost_center', 'activity', 'expense_description', 'agu_per_class', 'agu_per_stat', 'is_active', 'created_at']),
+            'sites'        => Site::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'classes'      => MasterClass::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'priorities'   => Priority::orderByRaw('CASE WHEN sequence_no IS NULL THEN 1 ELSE 0 END, sequence_no ASC')
                 ->orderBy('name')
-                ->get(['id', 'name', 'sequence_no', 'description', 'created_at']),
-            'statuses'     => MasterStatus::latest()->get(['id', 'name', 'description', 'created_at']),
-            'departments'  => Department::latest()->get(['id', 'name', 'description', 'created_at']),
-            'categories'   => Category::latest()->get(['id', 'name', 'description', 'created_at']),
-            'serviceTypes' => ServiceType::latest()->get(['id', 'name', 'description', 'created_at']),
-            'workForces'   => WorkForce::latest()->get(['id', 'name', 'description', 'created_at']),
-            'structures'   => Structure::latest()->get(['id', 'name', 'description', 'created_at']),
-            'suppliers'    => Supplier::latest()->get(['id', 'company', 'email', 'telephone_no', 'mobile_no', 'created_at']),
+                ->get(['id', 'name', 'sequence_no', 'description', 'is_active', 'created_at']),
+            'statuses'     => MasterStatus::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'departments'  => Department::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'categories'   => Category::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'serviceTypes' => ServiceType::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'workForces'   => WorkForce::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'structures'   => Structure::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'suppliers'    => Supplier::latest()->get(['id', 'company', 'email', 'telephone_no', 'mobile_no', 'is_active', 'created_at']),
         ]);
+    }
+
+    /**
+     * Master resource slugs → model class. Used by the generic active toggle.
+     */
+    private const TOGGLE_MODELS = [
+        'job-types'     => JobType::class,
+        'job-locations' => JobLocation::class,
+        'cost-codes'    => CostCode::class,
+        'sites'         => Site::class,
+        'classes'       => MasterClass::class,
+        'priorities'    => Priority::class,
+        'statuses'      => MasterStatus::class,
+        'departments'   => Department::class,
+        'categories'    => Category::class,
+        'service-types' => ServiceType::class,
+        'work-forces'   => WorkForce::class,
+        'structures'    => Structure::class,
+        'suppliers'     => Supplier::class,
+    ];
+
+    /**
+     * Flip the is_active flag of any master-data record. Deactivated records
+     * stay in the admin list but are filtered out of every dropdown elsewhere.
+     */
+    public function toggleActive(string $type, int $id)
+    {
+        $model = self::TOGGLE_MODELS[$type] ?? null;
+        abort_unless($model !== null, 404);
+
+        $record = $model::findOrFail($id);
+        $record->is_active = ! $record->is_active;
+        $record->save();
+
+        return redirect()->back()->with(
+            'success',
+            'Entry ' . ($record->is_active ? 'activated' : 'deactivated') . '.'
+        );
     }
 
     // ── Job Types ─────────────────────────────────────────────────────────
@@ -109,10 +147,8 @@ class MasterDataController extends Controller
     // ── Cost Codes ────────────────────────────────────────────────────────
     public function storeCostCode(Request $request)
     {
-        $data = $request->validate([
-            'name'        => 'required|string|max:255|unique:cost_codes,name',
-            'description' => 'nullable|string|max:500',
-        ]);
+        $data = $this->validateCostCode($request);
+        $data['description'] = $data['expense_description'] ?? ($data['cost_center'] ?? null);
 
         CostCode::create($data);
 
@@ -121,14 +157,30 @@ class MasterDataController extends Controller
 
     public function updateCostCode(Request $request, CostCode $costCode)
     {
-        $data = $request->validate([
-            'name'        => 'required|string|max:255|unique:cost_codes,name,' . $costCode->id,
-            'description' => 'nullable|string|max:500',
-        ]);
+        $data = $this->validateCostCode($request, $costCode->id);
+        $data['description'] = $data['expense_description'] ?? ($data['cost_center'] ?? null);
 
         $costCode->update($data);
 
         return redirect()->back()->with('success', 'Cost code updated.');
+    }
+
+    /**
+     * Validate a cost code create/update. Description is derived from
+     * expense_description → cost_center to match the CSV import semantics.
+     */
+    private function validateCostCode(Request $request, ?int $ignoreId = null): array
+    {
+        return $request->validate([
+            'name'                => 'required|string|max:191|unique:cost_codes,name' . ($ignoreId ? ',' . $ignoreId : ''),
+            'division'            => 'nullable|string|max:191',
+            'cost_center'         => 'nullable|string|max:191',
+            'activity'            => 'nullable|string|max:191',
+            'expense_description' => 'nullable|string|max:500',
+            'agu_per_class'       => 'nullable|string|max:191',
+            'agu_per_stat'        => 'nullable|string|max:100',
+            'is_active'           => 'boolean',
+        ]);
     }
 
     public function destroyCostCode(CostCode $costCode)
@@ -277,11 +329,13 @@ class MasterDataController extends Controller
     /**
      * Bulk-import cost codes from a CSV file.
      *
-     * Expected columns (header row, case-insensitive): "Full_GL_Codes" for the
-     * code and "Cost_Center" for the description. Existing codes (matched by
-     * name) are updated; new ones are created. Chunked upsert keeps the query
-     * parameter count well under SQL Server's 2100 limit while staying fast on
-     * MySQL too.
+     * Every column of the GL-code CSV is captured (header row, case-insensitive):
+     * Full_GL_Codes → name (unique key), Division, Cost_Center, Activity,
+     * Expense_Description, AGU_PER_CLASS, AGU_PER_STAT and isActive. The
+     * human-readable description falls back to Expense_Description → Cost_Center.
+     * Existing codes (matched by name) are updated; new ones are created. Chunked
+     * upsert keeps the parameter count under SQL Server's 2100 limit while
+     * staying fast on MySQL too.
      */
     public function importCostCodes(Request $request)
     {
@@ -304,8 +358,14 @@ class MasterDataController extends Controller
         $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $header[0]);
         $columns   = array_map(fn ($h) => strtolower(trim((string) $h)), $header);
 
-        $nameIdx = $this->findCsvColumn($columns, ['full_gl_codes', 'gl_code', 'gl_codes', 'code', 'name']);
-        $descIdx = $this->findCsvColumn($columns, ['cost_center', 'cost center', 'description']);
+        $nameIdx     = $this->findCsvColumn($columns, ['full_gl_codes', 'gl_code', 'gl_codes', 'code', 'name']);
+        $divisionIdx = $this->findCsvColumn($columns, ['division']);
+        $centerIdx   = $this->findCsvColumn($columns, ['cost_center', 'cost center']);
+        $activityIdx = $this->findCsvColumn($columns, ['activity']);
+        $expenseIdx  = $this->findCsvColumn($columns, ['expense_description', 'expense description']);
+        $classIdx    = $this->findCsvColumn($columns, ['agu_per_class', 'agu per class', 'class']);
+        $statIdx     = $this->findCsvColumn($columns, ['agu_per_stat', 'agu per stat', 'status']);
+        $activeIdx   = $this->findCsvColumn($columns, ['isactive', 'is_active', 'active']);
 
         if ($nameIdx === null) {
             fclose($handle);
@@ -316,11 +376,26 @@ class MasterDataController extends Controller
         $seen     = [];
         $batch    = [];
         $imported = 0;
-        $chunk    = 200; // 200 rows × 4 columns = 800 bind params — safe for SQL Server.
+        $chunk    = 150; // 150 rows × 11 columns = 1650 bind params — safe for SQL Server.
+
+        // Trim a cell to a string, or null when blank.
+        $cell = function ($row, $idx) {
+            if ($idx === null) {
+                return null;
+            }
+            $v = trim((string) ($row[$idx] ?? ''));
+            return $v === '' ? null : $v;
+        };
+
+        $clip = fn ($v, $len) => $v === null ? null : mb_substr($v, 0, $len);
 
         $flush = function () use (&$batch, &$imported) {
             if ($batch) {
-                CostCode::upsert($batch, ['name'], ['description', 'updated_at']);
+                CostCode::upsert(
+                    $batch,
+                    ['name'],
+                    ['description', 'division', 'cost_center', 'activity', 'expense_description', 'agu_per_class', 'agu_per_stat', 'is_active', 'updated_at']
+                );
                 $imported += count($batch);
                 $batch = [];
             }
@@ -333,21 +408,35 @@ class MasterDataController extends Controller
             }
             $name = mb_substr($name, 0, 191);
 
-            // De-duplicate within the file (last value wins would need a map;
-            // first value wins is fine here since codes repeat identically).
+            // De-duplicate within the file — the GL code is the unique key, so
+            // the first occurrence wins (duplicates in the source repeat data).
             if (isset($seen[$name])) {
                 continue;
             }
             $seen[$name] = true;
 
-            $desc = $descIdx !== null ? trim((string) ($row[$descIdx] ?? '')) : '';
-            $desc = $desc !== '' ? mb_substr($desc, 0, 500) : null;
+            $expense = $cell($row, $expenseIdx);
+            $center  = $cell($row, $centerIdx);
+            // Prefer the readable expense name for the description, else the cost center.
+            $desc    = $expense ?? $center;
+
+            $activeRaw = $cell($row, $activeIdx);
+            $isActive  = $activeRaw === null
+                ? true
+                : in_array(strtolower($activeRaw), ['1', 'true', 'yes', 'active', 'open'], true);
 
             $batch[] = [
-                'name'        => $name,
-                'description' => $desc,
-                'created_at'  => $now,
-                'updated_at'  => $now,
+                'name'                => $name,
+                'description'         => $clip($desc, 500),
+                'division'            => $clip($cell($row, $divisionIdx), 191),
+                'cost_center'         => $clip($center, 191),
+                'activity'            => $clip($cell($row, $activityIdx), 191),
+                'expense_description' => $clip($expense, 500),
+                'agu_per_class'       => $clip($cell($row, $classIdx), 191),
+                'agu_per_stat'        => $clip($cell($row, $statIdx), 100),
+                'is_active'           => $isActive,
+                'created_at'          => $now,
+                'updated_at'          => $now,
             ];
 
             if (count($batch) >= $chunk) {

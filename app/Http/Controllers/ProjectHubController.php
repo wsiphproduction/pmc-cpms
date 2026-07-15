@@ -9,6 +9,7 @@ use App\Models\Project;
 use App\Models\ProjectBilling;
 use App\Models\ProjectIocItem;
 use App\Models\ProjectMtrDoc;
+use App\Models\Notification;
 use App\Models\ProjectNtp;
 use App\Models\ProjectPermit;
 use App\Models\ProjectQualityDoc;
@@ -66,7 +67,7 @@ class ProjectHubController extends Controller
             }
         }
 
-        AuditTrail::log("Dispatched RFQ to {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'create']);
+        AuditTrail::log("Dispatched RFQ to {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'create', 'rfq_id' => $rfq->id]);
 
         return back()->with('success', 'RFQ dispatched successfully.');
     }
@@ -125,7 +126,7 @@ class ProjectHubController extends Controller
             }
         }
 
-        AuditTrail::log("Updated RFQ details for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update']);
+        AuditTrail::log("Updated RFQ details for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id]);
 
         return back()->with('success', 'Quotation details saved.');
     }
@@ -138,7 +139,7 @@ class ProjectHubController extends Controller
 
         $rfq->update($data);
 
-        AuditTrail::log("RFQ status updated to {$data['status']} for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update']);
+        AuditTrail::log("RFQ status updated to {$data['status']} for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id]);
 
         return back()->with('success', 'RFQ status updated.');
     }
@@ -147,7 +148,7 @@ class ProjectHubController extends Controller
     {
         abort_unless((int) $rfq->project_id === (int) $project->id, 403);
 
-        AuditTrail::log("Deleted RFQ for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'delete']);
+        AuditTrail::log("Deleted RFQ for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'delete', 'rfq_id' => $rfq->id]);
         $rfq->delete();
 
         return back()->with('success', 'RFQ deleted.');
@@ -162,8 +163,10 @@ class ProjectHubController extends Controller
             'project_rfq_id'  => [
                 'nullable', 'exists:project_rfqs,id',
                 function ($attr, $value, $fail) use ($project) {
-                    if ($value && $project->ntps()->where('project_rfq_id', $value)->exists()) {
-                        $fail('An NTP has already been issued for this RFQ.');
+                    // A rejected NTP can be re-submitted; only block if one is still
+                    // pending review or already issued for this RFQ.
+                    if ($value && $project->ntps()->where('project_rfq_id', $value)->where('status', '!=', 'rejected')->exists()) {
+                        $fail('An NTP is already pending review or issued for this RFQ.');
                     }
                 },
             ],
@@ -174,24 +177,27 @@ class ProjectHubController extends Controller
 
         $ntpNo = $this->nextNtpNo();
 
+        // Submitted for department-user review — NOT issued yet. The RFQ is not
+        // awarded and the budget is not recalculated until the NTP is approved.
         $project->ntps()->create([
             ...$data,
             'ntp_no'      => $ntpNo,
-            'issued_date' => now()->toDateString(),
-            'issued_by'   => auth()->id(),
+            'status'      => 'pending_review',
             'created_by'  => auth()->id(),
         ]);
 
-        // Mark RFQ as awarded if linked
-        if (!empty($data['project_rfq_id'])) {
-            ProjectRfq::where('id', $data['project_rfq_id'])->update(['status' => 'awarded']);
+        AuditTrail::log("NTP {$ntpNo} submitted for department review ({$data['contractor_name']})", $project, array_filter(['module' => 'NTP', 'type' => 'create', 'rfq_id' => $data['project_rfq_id'] ?? null]));
+
+        // Notify the project's department user (requester) that an NTP awaits review.
+        if ($requesterId = $project->projectRequest?->requester_id) {
+            Notification::notify(
+                $requesterId,
+                "NTP {$ntpNo} for {$data['contractor_name']} is awaiting your review on project {$project->project_no}.",
+                route('ntp-reviews.index', absolute: false)
+            );
         }
 
-        AuditTrail::log("NTP {$ntpNo} issued to {$data['contractor_name']}", $project, ['module' => 'NTP', 'type' => 'create']);
-
-        $this->recalculateBudgetTotal($project);
-
-        return back()->with('success', "NTP {$ntpNo} issued successfully.");
+        return back()->with('success', "NTP {$ntpNo} submitted for department review.");
     }
 
     public function destroyNtp(Project $project, ProjectNtp $ntp): RedirectResponse
@@ -201,7 +207,8 @@ class ProjectHubController extends Controller
         AuditTrail::log("NTP {$ntp->ntp_no} deleted", $project, ['module' => 'NTP', 'type' => 'delete']);
         $ntp->delete();
 
-        $this->recalculateBudgetTotal($project);
+        // Budget is set manually via the project's Project Cost field — not derived
+        // from NTPs — so deleting an NTP no longer changes the project budget.
 
         return back()->with('success', 'NTP deleted.');
     }
@@ -260,6 +267,7 @@ class ProjectHubController extends Controller
             'title'             => ['required', 'string', 'max:255'],
             'description'       => ['nullable', 'string'],
             'amount'            => ['required', 'numeric', 'min:0'],
+            'duration_days'     => ['nullable', 'integer', 'min:0'],
             'requestor'         => ['nullable', 'string', 'max:255'],
             'date_of_request'   => ['nullable', 'date'],
             'priority'          => ['nullable', 'string', 'max:255'],
@@ -286,6 +294,7 @@ class ProjectHubController extends Controller
             'title'             => $data['title'],
             'description'       => ($data['description']       ?? '') ?: null,
             'amount'            => $data['amount'],
+            'duration_days'     => ($data['duration_days']     ?? '') !== '' ? (int) $data['duration_days'] : null,
             'requestor'         => ($data['requestor']         ?? '') ?: null,
             'date_of_request'   => ($data['date_of_request']   ?? '') ?: null,
             'priority'          => ($data['priority']           ?? '') ?: null,
@@ -318,6 +327,7 @@ class ProjectHubController extends Controller
             'title'             => ['required', 'string', 'max:255'],
             'description'       => ['nullable', 'string'],
             'amount'            => ['required', 'numeric', 'min:0'],
+            'duration_days'     => ['nullable', 'integer', 'min:0'],
             'status'            => ['required', 'in:pending,approved,rejected'],
             'approved_date'     => ['nullable', 'date'],
             'requestor'         => ['nullable', 'string', 'max:255'],
@@ -339,6 +349,7 @@ class ProjectHubController extends Controller
             'title'             => $data['title'],
             'description'       => ($data['description']       ?? '') ?: null,
             'amount'            => $data['amount'],
+            'duration_days'     => ($data['duration_days']     ?? '') !== '' ? (int) $data['duration_days'] : null,
             'status'            => $data['status'],
             'approved_date'     => ($data['approved_date']     ?? '') ?: null,
             'requestor'         => ($data['requestor']         ?? '') ?: null,
@@ -539,10 +550,11 @@ class ProjectHubController extends Controller
             'attachments'  => ['nullable', 'array'],
             'attachments.*'=> ['string'],
             'recommendation' => ['nullable', 'string', 'max:255'],
-            'status'       => ['required', 'in:pending,approved,paid'],
             'file'         => ['nullable', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx'],
         ]);
 
+        // Status is changed only through the dedicated PM-gated status flow,
+        // never here — Edit handles billing details and may run at any status.
         $billing->update([
             'billing_type' => $data['billing_type'],
             'period_from'  => ($data['period_from']  ?? '') ?: null,
@@ -553,7 +565,6 @@ class ProjectHubController extends Controller
             'remarks'      => ($data['remarks']      ?? '') ?: null,
             'attachments'  => $data['attachments']   ?? null,
             'recommendation' => ($data['recommendation'] ?? '') ?: null,
-            'status'       => $data['status'],
         ]);
 
         if ($request->hasFile('file')) {
@@ -570,7 +581,7 @@ class ProjectHubController extends Controller
             ]);
         }
 
-        AuditTrail::log("Billing {$billing->stmt_no} updated — status: {$data['status']}", $project, ['module' => 'RFP', 'type' => 'update']);
+        AuditTrail::log("Billing {$billing->stmt_no} updated ({$data['billing_type']})", $project, ['module' => 'RFP', 'type' => 'update']);
 
         $this->recalculateBudgetPaid($project);
 
@@ -581,13 +592,8 @@ class ProjectHubController extends Controller
     {
         abort_unless((int) $billing->project_id === (int) $project->id, 403);
 
-        // A paid billing is locked — its status can be viewed but not changed.
-        if ($billing->status === 'paid') {
-            return back()->with('error', 'This billing is already paid and can no longer be changed.');
-        }
-
         $data = $request->validate([
-            'status'  => ['required', 'in:pending,approved,paid'],
+            'status'  => ['required', 'in:pending,approved'],
             'remarks' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -629,19 +635,10 @@ class ProjectHubController extends Controller
 
     private function recalculateBudgetPaid(Project $project): void
     {
+        // "Approved" billings are treated as paid — an approved statement is
+        // cleared for payment and counts toward the project's paid total.
         $project->update([
-            'budget_paid' => $project->billings()->where('status', 'paid')->sum('amount'),
-        ]);
-    }
-
-    /**
-     * Total Project Cost is derived from the sum of approved NTP contract values
-     * (the officially awarded cost) rather than a manually-entered figure.
-     */
-    private function recalculateBudgetTotal(Project $project): void
-    {
-        $project->update([
-            'budget_total' => $project->ntps()->sum('approved_cost'),
+            'budget_paid' => $project->billings()->where('status', 'approved')->sum('amount'),
         ]);
     }
 
@@ -718,6 +715,7 @@ class ProjectHubController extends Controller
     public function storePsr(Request $request, Project $project): RedirectResponse
     {
         $data = $request->validate([
+            'project_ntp_id'    => ['nullable', 'exists:project_ntps,id'],
             'week_code'         => ['required', 'string', 'max:20'],
             'completion_pct'    => ['required', 'integer', 'min:0', 'max:100'],
             'identified_issues' => ['nullable', 'string'],
@@ -734,6 +732,7 @@ class ProjectHubController extends Controller
         }
 
         $report = $project->weeklyReports()->create([
+            'project_ntp_id'    => ($data['project_ntp_id'] ?? '') ?: null,
             'week_code'         => $data['week_code'],
             'completion_pct'    => $data['completion_pct'],
             'identified_issues' => $data['identified_issues'] ?? null,
@@ -750,6 +749,122 @@ class ProjectHubController extends Controller
         AuditTrail::log("Weekly report {$report->week_code} submitted — {$data['completion_pct']}% complete", $project, ['module' => 'PSR', 'type' => 'upload']);
 
         return back()->with('success', "Weekly report {$report->week_code} submitted.");
+    }
+
+    /**
+     * Bulk-import weekly reports from a CSV file. Expected columns (header row,
+     * case-insensitive): week_code, completion_pct, identified_issues,
+     * progress_updates, submitted_date, ntp_no. Only week_code is required per
+     * row; ntp_no is matched against this project's NTP numbers.
+     */
+    public function importPsr(Request $request, Project $project): RedirectResponse
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:csv,txt', 'max:10240'],
+        ]);
+
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+        if ($handle === false) {
+            return back()->with('error', 'Could not read the uploaded file.');
+        }
+
+        $header = fgetcsv($handle);
+        if ($header === false) {
+            fclose($handle);
+            return back()->with('error', 'The CSV file is empty.');
+        }
+
+        $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) $header[0]);
+        $columns   = array_map(fn ($h) => strtolower(trim((string) $h)), $header);
+
+        $weekIdx    = $this->findCsvColumn($columns, ['week_code', 'week', 'week code']);
+        $pctIdx     = $this->findCsvColumn($columns, ['completion_pct', 'completion', 'percent', '% completion', 'progress']);
+        $issuesIdx  = $this->findCsvColumn($columns, ['identified_issues', 'issues', 'identified issues']);
+        $updatesIdx = $this->findCsvColumn($columns, ['progress_updates', 'updates', 'progress updates']);
+        $dateIdx    = $this->findCsvColumn($columns, ['submitted_date', 'date', 'submitted date']);
+        $ntpIdx     = $this->findCsvColumn($columns, ['ntp_no', 'ntp', 'ntp no', 'ntp number']);
+
+        if ($weekIdx === null) {
+            fclose($handle);
+            return back()->with('error', 'CSV must contain a "week_code" column.');
+        }
+
+        // NTP number → id lookup for this project (case-insensitive).
+        $ntpByNo = $project->ntps()->pluck('id', 'ntp_no')
+            ->mapWithKeys(fn ($id, $no) => [strtolower(trim((string) $no)) => $id]);
+
+        $cell = function ($row, $idx) {
+            if ($idx === null) {
+                return null;
+            }
+            $v = trim((string) ($row[$idx] ?? ''));
+            return $v === '' ? null : $v;
+        };
+
+        $imported = 0;
+        $latestPct = null;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $week = $cell($row, $weekIdx);
+            if ($week === null) {
+                continue;
+            }
+
+            $pct = (int) round((float) ($cell($row, $pctIdx) ?? 0));
+            $pct = max(0, min(100, $pct));
+
+            $ntpNo = $cell($row, $ntpIdx);
+            $ntpId = $ntpNo !== null ? ($ntpByNo[strtolower($ntpNo)] ?? null) : null;
+
+            $dateRaw = $cell($row, $dateIdx);
+            $submitted = now()->toDateString();
+            if ($dateRaw !== null) {
+                try {
+                    $submitted = \Carbon\Carbon::parse($dateRaw)->toDateString();
+                } catch (\Throwable $e) {
+                    // Keep the default of today when the date can't be parsed.
+                }
+            }
+
+            $project->weeklyReports()->create([
+                'project_ntp_id'    => $ntpId,
+                'week_code'         => mb_substr($week, 0, 20),
+                'completion_pct'    => $pct,
+                'identified_issues' => $cell($row, $issuesIdx),
+                'progress_updates'  => $cell($row, $updatesIdx),
+                'submitted_date'    => $submitted,
+                'created_by'        => auth()->id(),
+            ]);
+
+            $latestPct = $pct;
+            $imported++;
+        }
+        fclose($handle);
+
+        if ($imported === 0) {
+            return back()->with('error', 'No valid weekly reports found in the CSV.');
+        }
+
+        // Reflect the most recent imported report's progress on the project.
+        if ($latestPct !== null) {
+            $project->update(['completion_percent' => $latestPct]);
+        }
+
+        AuditTrail::log("Imported {$imported} weekly report(s) from CSV", $project, ['module' => 'PSR', 'type' => 'upload']);
+
+        return back()->with('success', "Imported {$imported} weekly report(s) from CSV.");
+    }
+
+    private function findCsvColumn(array $columns, array $candidates): ?int
+    {
+        foreach ($candidates as $candidate) {
+            $index = array_search($candidate, $columns, true);
+            if ($index !== false) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 
     public function destroyPsr(Project $project, ProjectWeeklyReport $psr): RedirectResponse

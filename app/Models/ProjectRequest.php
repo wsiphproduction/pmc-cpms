@@ -26,6 +26,7 @@ class ProjectRequest extends Model
         'capex',
         'for_budgeting',
         'status',
+        'status_before_hold',
     ];
 
     protected $casts = [

@@ -12,5 +12,16 @@ class CostCode extends Model
     protected $fillable = [
         'name',
         'description',
+        'division',
+        'cost_center',
+        'activity',
+        'expense_description',
+        'agu_per_class',
+        'agu_per_stat',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 }

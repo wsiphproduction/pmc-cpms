@@ -9,6 +9,7 @@ interface VofRow {
     title: string;
     description: string | null;
     amount: number;
+    duration_days: number | null;
     status: string;
     submitted_date: string;
     approved_date: string | null;
@@ -104,6 +105,7 @@ function CreateModal({ project, onClose }: { project: HubProject; onClose: () =>
     const [title,      setTitle]      = useState('');
     const [desc,       setDesc]       = useState('');
     const [amount,     setAmount]     = useState('');
+    const [duration,   setDuration]   = useState('');
     const [requestor,  setRequestor]  = useState('');
     const [dateReq,    setDateReq]    = useState('');
     const [priorities, setPriorities] = useState<string[]>([]);
@@ -121,6 +123,7 @@ function CreateModal({ project, onClose }: { project: HubProject; onClose: () =>
 
         router.post(route('hub.vof.store', project.id), {
             title, description: desc, amount,
+            duration_days: duration,
             requestor, date_of_request: dateReq,
             priority: priorities.join(','),
             attachment,
@@ -174,9 +177,15 @@ function CreateModal({ project, onClose }: { project: HubProject; onClose: () =>
                     <input type="number" style={inputStyle} placeholder="0.00" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} />
                 </Field>
             </div>
-            <div style={{ marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <Field label="Description / Justification">
                     <textarea rows={3} style={inputStyle} placeholder="Describe the variation and why it is needed…" value={desc} onChange={e => setDesc(e.target.value)} />
+                </Field>
+                <Field label="Duration (Calendar Days)">
+                    <div style={{ display: 'flex', gap: '0' }}>
+                        <input type="number" min="0" step="1" style={{ ...inputStyle, borderRadius: '7px 0 0 7px', borderRight: 'none' }} placeholder="e.g., 15" value={duration} onChange={e => setDuration(e.target.value)} />
+                        <span style={{ padding: '8px 12px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '0 7px 7px 0', fontSize: '12.5px', color: '#475569', whiteSpace: 'nowrap' }}>Days</span>
+                    </div>
                 </Field>
             </div>
             <Field label="Attachment (PDF / Image / Document)">
@@ -261,8 +270,9 @@ function ViewVofModal({ vof, onClose }: { vof: VofRow; onClose: () => void }) {
                 <Field label="Title / Subject"><div>{vof.title}</div></Field>
                 <Field label="Amount (PhP)"><div>PhP {vof.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div></Field>
             </div>
-            <div style={{ marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <Field label="Description / Justification"><div style={{ whiteSpace: 'pre-wrap' }}>{vof.description || '—'}</div></Field>
+                <Field label="Duration (Calendar Days)"><div>{vof.duration_days != null ? `${vof.duration_days} day${vof.duration_days === 1 ? '' : 's'}` : '—'}</div></Field>
             </div>
             <div style={{ marginBottom: '20px' }}>
                 <Field label="Attachment">
@@ -289,6 +299,7 @@ function EditModal({ project, vof, onClose }: { project: HubProject; vof: VofRow
     const [title,       setTitle]       = useState(vof.title);
     const [desc,        setDesc]        = useState(vof.description ?? '');
     const [amount,      setAmount]      = useState(String(vof.amount));
+    const [duration,    setDuration]    = useState(vof.duration_days != null ? String(vof.duration_days) : '');
     const [requestor,   setRequestor]   = useState(vof.requestor ?? '');
     const [dateReq,     setDateReq]     = useState(vof.date_of_request ?? '');
     const [priorities,  setPriorities]  = useState<string[]>(vof.priority ? vof.priority.split(',').filter(Boolean) : []);
@@ -309,6 +320,7 @@ function EditModal({ project, vof, onClose }: { project: HubProject; vof: VofRow
         router.post(route('hub.vof.update', [project.id, vof.id]), {
             _method: 'patch',
             title, description: desc, amount,
+            duration_days: duration,
             status, approved_date: approvedDate || null,
             requestor, date_of_request: dateReq,
             priority: priorities.join(','),
@@ -374,9 +386,15 @@ function EditModal({ project, vof, onClose }: { project: HubProject; vof: VofRow
                     <input type="number" style={inputStyle} placeholder="0.00" min="0" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} />
                 </Field>
             </div>
-            <div style={{ marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <Field label="Description / Justification">
                     <textarea rows={3} style={inputStyle} placeholder="Describe the variation and why it is needed…" value={desc} onChange={e => setDesc(e.target.value)} />
+                </Field>
+                <Field label="Duration (Calendar Days)">
+                    <div style={{ display: 'flex', gap: '0' }}>
+                        <input type="number" min="0" step="1" style={{ ...inputStyle, borderRadius: '7px 0 0 7px', borderRight: 'none' }} placeholder="e.g., 15" value={duration} onChange={e => setDuration(e.target.value)} />
+                        <span style={{ padding: '8px 12px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '0 7px 7px 0', fontSize: '12.5px', color: '#475569', whiteSpace: 'nowrap' }}>Days</span>
+                    </div>
                 </Field>
             </div>
             <div style={{ marginBottom: '20px' }}>

@@ -32,7 +32,7 @@ class UserController extends Controller
                 'deleted_at' => $user->deleted_at,
             ]),
             'roles' => Role::orderBy('name')->pluck('name'),
-            'departments' => Department::orderBy('name')->get(['name', 'description'])->map(fn (Department $row) => [
+            'departments' => Department::where('is_active', true)->orderBy('name')->get(['name', 'description'])->map(fn (Department $row) => [
                 'value'        => (string) $row->name,
                 'label'        => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,
                 'displayLabel' => (string) $row->name,

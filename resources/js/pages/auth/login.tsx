@@ -120,7 +120,6 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             onChange={e => setData('email', e.target.value)}
                             onFocus={() => setFocusedField('email')}
                             onBlur={() => setFocusedField(null)}
-                            placeholder="you@example.com"
                             style={{ ...inputStyle('email', !!errors.email), paddingLeft: '38px' }}
                         />
                     </div>
@@ -149,7 +148,6 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                             onChange={e => setData('password', e.target.value)}
                             onFocus={() => setFocusedField('password')}
                             onBlur={() => setFocusedField(null)}
-                            placeholder="Enter your password"
                             style={{ ...inputStyle('password', !!errors.password), paddingLeft: '38px', paddingRight: '42px' }}
                         />
                         {/* Show/hide toggle */}

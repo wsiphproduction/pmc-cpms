@@ -14,7 +14,7 @@ class ProjectRequestPolicy
 
     public function view(User $user, ProjectRequest $projectRequest): bool
     {
-        if ($user->hasRole(['approver', 'admin'])) {
+        if ($user->hasRole(['approver', 'assistant_manager', 'admin'])) {
             return true;
         }
 
@@ -29,9 +29,12 @@ class ProjectRequestPolicy
     public function update(User $user, ProjectRequest $projectRequest): bool
     {
         // Editing a request is the department user's (requester's) responsibility,
-        // and only while it is still pending. Approvers/admins review, give
-        // technical feedback and decide — they do not edit the request content.
-        return $projectRequest->requester_id === $user->id && $projectRequest->status === 'pending';
+        // while it is still awaiting a decision — that is, "pending" (For Approval)
+        // or "hold" (an engineer commented and the requester must respond).
+        // Approvers/admins review, give technical feedback and decide — they do
+        // not edit the request content.
+        return $projectRequest->requester_id === $user->id
+            && in_array($projectRequest->status, ['pending', 'hold'], true);
     }
 
     public function delete(User $user, ProjectRequest $projectRequest): bool
@@ -41,6 +44,9 @@ class ProjectRequestPolicy
 
     public function decide(User $user, ProjectRequest $projectRequest): bool
     {
-        return $user->hasRole(['approver', 'admin']) && $projectRequest->status === 'pending';
+        // Approvers/admins can approve or reject while the request is still open
+        // for a decision — either awaiting approval or on hold.
+        return $user->hasRole(['approver', 'assistant_manager', 'admin'])
+            && in_array($projectRequest->status, ['pending', 'hold'], true);
     }
 }

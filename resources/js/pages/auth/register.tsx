@@ -127,7 +127,6 @@ export default function Register() {
                             onFocus={() => setFocused('name')}
                             onBlur={() => setFocused(null)}
                             disabled={processing}
-                            placeholder="Your full name"
                             style={inputStyle('name', !!errors.name)}
                         />
                     </div>
@@ -153,7 +152,6 @@ export default function Register() {
                             onFocus={() => setFocused('email')}
                             onBlur={() => setFocused(null)}
                             disabled={processing}
-                            placeholder="you@example.com"
                             style={inputStyle('email', !!errors.email)}
                         />
                     </div>
@@ -179,7 +177,6 @@ export default function Register() {
                             onFocus={() => setFocused('password')}
                             onBlur={() => setFocused(null)}
                             disabled={processing}
-                            placeholder="Create a strong password"
                             style={{ ...inputStyle('password', !!errors.password), paddingRight: '42px' }}
                         />
                         <EyeToggle show={showPassword} onToggle={() => setShowPassword(p => !p)} />
@@ -205,7 +202,6 @@ export default function Register() {
                             onFocus={() => setFocused('confirm')}
                             onBlur={() => setFocused(null)}
                             disabled={processing}
-                            placeholder="Re-enter your password"
                             style={{ ...inputStyle('confirm', !!errors.password_confirmation), paddingRight: '42px' }}
                         />
                         <EyeToggle show={showConfirm} onToggle={() => setShowConfirm(p => !p)} />

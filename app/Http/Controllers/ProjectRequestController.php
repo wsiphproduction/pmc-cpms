@@ -24,7 +24,7 @@ class ProjectRequestController extends Controller
         $query = ProjectRequest::with(['requester', 'project'])->latest();
 
         $user = $request->user();
-        if (!$user->hasRole(['approver', 'admin'])) {
+        if (!$user->hasRole(['approver', 'assistant_manager', 'admin'])) {
             $query->where('requester_id', $user->id);
         }
 
@@ -59,9 +59,9 @@ class ProjectRequestController extends Controller
         $this->authorize('create', ProjectRequest::class);
 
         return Inertia::render('requests/create', [
-            'jobTypes'     => JobType::orderBy('name')->get(['id', 'name']),
-            'jobLocations' => JobLocation::orderBy('name')->get(['id', 'name']),
-            'costCodes'    => CostCode::orderBy('name')->get(['id', 'name', 'description']),
+            'jobTypes'     => JobType::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'jobLocations' => JobLocation::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'costCodes'    => CostCode::where('is_active', true)->orderBy('name')->get(['id', 'name', 'description']),
         ]);
     }
 
@@ -79,9 +79,9 @@ class ProjectRequestController extends Controller
             'capex'           => ['boolean'],
             'for_budgeting'   => ['boolean'],
 
-            'attachments'               => ['required', 'array', 'min:1'],
-            'attachments.*.file'        => ['required', 'file'],
-            'attachments.*.type'        => ['required', 'string', 'in:picture,drawing,report'],
+            'attachments'               => ['nullable', 'array'],
+            'attachments.*.file'        => ['nullable', 'file'],
+            'attachments.*.type'        => ['required_with:attachments.*.file', 'string', 'in:picture,drawing,report,other'],
             'attachments.*.description' => ['nullable', 'string', 'max:255'],
         ]);
 
@@ -139,28 +139,56 @@ class ProjectRequestController extends Controller
 
         return Inertia::render('requests/edit', [
             'projectRequest' => $projectRequest->load('attachments'),
-            'jobTypes'       => JobType::orderBy('name')->get(['id', 'name']),
-            'jobLocations'   => JobLocation::orderBy('name')->get(['id', 'name']),
-            'costCodes'      => CostCode::orderBy('name')->get(['id', 'name']),
+            'jobTypes'       => JobType::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'jobLocations'   => JobLocation::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'costCodes'      => CostCode::where('is_active', true)->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
     public function update(Request $request, ProjectRequest $projectRequest): RedirectResponse
     {
-        // Status-only patch (approve/reject from index or show page)
+        // Status-only patch (approve/reject/resume from index or show page)
         if ($request->has('status') && count($request->all()) === 1) {
             $this->authorize('decide', $projectRequest);
 
+            $link = route('requests.show', $projectRequest->id, absolute: false);
+
+            // "resume" lifts a hold and restores the status the request had before it.
+            if ($request->status === 'resume') {
+                $restored = $projectRequest->status_before_hold ?: 'pending';
+
+                $projectRequest->update([
+                    'status'             => $restored,
+                    'status_before_hold' => null,
+                ]);
+
+                Notification::notify(
+                    $projectRequest->requester_id,
+                    "Project Request #{$projectRequest->request_no} was taken OFF HOLD (status: " . ucfirst($restored) . ").",
+                    $link
+                );
+
+                return back()->with('success', 'Request resumed.');
+            }
+
             $request->validate([
-                'status' => ['required', 'string', 'in:approved,rejected,ongoing,completed,pending'],
+                'status' => ['required', 'string', 'in:approved,rejected,ongoing,completed,pending,hold'],
             ]);
 
-            $projectRequest->update(['status' => $request->status]);
+            $old = $projectRequest->status;
+
+            $projectRequest->update([
+                'status'             => $request->status,
+                // Remember the pre-hold status when moving TO hold; clear it otherwise.
+                'status_before_hold' => $request->status === 'hold'
+                    ? ($projectRequest->status_before_hold ?: $old)
+                    : null,
+            ]);
 
             Notification::notify(
                 $projectRequest->requester_id,
                 "Project Request #{$projectRequest->request_no} status was changed to: " . ucfirst($request->status),
-                route('requests.show', $projectRequest->id, absolute: false)
+                $link
             );
 
             return back()->with('success', 'Request status updated.');
@@ -181,20 +209,16 @@ class ProjectRequestController extends Controller
 
             'attachments'               => ['nullable', 'array'],
             'attachments.*.file'        => ['nullable', 'file'],
-            'attachments.*.type'        => ['required_with:attachments.*.file', 'string', 'in:picture,drawing,report'],
+            'attachments.*.type'        => ['required_with:attachments.*.file', 'string', 'in:picture,drawing,report,other'],
             'attachments.*.description' => ['nullable', 'string', 'max:255'],
 
             'deleted_attachments'   => ['nullable', 'array'],
             'deleted_attachments.*' => ['integer'],
         ]);
 
-        $existingCount = $projectRequest->attachments()->count();
-        $deletedCount  = count($request->input('deleted_attachments', []));
-        $newFileCount  = count(array_filter($request->file('attachments', []), fn ($a) => !empty($a['file'])));
-
-        if ($existingCount - $deletedCount + $newFileCount < 1) {
-            return back()->withErrors(['attachments' => 'At least one attachment is required.'])->withInput();
-        }
+        // If the request is currently ON HOLD, the requester editing it means they
+        // have addressed the engineer's concern — resume the pre-hold status.
+        $wasHold = $projectRequest->status === 'hold';
 
         $projectRequest->update([
             'title'         => $request->title,
@@ -206,6 +230,13 @@ class ProjectRequestController extends Controller
             'capex'         => $request->boolean('capex'),
             'for_budgeting' => $request->boolean('for_budgeting'),
         ]);
+
+        if ($wasHold) {
+            $projectRequest->update([
+                'status'             => $projectRequest->status_before_hold ?: 'pending',
+                'status_before_hold' => null,
+            ]);
+        }
 
         // Delete removed attachments
         if ($request->filled('deleted_attachments')) {
@@ -261,7 +292,7 @@ class ProjectRequestController extends Controller
             $type = $request->input("attachments.{$index}.type", 'other');
             $desc = $request->input("attachments.{$index}.description");
 
-            $type = in_array($type, ['picture', 'drawing', 'report'], true) ? $type : 'other';
+            $type = in_array($type, ['picture', 'drawing', 'report', 'other'], true) ? $type : 'other';
 
             $folder   = "requests/{$projectRequest->id}/{$type}s";
             $filepath = $file->store($folder, 'public');
@@ -280,7 +311,7 @@ class ProjectRequestController extends Controller
     private function notifyApprovers(string $message, ProjectRequest $projectRequest): void
     {
         Notification::notify(
-            User::whereHas('roles', fn ($q) => $q->where('name', 'approver'))->pluck('id'),
+            User::whereHas('roles', fn ($q) => $q->whereIn('name', ['approver', 'assistant_manager']))->pluck('id'),
             $message,
             route('requests.show', $projectRequest->id, absolute: false)
         );

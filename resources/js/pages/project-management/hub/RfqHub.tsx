@@ -21,6 +21,8 @@ interface RfqRow {
     quotation_file?: string | null;
     recipient_email?: string | null;
     has_ntp: boolean;
+    ntp_status?: 'pending_review' | 'issued' | 'rejected' | null;
+    audit_trail?: { action: string; user: string; date: string; type: string }[];
     items?: RfqItem[];
 }
 
@@ -435,17 +437,18 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
     };
 
     return (
-        <Modal title="Generate Notice to Proceed" onClose={onClose} headerBg="#059669" size="480px"
+        <Modal title="Submit Notice to Proceed for Review" onClose={onClose} headerBg="#059669" size="480px"
             footer={<>
                 <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Cancel</button>
                 <button type="button" onClick={handleIssue} disabled={saving} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#059669', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
-                    {saving ? 'Issuing...' : 'Issue Notice to Proceed'}
+                    {saving ? 'Submitting...' : 'Submit for Review'}
                 </button>
             </>}
         >
             {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginBottom: '12px' }}>{error}</div>}
             <div style={{ padding: '10px 14px', background: '#e0f2fe', border: '1px solid #bae6fd', borderRadius: '8px', marginBottom: '18px', fontSize: '12.5px', color: '#075985' }}>
-                Issuing NTP for: <strong>{row.contractor}</strong>
+                This NTP will be sent to the department user for review before it is issued.<br />
+                For: <strong>{row.contractor}</strong>
                 {calendarDays != null && <> · Duration: <strong>{calendarDays} calendar day{calendarDays === 1 ? '' : 's'}</strong></>}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
@@ -558,6 +561,38 @@ function SupplierSelect({ suppliers, value, onChange, usedContractors }: {
     );
 }
 
+// ── RFQ Audit Trail Modal ──────────────────────────────────────────────────
+function RfqHistoryModal({ row, onClose }: { row: RfqRow; onClose: () => void }) {
+    const entries = row.audit_trail ?? [];
+    const dotColor: Record<string, string> = {
+        create: '#2563eb', update: '#f59e0b', delete: '#dc2626', upload: '#0891b2', finance: '#059669',
+    };
+
+    return (
+        <Modal title={`Audit Trail — ${row.contractor}`} onClose={onClose} size="520px" headerBg="#0f172a"
+            footer={<button type="button" onClick={onClose} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#0f172a', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Close</button>}
+        >
+            {entries.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: '13px' }}>
+                    No history recorded for this RFQ yet.
+                </div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {entries.map((e, i) => (
+                        <div key={i} style={{ display: 'flex', gap: '12px', padding: '10px 4px', borderBottom: i < entries.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                            <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: dotColor[e.type] ?? '#64748b', marginTop: '4px', flexShrink: 0 }} />
+                            <div style={{ flex: 1 }}>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', lineHeight: 1.4 }}>{e.action}</div>
+                                <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>{e.date} · {e.user}</div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </Modal>
+    );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }: { project: HubProject; rfqs: RfqRow[]; suppliers?: { name: string; email: string }[]; canEdit?: boolean }) {
     const [dispatchContractor, setDispatchContractor] = useState('');
@@ -567,6 +602,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
     const [showSendModal, setShowSendModal]   = useState(false);
     const [viewRow, setViewRow]           = useState<RfqRow | null>(null);
     const [ntpRow, setNtpRow]             = useState<RfqRow | null>(null);
+    const [historyRow, setHistoryRow]     = useState<RfqRow | null>(null);
     const [sending, setSending]           = useState(false);
     const [sendError, setSendError]       = useState('');
 
@@ -652,23 +688,19 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
         setTimeout(() => { win.print(); win.close(); }, 250);
     };
 
-    const filePreviewCell = (row: RfqRow) => {
-        if (!row.quotation_file) return <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>;
-        return (
-            <a
-                href={row.quotation_file}
-                target="_blank"
-                rel="noreferrer"
-                title="View quotation file"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '6px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb', fontSize: '11.5px', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}
-            >
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                View File
-            </a>
-        );
-    };
+    // Quotation stays editable at any status until an NTP has been created for it.
+    const canEditRfq = (row: RfqRow) => canEdit && !row.has_ntp;
 
-    const canEditRfq = (row: RfqRow) => canEdit && row.status !== 'Submitted' && row.status !== 'Awarded' && !row.has_ntp;
+    const historyBtn = (row: RfqRow) => (
+        <button
+            type="button"
+            title="View audit history"
+            onClick={() => setHistoryRow(row)}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '5px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer' }}
+        >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </button>
+    );
 
     const viewOrEditBtns = (row: RfqRow) => (
         <ActionBtns
@@ -684,19 +716,27 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
-                {canEdit && (row.has_ntp ? (
-                    <span style={{ padding: '5px 12px', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', fontSize: '11.5px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                        ✓ NTP Issued
-                    </span>
-                ) : (
-                    <Button variant="success" onClick={() => setNtpRow(row)}>Create NTP</Button>
-                ))}
+                {historyBtn(row)}
+                {canEdit && (
+                    row.ntp_status === 'issued' ? (
+                        <span style={{ padding: '5px 12px', borderRadius: '6px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d', fontSize: '11.5px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            ✓ NTP Issued
+                        </span>
+                    ) : row.ntp_status === 'pending_review' ? (
+                        <span style={{ padding: '5px 12px', borderRadius: '6px', background: '#fef3c7', border: '1px solid #fde68a', color: '#92400e', fontSize: '11.5px', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            ⏳ NTP Pending Review
+                        </span>
+                    ) : (
+                        <Button variant="success" onClick={() => setNtpRow(row)}>Create NTP</Button>
+                    )
+                )}
             </div>
         );
         if (row.status === 'Submitted') return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
+                {historyBtn(row)}
                 {canEdit && <ActionBtns trophy onTrophy={() => handleStatus(row, 'awarded', 'Awarded')} />}
                 {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
             </div>
@@ -708,16 +748,17 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
+                {historyBtn(row)}
                 {canEdit && (
                     <>
                         <button
                             type="button"
                             disabled={!canReceive}
-                            title={canReceive ? 'Mark as Received / Submitted' : 'Add an itemized quotation with a total cost before marking as received'}
-                            onClick={() => canReceive && handleStatus(row, 'submitted', 'Submitted')}
+                            title={canReceive ? 'Accept the submitted quotation' : 'Add an itemized quotation with a total cost before accepting'}
+                            onClick={() => canReceive && handleStatus(row, 'submitted', 'Accepted')}
                             style={{ padding: '5px 10px', borderRadius: '6px', border: `1px solid ${canReceive ? '#bbf7d0' : '#e5e7eb'}`, background: canReceive ? '#f0fdf4' : '#f8fafc', color: canReceive ? '#15803d' : '#cbd5e1', fontSize: '11px', fontWeight: 700, cursor: canReceive ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}
                         >
-                            ✓ Received
+                            ✓ Accept
                         </button>
                         <button
                             type="button"
@@ -737,6 +778,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
+                {historyBtn(row)}
                 {canEdit && <ActionBtns refresh onRefresh={() => handleStatus(row, 'pending', 'Re-activated')} />}
                 {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
             </div>
@@ -758,6 +800,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             )}
             {viewRow       && <RfqViewModal row={viewRow} project={project} onClose={() => setViewRow(null)} canEdit={canEditRfq(viewRow)} />}
             {ntpRow        && <NtpModal row={ntpRow} project={project} onClose={() => setNtpRow(null)} />}
+            {historyRow    && <RfqHistoryModal row={historyRow} onClose={() => setHistoryRow(null)} />}
 
             {canEdit && (
                 <>
@@ -803,11 +846,14 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             </div>
 
             <DataTable
-                headers={['Contractor Name', 'Sent Date', 'Due Date', 'Status', 'Total Amount', 'File', 'Actions']}
+                headers={['Contractor Name', 'Scope of Work', 'Sent Date', 'Due Date', 'Status', 'Total Amount', 'Actions']}
                 rows={rfqs.map(row => {
                     const grandTotal = (row.items ?? []).reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
                     return [
                         <strong>{row.contractor}</strong>,
+                        row.scope_of_work
+                            ? <span title={row.scope_of_work} style={{ display: 'block', minWidth: '220px', maxWidth: '440px', fontSize: '12.5px', color: '#475569', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>{row.scope_of_work}</span>
+                            : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
                         row.sent,
                         row.due,
                         <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>,
@@ -821,7 +867,6 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                                 </div>
                             )
                             : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
-                        filePreviewCell(row),
                         actionCell(row),
                     ];
                 })}

@@ -1,5 +1,7 @@
+import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import { DataTable, HubProject, HubShell, InfoStrip, SectionTitle } from './Common';
+import { useConfirm } from '@/components/useConfirm';
 
 interface ScopeItem {
     seq: number;
@@ -19,13 +21,39 @@ interface NtpData {
     baseline_start: string;
     baseline_end: string;
     approved_cost: number;
+    status: string;
     issued_date: string;
+    reviewed_by: string | null;
+    review_remarks: string | null;
+    sub_project_id: number | null;
+    sub_project_no: string | null;
     scope_items: ScopeItem[];
 }
 
-export default function NtpHub({ project, ntps }: { project: HubProject; ntps: NtpData[]; canEdit?: boolean }) {
+const NTP_STATUS_META: Record<string, { label: string; bg: string; border: string; color: string }> = {
+    pending_review: { label: '⏳ Pending Review', bg: '#fef3c7', border: '#fde68a', color: '#92400e' },
+    issued:         { label: '✓ Issued',          bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d' },
+    rejected:       { label: '✕ Rejected',        bg: '#fef2f2', border: '#fecaca', color: '#dc2626' },
+};
+
+function NtpStatusBadge({ status }: { status: string }) {
+    const m = NTP_STATUS_META[status] ?? { label: status, bg: '#f1f5f9', border: '#e2e8f0', color: '#475569' };
+    return (
+        <span style={{ padding: '3px 10px', borderRadius: '999px', background: m.bg, border: `1px solid ${m.border}`, color: m.color, fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap' }}>{m.label}</span>
+    );
+}
+
+export default function NtpHub({ project, ntps, canEdit = true }: { project: HubProject; ntps: NtpData[]; canEdit?: boolean }) {
     const [selected, setSelected] = useState<NtpData | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+
+    // Only rejected NTPs may be deleted — issued/pending ones are protected.
+    const handleDelete = (ntp: NtpData) => {
+        showConfirm(`Delete rejected NTP ${ntp.ntp_no}? This cannot be undone.`, () => {
+            router.delete(route('hub.ntp.destroy', [project.id, ntp.id]), { preserveScroll: true });
+        }, { title: 'Delete NTP', confirmLabel: 'Delete', variant: 'danger' });
+    };
 
     const handlePrint = () => {
         const content = printRef.current;
@@ -52,6 +80,7 @@ export default function NtpHub({ project, ntps }: { project: HubProject; ntps: N
     if (!selected) {
         return (
             <HubShell>
+                {confirmDialog}
                 <div style={{ borderBottom: '2px solid #059669', paddingBottom: '14px', marginBottom: '24px' }}>
                     <h3 style={{ color: '#059669', margin: '0 0 4px' }}>NOTICE TO PROCEED</h3>
                     <span style={{ color: '#64748b', fontSize: '12px' }}>Official Authorization for Project Commencement</span>
@@ -67,7 +96,7 @@ export default function NtpHub({ project, ntps }: { project: HubProject; ntps: N
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['NTP No.', 'Contractor', 'Baseline Start', 'Baseline End', 'Approved Cost', 'Issued Date', ''].map(h => (
+                                {['NTP No.', 'Contractor', 'Baseline Start', 'Baseline End', 'Approved Cost', 'Status', 'Issued Date', ''].map(h => (
                                     <th key={h} style={{ padding: '9px 14px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>{h}</th>
                                 ))}
                             </tr>
@@ -82,16 +111,58 @@ export default function NtpHub({ project, ntps }: { project: HubProject; ntps: N
                                     <td style={{ padding: '10px 14px', fontSize: '13px', color: '#0f172a', fontWeight: 600, borderBottom: '1px solid #f1f5f9' }}>
                                         Php {ntp.approved_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </td>
-                                    <td style={{ padding: '10px 14px', fontSize: '13px', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{ntp.issued_date}</td>
                                     <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelected(ntp)}
-                                            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                                        >
-                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                            View
-                                        </button>
+                                        <NtpStatusBadge status={ntp.status} />
+                                        {ntp.status === 'rejected' && ntp.review_remarks && (
+                                            <div title={ntp.review_remarks} style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ntp.review_remarks}</div>
+                                        )}
+                                    </td>
+                                    <td style={{ padding: '10px 14px', fontSize: '13px', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{ntp.status === 'issued' ? ntp.issued_date : '—'}</td>
+                                    <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}>
+                                        <div style={{ display: 'flex', gap: '6px' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelected(ntp)}
+                                                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#166534', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                            >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                View
+                                            </button>
+                                            {/* Sub-project: one per issued NTP. Create it, or jump to it if it exists. */}
+                                            {ntp.status === 'issued' && ntp.sub_project_id && (
+                                                <button
+                                                    type="button"
+                                                    title={`Open sub-project ${ntp.sub_project_no ?? ''}`}
+                                                    onClick={() => router.visit(route('projects.show', ntp.sub_project_id!))}
+                                                    style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #c7d2fe', background: '#eef2ff', color: '#4338ca', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                                >
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M7 16l4-4 3 3 5-5"/></svg>
+                                                    View Sub-Project
+                                                </button>
+                                            )}
+                                            {canEdit && ntp.status === 'issued' && !ntp.sub_project_id && (
+                                                <button
+                                                    type="button"
+                                                    title="Create a sub-project from this issued NTP"
+                                                    onClick={() => router.visit(route('projects.create', { parent: project.id, ntp: ntp.id }))}
+                                                    style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#047857', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                                >
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                    Create Sub-Project
+                                                </button>
+                                            )}
+                                            {canEdit && ntp.status === 'rejected' && (
+                                                <button
+                                                    type="button"
+                                                    title="Delete rejected NTP"
+                                                    onClick={() => handleDelete(ntp)}
+                                                    style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                                >
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                                    Delete
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

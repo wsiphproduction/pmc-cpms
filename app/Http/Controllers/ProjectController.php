@@ -12,6 +12,7 @@ use App\Models\Notification;
 use App\Models\Priority;
 use App\Models\Project;
 use App\Models\ProjectCompletion;
+use App\Models\ProjectNtp;
 use App\Models\ProjectRequest;
 use App\Models\ServiceType;
 use App\Models\Setting;
@@ -45,10 +46,12 @@ class ProjectController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = Project::with(['manager', 'creator'])->latest();
+        // Sub-projects live under their parent's operations hub and are never
+        // listed here — the management list only shows top-level projects.
+        $query = Project::with(['manager', 'creator'])->whereNull('parent_id')->latest();
 
         $user = $request->user();
-        if (!$user->hasRole(['approver', 'admin'])) {
+        if (!$user->hasRole(['approver', 'assistant_manager', 'admin'])) {
             $query->whereHas('projectRequest', fn ($q) => $q->where('requester_id', $user->id));
         }
 
@@ -100,6 +103,29 @@ class ProjectController extends Controller
     {
         $this->authorize('create', Project::class);
 
+        // Sub-project mode: started from an issued NTP on a parent project.
+        if ($request->filled('parent') && $request->filled('ntp')) {
+            $parent = Project::findOrFail($request->integer('parent'));
+            $ntp = ProjectNtp::where('project_id', $parent->id)->findOrFail($request->integer('ntp'));
+
+            abort_unless($ntp->status === 'issued', 422, 'Sub-projects can only be created from an issued NTP.');
+            abort_if(Project::where('source_ntp_id', $ntp->id)->exists(), 409, 'This NTP already has a sub-project.');
+
+            return Inertia::render('project-management/create', [
+                'next_project_no' => $this->subProjectNo($parent),
+                'project' => $this->subProjectFormData($parent, $ntp),
+                'sub_context' => [
+                    'parent_id'     => $parent->id,
+                    'parent_no'     => $parent->project_no,
+                    'parent_title'  => $parent->title,
+                    'source_ntp_id' => $ntp->id,
+                    'ntp_no'        => $ntp->ntp_no,
+                    'contractor'    => $ntp->contractor_name,
+                ],
+                ...$this->masterDataOptions(),
+            ]);
+        }
+
         $projectRequest = $request->filled('request_id')
             ? ProjectRequest::with(['project', 'requester'])->findOrFail($request->integer('request_id'))
             : null;
@@ -109,6 +135,7 @@ class ProjectController extends Controller
         return Inertia::render('project-management/create', [
             'next_project_no' => $this->nextProjectNo(),
             'project' => $projectRequest ? $this->projectFormDataFromRequest($projectRequest) : null,
+            'sub_context' => null,
             ...$this->masterDataOptions(),
         ]);
     }
@@ -126,13 +153,30 @@ class ProjectController extends Controller
         abort_if($sourceRequest && $sourceRequest->status !== 'approved', 422, 'Only approved requests can be converted to projects.');
         abort_if($sourceRequest?->project, 409, 'This project request already has a project.');
 
-        if ($data['project_type'] === 'major' && !$request->hasFile('proposal_document')) {
+        // Sub-project mode: validate the parent/NTP pairing and derive the number.
+        $sub = $request->validate([
+            'parent_id'     => ['nullable', 'exists:projects,id'],
+            'source_ntp_id' => ['nullable', 'exists:project_ntps,id'],
+        ]);
+        $parent = null;
+        if (!empty($sub['parent_id'])) {
+            $parent = Project::findOrFail($sub['parent_id']);
+            $ntp = ProjectNtp::where('project_id', $parent->id)->findOrFail($sub['source_ntp_id']);
+            abort_unless($ntp->status === 'issued', 422, 'Sub-projects can only be created from an issued NTP.');
+            abort_if(Project::where('source_ntp_id', $ntp->id)->exists(), 409, 'This NTP already has a sub-project.');
+        }
+
+        // Major projects need an approved proposal — except sub-projects, which
+        // inherit the parent's already-approved proposal.
+        if (!$parent && $data['project_type'] === 'major' && !$request->hasFile('proposal_document')) {
             return back()->withErrors(['proposal_document' => 'Approved proposal document is required for major projects.'])->withInput();
         }
 
         $project = Project::create([
             'project_request_id' => $data['project_request_id'] ?? null,
-            'project_no' => $this->nextProjectNo(),
+            'parent_id' => $parent?->id,
+            'source_ntp_id' => $parent ? $sub['source_ntp_id'] : null,
+            'project_no' => $parent ? $this->subProjectNo($parent) : $this->nextProjectNo(),
             'title' => $data['title'],
             'project_manager_id' => $manager?->id,
             'project_manager_name' => $manager?->name,
@@ -149,6 +193,7 @@ class ProjectController extends Controller
             'category' => $data['category'],
             'service_type' => $data['service_type'],
             'deadline' => $data['deadline'],
+            'budget_total' => $data['project_cost'] ?? 0,
             'owner_email' => $data['owner_email'] ?? null,
             'structure_type' => $data['structure_type'] ?? null,
             'jip' => $request->boolean('jip'),
@@ -181,16 +226,23 @@ class ProjectController extends Controller
         }
 
         return redirect()->route('projects.show', $project)
-            ->with('success', 'Project registered successfully.');
+            ->with('success', $parent ? 'Sub-project created successfully.' : 'Project registered successfully.');
     }
 
     public function show(Project $project): Response
     {
         $this->authorize('view', $project);
 
+        // Department users (requesters) get a read-only summary with the RFQ list
+        // only — the full operations hub is hidden from them.
+        $deptView = auth()->user()->hasRole('requestor');
+
         return Inertia::render('project-management/show', [
-            'project'    => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user', 'completion'])),
-            'hub_counts' => $this->hubCounts($project),
+            'project'        => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user', 'completion', 'parent', 'children'])),
+            'hub_counts'     => $this->hubCounts($project),
+            'is_dept_view'   => $deptView,
+            'active_section' => $deptView ? 'rfq' : null,
+            'hub_data'       => $deptView ? $this->hubSectionData($project, 'rfq') : [],
         ]);
     }
 
@@ -233,6 +285,7 @@ class ProjectController extends Controller
             'category' => $data['category'],
             'service_type' => $data['service_type'],
             'deadline' => $data['deadline'],
+            'budget_total' => $data['project_cost'] ?? 0,
             'owner_email' => $data['owner_email'] ?? null,
             'structure_type' => $data['structure_type'] ?? null,
             'jip' => $request->boolean('jip'),
@@ -366,13 +419,18 @@ class ProjectController extends Controller
         $validSections = ['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
-        $project->load(['manager', 'creator', 'statusLogs.user', 'completion']);
+        $project->load(['manager', 'creator', 'statusLogs.user', 'completion', 'parent', 'children']);
+
+        // Department users only ever see the read-only RFQ list, never the rest
+        // of the hub — force the section regardless of which URL they hit.
+        $deptView = auth()->user()->hasRole('requestor');
 
         return Inertia::render('project-management/show', [
             'project'        => $this->projectDetailData($project),
-            'active_section' => $section,
-            'hub_data'       => $this->hubSectionData($project, $section),
+            'active_section' => $deptView ? 'rfq' : $section,
+            'hub_data'       => $this->hubSectionData($project, $deptView ? 'rfq' : $section),
             'hub_counts'     => $this->hubCounts($project),
+            'is_dept_view'   => $deptView,
         ]);
     }
 
@@ -396,6 +454,24 @@ class ProjectController extends Controller
 
     private function hubSectionData(Project $project, string $section): array
     {
+        // Per-RFQ audit history: project audit entries tagged with an rfq_id,
+        // grouped so each RFQ row can show its own trail.
+        $rfqAudits = $section === 'rfq'
+            ? AuditTrail::where('reference_type', Project::class)
+                ->where('reference_id', $project->id)
+                ->with('user')
+                ->latest()
+                ->get()
+                ->filter(fn ($a) => !empty($a->changes['rfq_id']))
+                ->groupBy(fn ($a) => (int) $a->changes['rfq_id'])
+            : collect();
+
+        // Sub-projects keyed by the NTP they were spawned from, so each NTP row
+        // can show either a "Create Sub-Project" or "View Sub-Project" action.
+        $subProjectsByNtp = $section === 'ntp'
+            ? $project->children()->whereNotNull('source_ntp_id')->get()->keyBy('source_ntp_id')
+            : collect();
+
         return match ($section) {
             'rfq' => [
                 'rfqs' => $project->rfqs()->with('items')->get()->map(fn ($rfq) => [
@@ -412,7 +488,15 @@ class ProjectController extends Controller
                     'exclusions'      => $rfq->exclusions,
                     'quotation_file'  => $rfq->quotation_file ? Storage::disk('public')->url($rfq->quotation_file) : null,
                     'recipient_email' => $rfq->recipient_email,
-                    'has_ntp'         => $project->ntps()->where('project_rfq_id', $rfq->id)->exists(),
+                    // A rejected NTP no longer blocks the RFQ — treat it as "no NTP".
+                    'has_ntp'         => $project->ntps()->where('project_rfq_id', $rfq->id)->where('status', '!=', 'rejected')->exists(),
+                    'ntp_status'      => optional($project->ntps()->where('project_rfq_id', $rfq->id)->where('status', '!=', 'rejected')->first())->status,
+                    'audit_trail'     => ($rfqAudits[$rfq->id] ?? collect())->map(fn ($a) => [
+                        'action' => $a->action,
+                        'user'   => $a->user?->name ?? 'System',
+                        'date'   => $a->created_at?->format('M d, Y h:i A') ?? '-',
+                        'type'   => $a->changes['type'] ?? 'update',
+                    ])->values(),
                     'items'           => $rfq->items->map(fn ($item) => [
                         'seq'        => $item->seq,
                         'description'=> $item->description,
@@ -422,20 +506,26 @@ class ProjectController extends Controller
                         'total_cost' => $item->total_cost,
                     ]),
                 ])->values(),
-                'suppliers' => Supplier::orderBy('company')->get(['company', 'email'])
+                'suppliers' => Supplier::where('is_active', true)->orderBy('company')->get(['company', 'email'])
                     ->map(fn ($s) => ['name' => $s->company, 'email' => $s->email ?? ''])
                     ->values(),
             ],
 
             'ntp' => [
-                'ntps' => $project->ntps()->with('rfq.items')->get()->map(fn ($ntp) => [
+                'ntps' => $project->ntps()->with('rfq.items', 'reviewer')->get()->map(fn ($ntp) => [
                     'id'             => $ntp->id,
                     'ntp_no'         => $ntp->ntp_no,
                     'contractor'     => $ntp->contractor_name,
                     'baseline_start' => optional($ntp->baseline_start)->format('M d, Y') ?? '-',
                     'baseline_end'   => optional($ntp->baseline_end)->format('M d, Y') ?? '-',
                     'approved_cost'  => (float) $ntp->approved_cost,
+                    'status'         => $ntp->status,
                     'issued_date'    => optional($ntp->issued_date)->format('M d, Y') ?? '-',
+                    'reviewed_by'    => $ntp->reviewer->name ?? null,
+                    'review_remarks' => $ntp->review_remarks,
+                    // One sub-project per issued NTP — drives the Create/View button.
+                    'sub_project_id' => optional($subProjectsByNtp->get($ntp->id))->id,
+                    'sub_project_no' => optional($subProjectsByNtp->get($ntp->id))->project_no,
                     'scope_items'    => $ntp->rfq
                         ? $ntp->rfq->items->map(fn ($item) => [
                             'seq'         => $item->seq,
@@ -470,6 +560,7 @@ class ProjectController extends Controller
                     'title'             => $vo->title,
                     'description'       => $vo->description,
                     'amount'            => (float) $vo->amount,
+                    'duration_days'     => $vo->duration_days,
                     'status'            => ucfirst($vo->status),
                     'submitted_date'    => optional($vo->submitted_date)->format('M d, Y') ?? '-',
                     'approved_date'     => optional($vo->approved_date)->format('Y-m-d'),
@@ -514,6 +605,7 @@ class ProjectController extends Controller
             ],
 
             'rfp' => [
+                'can_manage_status' => auth()->user()->can('manageBillingStatus', $project),
                 'ntps'     => $project->ntps()->get()->map(fn ($n) => [
                     'id'            => $n->id,
                     'ntp_no'        => $n->ntp_no,
@@ -540,6 +632,7 @@ class ProjectController extends Controller
                     'recommendation'      => $b->recommendation,
                     'ntp_id'              => $b->project_ntp_id,
                     'ntp_no'              => $b->ntp?->ntp_no,
+                    'ntp_date'            => optional($b->ntp?->issued_date)->format('M d, Y'),
                     'ntp_contractor'      => $b->ntp?->contractor_name,
                     'ntp_approved_cost'   => $b->ntp ? (float) $b->ntp->approved_cost : null,
                     'status_logs'         => $b->statusLogs->map(fn ($log) => [
@@ -554,7 +647,7 @@ class ProjectController extends Controller
             ],
 
             'ioc', 'acr' => [
-                'cost_codes' => CostCode::orderBy('name')->get(['name'])
+                'cost_codes' => CostCode::where('is_active', true)->orderBy('name')->get(['name'])
                     ->map(fn ($row) => ['value' => (string) $row->name, 'label' => (string) $row->name])
                     ->values(),
                 'iocs' => $project->iocItems()->get()->map(fn ($item) => [
@@ -569,7 +662,12 @@ class ProjectController extends Controller
             ],
 
             'psr' => [
-                'reports' => $project->weeklyReports()->get()->map(fn ($r) => [
+                'ntps' => $project->ntps()->get()->map(fn ($n) => [
+                    'id'         => $n->id,
+                    'ntp_no'     => $n->ntp_no,
+                    'contractor' => $n->contractor_name,
+                ])->values(),
+                'reports' => $project->weeklyReports()->with('ntp')->get()->map(fn ($r) => [
                     'id'                => $r->id,
                     'week_code'         => $r->week_code,
                     'completion_pct'    => $r->completion_pct,
@@ -578,6 +676,9 @@ class ProjectController extends Controller
                     'submitted_date'    => optional($r->submitted_date)->format('M d, Y') ?? '-',
                     'filename'          => $r->filename,
                     'url'               => $r->file_path ? Storage::disk('public')->url($r->file_path) : null,
+                    'ntp_id'            => $r->project_ntp_id,
+                    'ntp_no'            => $r->ntp?->ntp_no,
+                    'ntp_contractor'    => $r->ntp?->contractor_name,
                 ])->values(),
             ],
 
@@ -631,6 +732,7 @@ class ProjectController extends Controller
             'category' => ['required', 'string', 'max:255'],
             'service_type' => ['required', 'string', 'max:255'],
             'deadline' => ['required', 'date'],
+            'project_cost' => ['nullable', 'numeric', 'min:0'],
             'owner_email' => ['nullable', 'email', 'max:255'],
             'structure_type' => ['nullable', 'string', 'max:255'],
             'jip' => ['boolean'],
@@ -650,27 +752,28 @@ class ProjectController extends Controller
         return [
             'managers' => User::orderBy('name')->get(['id', 'name'])
                 ->map(fn (User $user) => ['value' => (string) $user->id, 'label' => $user->name]),
-            'sites' => Site::orderBy('name')->get(['name'])->map($option),
-            'assets' => Structure::orderBy('name')->get(['name'])->map($option),
-            'departments' => Department::orderBy('name')->get(['name', 'description'])->map(fn ($row) => [
+            'sites' => Site::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
+            'assets' => Structure::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
+            'departments' => Department::where('is_active', true)->orderBy('name')->get(['name', 'description'])->map(fn ($row) => [
                 'value' => (string) $row->name,
                 'label' => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,
                 'displayLabel' => (string) $row->name,
             ]),
-            'classes' => MasterClass::orderBy('name')->get(['name'])->map($option),
-            'priorities' => Priority::orderByRaw('CASE WHEN sequence_no IS NULL THEN 1 ELSE 0 END, sequence_no ASC')
+            'classes' => MasterClass::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
+            'priorities' => Priority::where('is_active', true)
+                ->orderByRaw('CASE WHEN sequence_no IS NULL THEN 1 ELSE 0 END, sequence_no ASC')
                 ->orderBy('name')
                 ->get(['name'])
                 ->map($option),
-            'statuses' => MasterStatus::orderBy('name')->get(['name'])->map(fn ($row) => [
+            'statuses' => MasterStatus::where('is_active', true)->orderBy('name')->get(['name'])->map(fn ($row) => [
                 'value' => $this->statusKeyFromName($row->name),
                 'label' => $row->name,
             ])->values(),
-            'workForces' => WorkForce::orderBy('name')->get(['name'])->map($option),
-            'costCodes' => CostCode::orderBy('name')->get(['name'])->map($option),
-            'categories' => Category::orderBy('name')->get(['name'])->map($option),
-            'serviceTypes' => ServiceType::orderBy('name')->get(['name'])->map($option),
-            'structures' => Structure::orderBy('name')->get(['name'])->map($option),
+            'workForces' => WorkForce::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
+            'costCodes' => CostCode::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
+            'categories' => Category::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
+            'serviceTypes' => ServiceType::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
+            'structures' => Structure::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
         ];
     }
 
@@ -708,6 +811,40 @@ class ProjectController extends Controller
         $next = $latest ? ((int) substr($latest, -4)) + 1 : 1;
 
         return 'PRJ-' . $year . '-' . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Sub-project numbers derive from the parent (e.g. PRJ-2026-0001 → …-01, -02),
+     * making the relationship obvious at a glance. Sequence is per-parent.
+     */
+    private function subProjectNo(Project $parent): string
+    {
+        $latest = Project::withTrashed()
+            ->where('parent_id', $parent->id)
+            ->where('project_no', 'like', $parent->project_no . '-%')
+            ->orderByDesc('project_no')
+            ->value('project_no');
+
+        $next = $latest ? ((int) substr($latest, -2)) + 1 : 1;
+
+        return $parent->project_no . '-' . str_pad((string) $next, 2, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Prefill the project form for a sub-project: carry over the parent's
+     * details, then overlay what the NTP defines (contractor cost, baseline
+     * end date, and a title that identifies the NTP). Fully editable after.
+     */
+    private function subProjectFormData(Project $parent, ProjectNtp $ntp): array
+    {
+        return [
+            ...$this->projectFormData($parent),
+            'id' => null,
+            'title' => "{$parent->title} — {$ntp->ntp_no}" . ($ntp->contractor_name ? " ({$ntp->contractor_name})" : ''),
+            'status' => 'PLANNING',
+            'project_cost' => $ntp->approved_cost !== null ? (float) $ntp->approved_cost : (float) $parent->budget_total,
+            'deadline' => optional($ntp->baseline_end)->format('Y-m-d') ?? optional($parent->deadline)->format('Y-m-d'),
+        ];
     }
 
     private function projectListData(Project $project): array
@@ -792,6 +929,21 @@ class ProjectController extends Controller
             ]),
             'completion'  => $this->completionData($project),
             'signatories' => $this->signatoryData($project),
+            // Sub-project links: the parent (if this is a sub-project) and any
+            // children (if this is a parent). Hidden from the management list,
+            // so this is the primary way to navigate between them.
+            'parent' => $project->parent ? [
+                'id'         => $project->parent->id,
+                'project_no' => $project->parent->project_no,
+                'title'      => $project->parent->title,
+            ] : null,
+            'sub_projects' => $project->children->map(fn (Project $child) => [
+                'id'                 => $child->id,
+                'project_no'         => $child->project_no,
+                'title'              => $child->title,
+                'status'             => self::STATUS_LABELS[$child->status_key] ?? $child->status_key,
+                'completion_percent' => $child->completion_percent,
+            ])->values(),
             'can' => [
                 'update' => auth()->user()->can('update', $project),
                 'delete' => auth()->user()->can('delete', $project),
@@ -876,6 +1028,7 @@ class ProjectController extends Controller
             'category' => $project->category,
             'service_type' => $project->service_type,
             'deadline' => optional($project->deadline)->format('Y-m-d'),
+            'project_cost' => (float) $project->budget_total,
             'owner_email' => $project->owner_email ?? '',
             'structure_type' => $project->structure_type ?? '',
             'jip' => $project->jip,

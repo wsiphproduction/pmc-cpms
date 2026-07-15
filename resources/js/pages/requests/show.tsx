@@ -8,7 +8,7 @@ interface Attachment {
     id: number;
     filename: string;
     filepath: string;
-    type: 'picture' | 'drawing' | 'report' | null;
+    type: 'picture' | 'drawing' | 'report' | 'other' | null;
     description: string | null;
     url: string;
 }
@@ -36,7 +36,7 @@ interface ProjectRequestData {
     opex: boolean;
     capex: boolean;
     for_budgeting: boolean;
-    status: 'pending' | 'approved' | 'ongoing' | 'rejected' | 'completed';
+    status: 'pending' | 'approved' | 'hold' | 'ongoing' | 'rejected' | 'completed';
     requester: User | null;
     project: { id: number; project_no: string } | null;
     attachments: Attachment[];
@@ -98,8 +98,9 @@ function InfoValue({ children }: { children: React.ReactNode }) {
 
 function StatusBadge({ status }: { status: ProjectRequestData['status'] }) {
     const map: Record<ProjectRequestData['status'], { bg: string; color: string; label: string }> = {
-        pending:   { bg: '#fef9c3', color: '#854d0e', label: '⏳ Pending Review' },
+        pending:   { bg: '#fef9c3', color: '#854d0e', label: '⏳ For Approval' },
         approved:  { bg: '#dcfce7', color: '#166534', label: '✓ Approved' },
+        hold:      { bg: '#ffedd5', color: '#9a3412', label: '⏸ On Hold' },
         ongoing:   { bg: '#dbeafe', color: '#1e40af', label: '⚡ Ongoing' },
         rejected:  { bg: '#fee2e2', color: '#991b1b', label: '✗ Rejected' },
         completed: { bg: '#f3f4f6', color: '#374151', label: '✔ Completed' },
@@ -409,25 +410,32 @@ function FeedbackSection({ feedbacks, onEdit, onDelete }: {
 }
 
 // ── Comments Section ───────────────────────────────────────────────────────
-function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
+function CommentsSection({ projectRequestId, canComment }: { projectRequestId: number; canComment: boolean }) {
     const [comments, setComments] = useState<Comment[]>([]);
     const [loading, setLoading] = useState(true);
     const [newComment, setNewComment] = useState('');
     const [posting, setPosting] = useState(false);
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
-    const csrfToken = () =>
-        (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+    // Read Laravel's XSRF-TOKEN cookie (refreshed on every response) rather than
+    // the <meta> tag, which is baked in at initial load and goes stale after
+    // Inertia reloads / session-token rotation — the cause of CSRF mismatches.
+    const xsrfToken = () =>
+        decodeURIComponent(
+            document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))?.split('=')[1] ?? ''
+        );
 
-    useEffect(() => {
-        setLoading(true);
+    const loadComments = () =>
         fetch(route('comments.index', projectRequestId), {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         })
             .then(r => r.json())
             .then(data => setComments(data))
-            .catch(console.error)
-            .finally(() => setLoading(false));
+            .catch(console.error);
+
+    useEffect(() => {
+        setLoading(true);
+        loadComments().finally(() => setLoading(false));
     }, [projectRequestId]);
 
     const postComment = async () => {
@@ -439,14 +447,23 @@ function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json',
-                    'X-CSRF-TOKEN': csrfToken(),
+                    'X-XSRF-TOKEN': xsrfToken(),
                 },
                 body: JSON.stringify({ content: newComment.trim() }),
             });
             if (res.ok) {
                 const comment = await res.json();
-                setComments(prev => [...prev, comment]);
+                setComments(prev => [...prev, comment]); // instant feedback
                 setNewComment('');
+                // The comment may have flipped the request to HOLD server-side.
+                // Reload the projectRequest prop for the status badge, then re-sync
+                // the comment list from the server once the reload settles (so the
+                // re-render can't clobber the freshly-posted comment).
+                // reload() keeps scroll + component state automatically.
+                router.reload({
+                    only: ['projectRequest'],
+                    onFinish: () => loadComments(),
+                });
             }
         } catch (err) {
             console.error(err);
@@ -460,7 +477,7 @@ function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
             try {
                 const res = await fetch(route('comments.destroy', id), {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': csrfToken(), 'Accept': 'application/json' },
+                    headers: { 'X-XSRF-TOKEN': xsrfToken(), 'Accept': 'application/json' },
                 });
                 if (res.ok) setComments(prev => prev.filter(c => c.id !== id));
             } catch (err) {
@@ -498,15 +515,17 @@ function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
                                         <span style={{ fontSize: '13px', fontWeight: 700, color: '#374151' }}>{c.author}</span>
                                         <span style={{ fontSize: '11.5px', color: '#9ca3af' }}>{c.date}</span>
                                     </div>
-                                    <button
-                                        onClick={() => deleteComment(c.id)}
-                                        title="Delete comment"
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', display: 'flex', padding: '2px', borderRadius: '4px' }}
-                                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
-                                        onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
-                                    >
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                                    </button>
+                                    {canComment && (
+                                        <button
+                                            onClick={() => deleteComment(c.id)}
+                                            title="Delete comment"
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', display: 'flex', padding: '2px', borderRadius: '4px' }}
+                                            onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                                            onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
+                                        >
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                        </button>
+                                    )}
                                 </div>
                                 <p style={{ fontSize: '13px', color: '#334155', margin: 0, lineHeight: 1.6, paddingLeft: '34px' }}>{c.content}</p>
                             </div>
@@ -514,26 +533,28 @@ function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
                     </div>
                 )}
 
-                <div>
-                    <textarea
-                        rows={3}
-                        value={newComment}
-                        onChange={e => setNewComment(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postComment(); }}
-                        placeholder="Write a comment… (Ctrl+Enter to submit)"
-                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e5e7eb', fontSize: '13px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                        onFocus={e => (e.target.style.borderColor = '#2563eb')}
-                        onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
-                    />
-                    <button
-                        onClick={postComment}
-                        disabled={posting || !newComment.trim()}
-                        style={{ marginTop: '8px', padding: '9px 20px', borderRadius: '8px', background: posting || !newComment.trim() ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: posting || !newComment.trim() ? 'not-allowed' : 'pointer', transition: 'background 0.15s', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                    >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                        {posting ? 'Posting…' : 'Post Comment'}
-                    </button>
-                </div>
+                {canComment && (
+                    <div>
+                        <textarea
+                            rows={3}
+                            value={newComment}
+                            onChange={e => setNewComment(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postComment(); }}
+                            placeholder="Write a comment… (Ctrl+Enter to submit)"
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e5e7eb', fontSize: '13px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
+                            onFocus={e => (e.target.style.borderColor = '#2563eb')}
+                            onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
+                        />
+                        <button
+                            onClick={postComment}
+                            disabled={posting || !newComment.trim()}
+                            style={{ marginTop: '8px', padding: '9px 20px', borderRadius: '8px', background: posting || !newComment.trim() ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: posting || !newComment.trim() ? 'not-allowed' : 'pointer', transition: 'background 0.15s', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                            {posting ? 'Posting…' : 'Post Comment'}
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -547,7 +568,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
     const role = auth?.user?.role ?? null;
     // Technical feedback is an engineer/approver responsibility — department
     // users (requestors) submit and edit requests, they don't review them.
-    const canGiveFeedback = role === 'approver' || role === 'admin';
+    const canGiveFeedback = role === 'approver' || role === 'assistant_manager' || role === 'admin';
 
     const [showFeedback, setShowFeedback] = useState(false);
     const [editingFeedback, setEditingFeedback] = useState<FeedbackEntry | null>(null);
@@ -559,7 +580,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
     // rows that predate the `type` column (a PDF report used to be mis-bucketed
     // as a drawing because both share the .pdf extension).
     const bucketOf = (a: Attachment): 'picture' | 'drawing' | 'report' | 'other' => {
-        if (a.type === 'picture' || a.type === 'drawing' || a.type === 'report') return a.type;
+        if (a.type === 'picture' || a.type === 'drawing' || a.type === 'report' || a.type === 'other') return a.type;
         const ext = getExt(a.filename);
         if (['jpg','jpeg','png','gif','webp'].includes(ext)) return 'picture';
         if (['pdf','dwg'].includes(ext)) return 'drawing';
@@ -574,6 +595,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
 
     const handleApprove = () => router.patch(route('requests.update', projectRequest.id), { status: 'approved' });
     const handleReject  = () => router.patch(route('requests.update', projectRequest.id), { status: 'rejected' });
+    const handleResume  = () => router.patch(route('requests.update', projectRequest.id), { status: 'resume' });
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
     const handleDelete  = () => {
@@ -622,6 +644,12 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                         <button onClick={openNewFeedback} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#0891b2', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                             Add Feedback
+                        </button>
+                    )}
+                    {projectRequest.status === 'hold' && projectRequest.can.decide && (
+                        <button onClick={handleResume} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: 'none', background: '#f59e0b', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                            Resume (Take off Hold)
                         </button>
                     )}
                     {projectRequest.status === 'approved' && !projectRequest.project && projectRequest.can.canCreateProject && (
@@ -781,7 +809,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
 
             <FeedbackSection feedbacks={feedbacks} onEdit={openEditFeedback} onDelete={deleteFeedback} />
 
-            <CommentsSection projectRequestId={projectRequest.id} />
+            <CommentsSection projectRequestId={projectRequest.id} canComment={role === 'approver' || role === 'admin'} />
         </AuthenticatedLayout>
     );
 }

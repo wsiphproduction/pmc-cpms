@@ -17,7 +17,7 @@ interface ProjectRequest {
     title: string;
     job_type: string;
     job_location: string;
-    status: 'approved' | 'pending' | 'ongoing' | 'rejected' | 'completed';
+    status: 'approved' | 'pending' | 'hold' | 'ongoing' | 'rejected' | 'completed';
     costcode: string | null;
     created_at: string | null;
     requester?: { name: string; department?: string | null };
@@ -66,17 +66,18 @@ type RequestDecision = 'approved' | 'rejected';
 
 // ── Status Badge ───────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: ProjectRequest['status'] }) {
-    const map: Record<ProjectRequest['status'], { bg: string; color: string }> = {
-        approved:  { bg: '#dcfce7', color: '#166534' },
-        pending:   { bg: '#fef9c3', color: '#854d0e' },
-        ongoing:   { bg: '#dbeafe', color: '#1e40af' },
-        rejected:  { bg: '#fee2e2', color: '#991b1b' },
-        completed: { bg: '#f3f4f6', color: '#374151' },
+    const map: Record<ProjectRequest['status'], { bg: string; color: string; label: string }> = {
+        approved:  { bg: '#dcfce7', color: '#166534', label: 'Approved' },
+        pending:   { bg: '#fef9c3', color: '#854d0e', label: 'For Approval' },
+        hold:      { bg: '#ffedd5', color: '#9a3412', label: 'Hold' },
+        ongoing:   { bg: '#dbeafe', color: '#1e40af', label: 'Ongoing' },
+        rejected:  { bg: '#fee2e2', color: '#991b1b', label: 'Rejected' },
+        completed: { bg: '#f3f4f6', color: '#374151', label: 'Completed' },
     };
-    const s = map[status] ?? { bg: '#f3f4f6', color: '#374151' };
+    const s = map[status] ?? { bg: '#f3f4f6', color: '#374151', label: status };
     return (
         <span style={{ padding: '3px 10px', borderRadius: '99px', fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.3px', background: s.bg, color: s.color }}>
-            {status}
+            {s.label}
         </span>
     );
 }
@@ -103,15 +104,19 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
     const [posting, setPosting]       = useState(false);
     const bottomRef                   = useRef<HTMLDivElement>(null);
 
-    const csrfToken = () =>
-        (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content ?? '';
+    // Read Laravel's XSRF-TOKEN cookie (refreshed on every response) rather than
+    // the <meta> tag, which goes stale after Inertia reloads / session rotation.
+    const xsrfToken = () =>
+        decodeURIComponent(
+            document.cookie.split('; ').find(c => c.startsWith('XSRF-TOKEN='))?.split('=')[1] ?? ''
+        );
 
     // Load comments when modal opens
     useEffect(() => {
         if (!request) return;
         setLoading(true);
         fetch(route('comments.index', request.id), {
-            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken() },
+            headers: { 'Accept': 'application/json', 'X-XSRF-TOKEN': xsrfToken() },
         })
             .then(r => r.json())
             .then(data => setComments(data))
@@ -133,7 +138,7 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
                 headers: {
                     'Content-Type':  'application/json',
                     'Accept':        'application/json',
-                    'X-CSRF-TOKEN':  csrfToken(),
+                    'X-XSRF-TOKEN':  xsrfToken(),
                 },
                 body: JSON.stringify({ content: newComment.trim() }),
             });
@@ -141,6 +146,10 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
                 const comment = await res.json();
                 setComments(prev => [...prev, comment]);
                 setNewComment('');
+                // An approver's comment may have flipped the request to HOLD —
+                // refresh the list so the status column reflects it. reload() keeps
+                // scroll + component state automatically, so the modal stays open.
+                router.reload({ only: ['requests'] });
             }
         } catch (err) {
             console.error(err);
@@ -156,7 +165,7 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
             try {
                 await fetch(route('comments.destroy', id), {
                     method: 'DELETE',
-                    headers: { 'X-CSRF-TOKEN': csrfToken(), 'Accept': 'application/json' },
+                    headers: { 'X-XSRF-TOKEN': xsrfToken(), 'Accept': 'application/json' },
                 });
                 setComments(prev => prev.filter(c => c.id !== id));
             } catch (err) {
@@ -312,10 +321,17 @@ function AdvancedSearchModal({ filters, onClose }: { filters: Filters; onClose: 
                     <div>
                         <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '7px' }}>Status</label>
                         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                            {['approved','pending','ongoing','rejected','completed'].map(s => (
-                                <label key={s} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#374151', cursor: 'pointer', textTransform: 'capitalize' }}>
-                                    <input type="checkbox" checked={statuses.includes(s)} onChange={() => toggleStatus(s)} style={{ cursor: 'pointer', accentColor: '#2563eb' }} />
-                                    {s}
+                            {[
+                                { value: 'approved',  label: 'Approved' },
+                                { value: 'pending',   label: 'For Approval' },
+                                { value: 'hold',      label: 'Hold' },
+                                { value: 'ongoing',   label: 'Ongoing' },
+                                { value: 'rejected',  label: 'Rejected' },
+                                { value: 'completed', label: 'Completed' },
+                            ].map(({ value, label }) => (
+                                <label key={value} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#374151', cursor: 'pointer' }}>
+                                    <input type="checkbox" checked={statuses.includes(value)} onChange={() => toggleStatus(value)} style={{ cursor: 'pointer', accentColor: '#2563eb' }} />
+                                    {label}
                                 </label>
                             ))}
                         </div>

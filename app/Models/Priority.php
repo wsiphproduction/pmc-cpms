@@ -13,5 +13,10 @@ class Priority extends Model
         'name',
         'sequence_no',
         'description',
+        'is_active',
+    ];
+
+    protected $casts = [
+        'is_active' => 'boolean',
     ];
 }

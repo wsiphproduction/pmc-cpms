@@ -18,7 +18,7 @@ class TechnicalFeedbackController extends Controller
      */
     public function store(Request $request, ProjectRequest $projectRequest): RedirectResponse
     {
-        abort_unless($request->user()->hasRole(['approver', 'admin']), 403);
+        abort_unless($request->user()->hasRole(['approver', 'assistant_manager', 'admin']), 403);
 
         $data = $this->validated($request);
 

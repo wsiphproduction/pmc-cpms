@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Button, DataTable, Field, HubProject, HubShell, Modal, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface PsrRow { id: number; week_code: string; completion_pct: number; identified_issues: string | null; progress_updates: string | null; submitted_date: string; filename: string | null; url: string | null }
+interface PsrRow { id: number; week_code: string; completion_pct: number; identified_issues: string | null; progress_updates: string | null; submitted_date: string; filename: string | null; url: string | null; ntp_id: number | null; ntp_no: string | null; ntp_contractor: string | null }
+interface NtpOption { id: number; ntp_no: string; contractor: string }
 
 function ProgressBar({ value }: { value: number }) {
     return (
@@ -99,11 +100,12 @@ function ViewReportModal({ report, onClose }: { report: PsrRow; onClose: () => v
 }
 
 // ── Weekly Report Modal ────────────────────────────────────────────────────
-function ReportModal({ project, onClose }: { project: HubProject; onClose: () => void }) {
+function ReportModal({ project, ntps, onClose }: { project: HubProject; ntps: NtpOption[]; onClose: () => void }) {
     const [weekCode, setWeekCode]   = useState('');
     const [pct, setPct]             = useState('');
     const [issues, setIssues]       = useState('');
     const [updates, setUpdates]     = useState('');
+    const [ntpId, setNtpId]         = useState('');
     const [saving, setSaving]       = useState(false);
     const [error, setError]         = useState('');
 
@@ -115,6 +117,7 @@ function ReportModal({ project, onClose }: { project: HubProject; onClose: () =>
         setError('');
         setSaving(true);
         router.post(route('hub.psr.store', project.id), {
+            project_ntp_id: ntpId || null,
             week_code: weekCode,
             completion_pct: pct,
             identified_issues: issues,
@@ -199,6 +202,17 @@ function ReportModal({ project, onClose }: { project: HubProject; onClose: () =>
                 style={{ ...inputStyle, borderRadius: '0 0 0 0', border: '1px solid #000', marginBottom: '16px', resize: 'vertical' }}
             />
 
+            {ntps.length > 0 && (
+                <div style={{ marginBottom: '14px' }}>
+                    <Field label="Notice to Proceed / Contractor (optional)">
+                        <select style={inputStyle} value={ntpId} onChange={e => setNtpId(e.target.value)}>
+                            <option value="">— Whole project (no specific NTP) —</option>
+                            {ntps.map(n => <option key={n.id} value={String(n.id)}>{n.ntp_no} — {n.contractor}</option>)}
+                        </select>
+                    </Field>
+                </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '14px' }}>
                 <Field label="Week Code (e.g. W1-OCT)">
                     <input style={inputStyle} placeholder="e.g. W1-OCT" value={weekCode} onChange={e => setWeekCode(e.target.value)} />
@@ -214,11 +228,81 @@ function ReportModal({ project, onClose }: { project: HubProject; onClose: () =>
     );
 }
 
+// ── CSV Bulk Import Modal ──────────────────────────────────────────────────
+function ImportModal({ project, onClose }: { project: HubProject; onClose: () => void }) {
+    const [file, setFile]     = useState<File | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [error, setError]   = useState('');
+
+    const handleSubmit = () => {
+        if (!file) { setError('Please choose a CSV file first.'); return; }
+        setError('');
+        setSaving(true);
+        router.post(route('hub.psr.import', project.id), { file }, {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: onClose,
+            onFinish: () => setSaving(false),
+        });
+    };
+
+    const downloadTemplate = () => {
+        const csv = 'week_code,completion_pct,identified_issues,progress_updates,submitted_date,ntp_no\n'
+            + 'W1-OCT,25,Delayed delivery of materials,Foundation works started,2026-10-07,\n'
+            + 'W2-OCT,40,,Column rebars installed,2026-10-14,\n';
+        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'psr-template.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    return (
+        <Modal title="Bulk Upload Weekly Reports (CSV)" onClose={onClose} size="560px"
+            footer={<>
+                {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginRight: 'auto' }}>{error}</div>}
+                <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Close</button>
+                <button type="button" onClick={handleSubmit} disabled={saving} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#0f172a', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
+                    {saving ? 'Importing...' : 'Import Reports'}
+                </button>
+            </>}
+        >
+            <div style={{ fontSize: '13px', color: '#475569', marginBottom: '14px', lineHeight: 1.5 }}>
+                Upload a CSV to add many weekly reports at once. The header row is matched
+                case-insensitively. Only <strong>week_code</strong> is required per row.
+            </div>
+            <ul style={{ fontSize: '12.5px', color: '#475569', margin: '0 0 16px', paddingLeft: '18px', lineHeight: 1.6 }}>
+                <li><strong>week_code</strong> — e.g. W1-OCT (required)</li>
+                <li><strong>completion_pct</strong> — 0–100</li>
+                <li><strong>identified_issues</strong>, <strong>progress_updates</strong> — free text</li>
+                <li><strong>submitted_date</strong> — e.g. 2026-10-07 (defaults to today)</li>
+                <li><strong>ntp_no</strong> — matches an NTP on this project (optional)</li>
+            </ul>
+            <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={e => setFile(e.target.files?.[0] ?? null)}
+                style={{ ...inputStyle, padding: '8px' }}
+            />
+            <button type="button" onClick={downloadTemplate}
+                style={{ marginTop: '12px', background: 'transparent', border: 'none', color: '#2563eb', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+                ↓ Download CSV template
+            </button>
+        </Modal>
+    );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function PsrHub({ project, reports, canEdit = true }: { project: HubProject; reports: PsrRow[]; canEdit?: boolean }) {
-    const [showModal, setShowModal] = useState(false);
-    const [viewing, setViewing]     = useState<PsrRow | null>(null);
+export default function PsrHub({ project, reports, ntps = [], canEdit = true }: { project: HubProject; reports: PsrRow[]; ntps?: NtpOption[]; canEdit?: boolean }) {
+    const [showModal, setShowModal]   = useState(false);
+    const [showImport, setShowImport] = useState(false);
+    const [viewing, setViewing]       = useState<PsrRow | null>(null);
+    const [ntpFilter, setNtpFilter]   = useState('');
     const progress = reports[0]?.completion_pct ?? project.completion_percent ?? 0;
+
+    const ntpOptions = Array.from(new Set(reports.map(r => r.ntp_no).filter((v): v is string => !!v))).sort();
+    const filteredReports = reports.filter(r => !ntpFilter || r.ntp_no === ntpFilter);
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
@@ -231,8 +315,9 @@ export default function PsrHub({ project, reports, canEdit = true }: { project: 
     return (
         <HubShell>
             {confirmDialog}
-            {showModal && <ReportModal project={project} onClose={() => setShowModal(false)} />}
-            {viewing   && <ViewReportModal report={viewing} onClose={() => setViewing(null)} />}
+            {showModal  && <ReportModal project={project} ntps={ntps} onClose={() => setShowModal(false)} />}
+            {showImport && <ImportModal project={project} onClose={() => setShowImport(false)} />}
+            {viewing    && <ViewReportModal report={viewing} onClose={() => setViewing(null)} />}
 
             {/* Summary card */}
             <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '22px', marginBottom: '22px', display: 'grid', gridTemplateColumns: '180px 190px 1fr', gap: '22px', alignItems: 'center' }}>
@@ -249,7 +334,12 @@ export default function PsrHub({ project, reports, canEdit = true }: { project: 
                 <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                         <h4 style={{ margin: 0, color: '#2563eb', fontSize: '14px' }}>Weekly Execution Phase</h4>
-                        {canEdit && <Button variant="dark" onClick={() => setShowModal(true)}>Add New Weekly Report</Button>}
+                        {canEdit && (
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                <Button variant="outline" onClick={() => setShowImport(true)}>Bulk Upload CSV</Button>
+                                <Button variant="dark" onClick={() => setShowModal(true)}>Add New Weekly Report</Button>
+                            </div>
+                        )}
                     </div>
                     <div style={{ background: '#e0f2fe', color: '#075985', borderRadius: '8px', padding: '10px 12px', fontSize: '12.5px', fontWeight: 600 }}>
                         A total of <strong>27 critical site checklists</strong> must be verified weekly by the site supervisor and approved by the QA/QC manager.
@@ -257,10 +347,36 @@ export default function PsrHub({ project, reports, canEdit = true }: { project: 
                 </div>
             </div>
 
+            {/* NTP filter */}
+            {ntpOptions.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-end', marginBottom: '12px' }}>
+                    <div>
+                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>NTP / Contractor</label>
+                        <select value={ntpFilter} onChange={e => setNtpFilter(e.target.value)}
+                            style={{ ...inputStyle, padding: '6px 8px', minWidth: '200px' }}>
+                            <option value="">All NTPs</option>
+                            {ntpOptions.map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                    </div>
+                    {ntpFilter && (
+                        <button type="button" onClick={() => setNtpFilter('')}
+                            style={{ padding: '7px 14px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12px', fontWeight: 600, color: '#475569', cursor: 'pointer' }}>
+                            Clear filter
+                        </button>
+                    )}
+                    <div style={{ marginLeft: 'auto', fontSize: '12px', color: '#64748b', paddingBottom: '7px' }}>
+                        Showing <strong>{filteredReports.length}</strong> of {reports.length}
+                    </div>
+                </div>
+            )}
+
             <DataTable
-                headers={['Week#', '% Completion', 'Identified Issues', 'Submitted Date', 'Attachment', 'Actions']}
-                rows={reports.map(r => [
+                headers={['Week#', 'NTP / Contractor', '% Completion', 'Identified Issues', 'Submitted Date', 'Attachment', 'Actions']}
+                rows={filteredReports.map(r => [
                     <strong style={{ color: '#2563eb' }}>{r.week_code}</strong>,
+                    r.ntp_no
+                        ? <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>{r.ntp_no}{r.ntp_contractor ? ` — ${r.ntp_contractor}` : ''}</span>
+                        : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>Whole project</span>,
                     <ProgressBar value={r.completion_pct} />,
                     <span style={{ fontSize: '12.5px' }}>{r.identified_issues ?? '—'}</span>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{r.submitted_date}</span>,

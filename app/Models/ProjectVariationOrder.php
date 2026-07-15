@@ -16,6 +16,7 @@ class ProjectVariationOrder extends Model
         'title',
         'description',
         'amount',
+        'duration_days',
         'status',
         'submitted_date',
         'approved_date',

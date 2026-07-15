@@ -9,8 +9,18 @@ interface SelectOption {
     displayLabel?: string;
 }
 
+interface SubContext {
+    parent_id: number;
+    parent_no: string;
+    parent_title: string;
+    source_ntp_id: number;
+    ntp_no: string;
+    contractor: string;
+}
+
 interface Props {
     next_project_no: string;
+    sub_context?: SubContext | null;
     managers: SelectOption[];
     sites: SelectOption[];
     assets: SelectOption[];
@@ -43,6 +53,7 @@ interface ProjectFormData {
     category: string;
     service_type: string;
     deadline: string;
+    project_cost: string;
     owner_email: string;
     structure_type: string;
     jip: boolean;
@@ -212,6 +223,7 @@ function CheckToggle({ id, label, checked, onChange, isSwitch }: {
 // ── Main Page ──────────────────────────────────────────────────────────────
 export default function ProjectCreate({
     next_project_no,
+    sub_context,
     managers,
     sites,
     assets,
@@ -247,6 +259,7 @@ export default function ProjectCreate({
         category:        project?.category ?? '',
         service_type:    project?.service_type ?? '',
         deadline:        project?.deadline ?? '',
+        project_cost:    project?.project_cost != null ? String(project.project_cost) : '',
         owner_email:     project?.owner_email ?? '',
         structure_type:  project?.structure_type ?? '',
         jip:             project?.jip ?? false,
@@ -266,14 +279,19 @@ export default function ProjectCreate({
         e.preventDefault();
         clearErrors('proposal_document' as any);
 
-        // Client-side guard: major projects need a proposal document
-        if (data.project_type === 'major' && !proposalFile && !project?.proposal_document_url) {
+        // Client-side guard: major projects need a proposal document.
+        // Sub-projects are exempt — they inherit the parent's approved proposal.
+        if (!sub_context && data.project_type === 'major' && !proposalFile && !project?.proposal_document_url) {
             setError('proposal_document' as any, 'Approved proposal document is required for major projects.');
             return;
         }
 
         const payload: Record<string, string | boolean | File | null> = { ...data };
         if (proposalFile) payload.proposal_document = proposalFile;
+        if (sub_context) {
+            payload.parent_id = String(sub_context.parent_id);
+            payload.source_ntp_id = String(sub_context.source_ntp_id);
+        }
 
         if (isEditing) {
             router.post(route('projects.update', project!.id!), { ...payload, _method: 'put' }, { forceFormData: true });
@@ -288,19 +306,40 @@ export default function ProjectCreate({
 
     return (
         <AuthenticatedLayout>
-            <Head title={isEditing ? 'Edit Project' : 'Create New Project'} />
+            <Head title={sub_context ? 'Create Sub-Project' : isEditing ? 'Edit Project' : 'Create New Project'} />
 
             {/* Page Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px' }}>
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.3px' }}>
-                    {isEditing ? 'Edit Project' : 'Create New Project'}
+                    {sub_context ? 'Create Sub-Project' : isEditing ? 'Edit Project' : 'Create New Project'}
                 </h1>
                 <nav style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12.5px', color: '#9ca3af' }}>
                     <Link href={route('projects.index')} style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>Projects</Link>
                     <span>/</span>
-                    <span style={{ color: '#374151' }}>{isEditing ? 'Edit' : 'Add New'}</span>
+                    {sub_context ? (
+                        <>
+                            <Link href={route('projects.show', sub_context.parent_id)} style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 500 }}>{sub_context.parent_no}</Link>
+                            <span>/</span>
+                            <span style={{ color: '#374151' }}>New Sub-Project</span>
+                        </>
+                    ) : (
+                        <span style={{ color: '#374151' }}>{isEditing ? 'Edit' : 'Add New'}</span>
+                    )}
                 </nav>
             </div>
+
+            {/* Sub-project context banner */}
+            {sub_context && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 18px', marginBottom: '20px', borderRadius: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M3 3v18h18"/><path d="M7 16l4-4 3 3 5-5"/></svg>
+                    <div style={{ fontSize: '12.5px', color: '#166534', lineHeight: 1.5 }}>
+                        Creating a sub-project under{' '}
+                        <strong>{sub_context.parent_no} — {sub_context.parent_title}</strong>, spawned from{' '}
+                        <strong>NTP {sub_context.ntp_no}</strong>{sub_context.contractor ? <> ({sub_context.contractor})</> : null}.
+                        <span style={{ color: '#15803d', opacity: 0.85 }}> Fields are prefilled from the parent — adjust as needed.</span>
+                    </div>
+                </div>
+            )}
 
             <form onSubmit={handleSubmit}>
                 <div style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '30px', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
@@ -577,7 +616,17 @@ export default function ProjectCreate({
                             />
                         </div>
                     </div>
-                    <div style={{ ...col2, marginBottom: '20px' }}>
+                    <div style={{ ...col3, marginBottom: '20px' }}>
+                        <div>
+                            <FormLabel>Project Cost (PhP)</FormLabel>
+                            <InputField
+                                type="number"
+                                value={data.project_cost}
+                                onChange={set('project_cost')}
+                                placeholder="0.00"
+                                error={errors.project_cost}
+                            />
+                        </div>
                         <div>
                             <FormLabel>Project Owner's Email</FormLabel>
                             <InputField
@@ -601,22 +650,11 @@ export default function ProjectCreate({
                         </div>
                     </div>
 
-                    {/* Spec Box */}
-                    <div style={{ background: '#f1f5f9', borderRadius: '10px', padding: '18px 22px', marginBottom: '20px', display: 'grid', gridTemplateColumns: '1fr 3fr', gap: '0', alignItems: 'center' }}>
-                        <div style={{ borderRight: '1px solid #e2e8f0', paddingRight: '20px' }}>
-                            <CheckToggle
-                                id="jip"
-                                label="JIP"
-                                checked={data.jip}
-                                onChange={v => setData('jip', v)}
-                                isSwitch
-                            />
-                        </div>
-                        <div style={{ paddingLeft: '24px', display: 'flex', gap: '32px', flexWrap: 'wrap' }}>
-                            <CheckToggle id="civil"    label="Civil Works Plans"  checked={data.need_civil}      onChange={v => setData('need_civil', v)} />
-                            <CheckToggle id="elec"     label="Electrical Plans"   checked={data.need_electrical} onChange={v => setData('need_electrical', v)} />
-                            <CheckToggle id="mech"     label="Mechanical Plans"   checked={data.need_mechanical} onChange={v => setData('need_mechanical', v)} />
-                        </div>
+                    {/* Spec Box — JIP hidden per request; jip stays in form state (false) */}
+                    <div style={{ background: '#f1f5f9', borderRadius: '10px', padding: '18px 22px', marginBottom: '20px', display: 'flex', gap: '32px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <CheckToggle id="civil"    label="Civil Works Plans"  checked={data.need_civil}      onChange={v => setData('need_civil', v)} />
+                        <CheckToggle id="elec"     label="Electrical Plans"   checked={data.need_electrical} onChange={v => setData('need_electrical', v)} />
+                        <CheckToggle id="mech"     label="Mechanical Plans"   checked={data.need_mechanical} onChange={v => setData('need_mechanical', v)} />
                     </div>
 
                     {/* Notes */}
@@ -666,7 +704,7 @@ export default function ProjectCreate({
                             ) : (
                                 <>
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                                    {isEditing ? 'Update Project' : 'Register Project'}
+                                    {sub_context ? 'Create Sub-Project' : isEditing ? 'Update Project' : 'Register Project'}
                                 </>
                             )}
                         </button>

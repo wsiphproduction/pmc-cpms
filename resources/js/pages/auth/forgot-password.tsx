@@ -85,7 +85,6 @@ export default function ForgotPassword({ status }: { status?: string }) {
                                 onChange={e => setData('email', e.target.value)}
                                 onFocus={() => setFocused(true)}
                                 onBlur={() => setFocused(false)}
-                                placeholder="you@example.com"
                                 style={{
                                     width: '100%',
                                     padding: '10px 14px 10px 38px',

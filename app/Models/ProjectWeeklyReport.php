@@ -12,6 +12,7 @@ class ProjectWeeklyReport extends Model
 
     protected $fillable = [
         'project_id',
+        'project_ntp_id',
         'week_code',
         'completion_pct',
         'identified_issues',
@@ -30,6 +31,11 @@ class ProjectWeeklyReport extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function ntp(): BelongsTo
+    {
+        return $this->belongsTo(ProjectNtp::class, 'project_ntp_id');
     }
 
     public function creator(): BelongsTo

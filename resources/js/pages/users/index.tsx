@@ -45,9 +45,10 @@ const formatDate = (value?: string | null) => {
 
 // Display labels only — underlying DB role slugs ('requestor'/'approver'/'admin') are unchanged.
 const ROLE_LABELS: Record<string, string> = {
-    admin:     'Admin',
-    approver:  'Project Engineer',
-    requestor: 'Department User',
+    admin:             'Admin',
+    approver:          'Project Engineer',
+    assistant_manager: 'Assistant Manager',
+    requestor:         'Department User',
 };
 
 const roleLabel = (role: string): string =>
@@ -55,9 +56,10 @@ const roleLabel = (role: string): string =>
 
 function RoleBadge({ role }: { role: string | null }) {
     const map: Record<string, { bg: string; color: string }> = {
-        admin:     { bg: '#dbeafe', color: '#1e40af' },
-        approver:  { bg: '#dcfce7', color: '#166534' },
-        requestor: { bg: '#fef9c3', color: '#854d0e' },
+        admin:             { bg: '#dbeafe', color: '#1e40af' },
+        approver:          { bg: '#dcfce7', color: '#166534' },
+        assistant_manager: { bg: '#ede9fe', color: '#5b21b6' },
+        requestor:         { bg: '#fef9c3', color: '#854d0e' },
     };
     const s = map[role ?? ''] ?? { bg: '#f3f4f6', color: '#374151' };
     return (
@@ -350,6 +352,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments }: 
                     { label: 'Total Users',  value: users.length,                                        color: '#2563eb' },
                     { label: 'Admins',       value: users.filter(u => u.role === 'admin').length,     color: '#7c3aed' },
                     { label: 'Project Engineers', value: users.filter(u => u.role === 'approver').length,  color: '#16a34a' },
+                    { label: 'Assistant Managers', value: users.filter(u => u.role === 'assistant_manager').length, color: '#5b21b6' },
                     { label: 'Department Users',  value: users.filter(u => u.role === 'requestor').length, color: '#92400e' },
                 ].map(stat => (
                     <div key={stat.label} style={{

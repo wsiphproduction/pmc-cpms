@@ -35,6 +35,8 @@ export default function Sidebar({
     const role = props.auth?.user?.role;
     const isRequestor = role === 'requestor';
     const isAdmin = role === 'admin';
+    // User management is admin-only.
+    const canManageUsers = isAdmin;
     const isCompact = collapsed && !isMobile;
     const sidebarWidth = isMobile ? 250 : isCompact ? 72 : 205;
 
@@ -63,6 +65,16 @@ export default function Sidebar({
                 ...(isRequestor ? [] : [{ label: 'Add New', href: route('projects.create') }]),
             ],
         },
+        // Department users review NTPs submitted by engineers.
+        ...(isRequestor ? [{
+            label: 'NTP Reviews',
+            href: route('ntp-reviews.index'),
+            icon: (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                </svg>
+            ),
+        }] : []),
         ...(isRequestor ? [] : [{
             label: 'Master Data',
             href: route('master.index'),
@@ -85,7 +97,7 @@ export default function Sidebar({
                 </svg>
             ),
         },
-        ...(isRequestor ? [] : [{
+        ...(canManageUsers ? [{
             label: 'Users',
             href: route('users.index'),
             icon: (
@@ -96,7 +108,7 @@ export default function Sidebar({
                     <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
                 </svg>
             ),
-        }]),
+        }] : []),
         ...(isAdmin ? [{
             label: 'Settings',
             href: route('system-settings.index'),

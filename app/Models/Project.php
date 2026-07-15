@@ -16,6 +16,8 @@ class Project extends Model
 
     protected $fillable = [
         'project_no',
+        'parent_id',
+        'source_ntp_id',
         'project_request_id',
         'title',
         'project_manager_id',
@@ -60,11 +62,33 @@ class Project extends Model
         'completion_percent' => 'integer',
         'created_by' => 'integer',
         'project_manager_id' => 'integer',
+        'parent_id' => 'integer',
+        'source_ntp_id' => 'integer',
     ];
 
     public function manager(): BelongsTo
     {
         return $this->belongsTo(User::class, 'project_manager_id');
+    }
+
+    // ── Sub-project relations ─────────────────────────────────────────────
+
+    /** The main project this sub-project belongs to (null for main projects). */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Project::class, 'parent_id');
+    }
+
+    /** Sub-projects spawned from this project's issued NTPs. */
+    public function children(): HasMany
+    {
+        return $this->hasMany(Project::class, 'parent_id')->latest();
+    }
+
+    /** The issued NTP a sub-project was created from (null for main projects). */
+    public function sourceNtp(): BelongsTo
+    {
+        return $this->belongsTo(ProjectNtp::class, 'source_ntp_id');
     }
 
     public function projectRequest(): BelongsTo
@@ -161,7 +185,13 @@ class Project extends Model
     public function health(): string
     {
         if ($this->completion_percent >= 100) {
-            return 'Advanced';
+            // Finished on or before the deadline is "Ahead"; finished after
+            // (or with no deadline to beat) is simply "Completed".
+            if ($this->deadline && now()->startOfDay()->lte(Carbon::parse($this->deadline)->startOfDay())) {
+                return 'Ahead';
+            }
+
+            return 'Completed';
         }
 
         $daysElapsed = $this->daysElapsed();

@@ -9,6 +9,14 @@ interface MasterItem {
     sequence_no?: number | null;
     description?: string | null;
     created_at?: string;
+    // Cost-code detail columns (populated by the GL-code CSV import).
+    division?: string | null;
+    cost_center?: string | null;
+    activity?: string | null;
+    expense_description?: string | null;
+    agu_per_class?: string | null;
+    agu_per_stat?: string | null;
+    is_active?: boolean;
 }
 
 interface Supplier {
@@ -17,6 +25,7 @@ interface Supplier {
     email?: string | null;
     telephone_no?: string | null;
     mobile_no?: string | null;
+    is_active?: boolean;
     created_at?: string;
 }
 
@@ -349,41 +358,6 @@ function RecordModal({
     );
 }
 
-// ── Delete Confirm ─────────────────────────────────────────────────────────
-function DeleteModal({ tab, item, onClose }: { tab: TabKey; item: MasterItem; onClose: () => void }) {
-    const [deleting, setDeleting] = useState(false);
-
-    const handleDelete = () => {
-        setDeleting(true);
-        router.delete(route(`${ROUTE_MAP[tab]}.destroy`, item.id), {
-            onFinish: () => { setDeleting(false); onClose(); },
-        });
-    };
-
-    return (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(2px)' }} />
-            <div style={{ position: 'relative', background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '380px', boxShadow: '0 24px 64px rgba(0,0,0,0.14)', zIndex: 201, padding: '24px 24px 20px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '14px' }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
-                </div>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>Delete Entry</div>
-                <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
-                    Are you sure you want to delete <strong style={{ color: '#0f172a' }}>"{item.name}"</strong>? This action cannot be undone.
-                </div>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                    <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12.5px', cursor: 'pointer', color: '#374151', fontWeight: 500 }}>
-                        Cancel
-                    </button>
-                    <button onClick={handleDelete} disabled={deleting} style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', background: '#dc2626', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.7 : 1 }}>
-                        {deleting ? 'Deleting…' : 'Delete'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
 // ── Icon Button ────────────────────────────────────────────────────────────
 function IconBtn({ onClick, title, color = '#374151', children }: {
     onClick?: () => void; title?: string; color?: string; children: React.ReactNode;
@@ -395,6 +369,21 @@ function IconBtn({ onClick, title, color = '#374151', children }: {
             onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
         >
             {children}
+        </button>
+    );
+}
+
+// ── Active / Inactive Toggle Switch ──────────────────────────────────────────
+function ToggleSwitch({ active, onClick, title }: { active: boolean; onClick: () => void; title?: string }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            title={title ?? (active ? 'Active — click to deactivate' : 'Inactive — click to activate')}
+            aria-label={active ? 'Deactivate' : 'Activate'}
+            style={{ position: 'relative', width: '38px', height: '22px', borderRadius: '99px', border: 'none', cursor: 'pointer', background: active ? '#16a34a' : '#cbd5e1', transition: 'background 0.15s', flexShrink: 0, padding: 0 }}
+        >
+            <span style={{ position: 'absolute', top: '2px', left: active ? '18px' : '2px', width: '18px', height: '18px', borderRadius: '50%', background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.25)' }} />
         </button>
     );
 }
@@ -437,18 +426,22 @@ function TablePagination({ page, totalPages, count, onPage }: { page: number; to
 
 // ── Tab Table ──────────────────────────────────────────────────────────────
 function TabTable({
-    tab, items, onAdd, onEdit, onDelete,
+    tab, items, onAdd, onEdit, onToggle,
 }: {
     tab: TabKey;
     items: MasterItem[];
     onAdd: () => void;
     onEdit: (item: MasterItem) => void;
-    onDelete: (item: MasterItem) => void;
+    onToggle: (item: MasterItem) => void;
 }) {
     const config = TAB_CONFIG.find(t => t.key === tab)!;
     const isPriority = tab === 'priorities';
     const isCostCode = tab === 'cost_codes';
-    const headers = isPriority ? ['#', 'Sequence', 'Name / Label', 'Description', 'Created At', 'Actions'] : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
+    const headers = isPriority
+        ? ['#', 'Sequence', 'Name / Label', 'Description', 'Created At', 'Actions']
+        : isCostCode
+            ? ['#', 'GL Code', 'Division', 'Cost Center', 'Activity', 'Expense Description', 'Class', 'Status', 'Active', 'Actions']
+            : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
 
     const [page, setPage] = useState(1);
     const totalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
@@ -492,7 +485,7 @@ function TabTable({
                             <button
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={importing}
-                                title="Import cost codes from a CSV file (columns: Full_GL_Codes, Cost_Center)"
+                                title="Import cost codes from a CSV file (columns: Full_GL_Codes, Division, Cost_Center, Activity, Expense_Description, AGU_PER_CLASS, AGU_PER_STAT, isActive)"
                                 style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#fff', color: '#0f766e', border: '1px solid #99f6e4', fontSize: '12.5px', fontWeight: 600, cursor: importing ? 'wait' : 'pointer' }}
                             >
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -538,31 +531,48 @@ function TabTable({
                             </tr>
                         ) : paginated.map((item, idx) => (
                             <tr key={item.id}
-                                style={{ borderBottom: '1px solid #f8fafc', transition: 'background 0.1s' }}
+                                style={{ borderBottom: '1px solid #f8fafc', transition: 'background 0.1s', opacity: item.is_active === false ? 0.5 : 1 }}
                                 onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                             >
                                 <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{(safePage - 1) * PER_PAGE + idx + 1}</td>
-                                {isPriority && (
-                                    <td style={{ padding: '12px 20px', color: '#334155', fontSize: '12px', fontWeight: 700, width: '90px' }}>
-                                        {item.sequence_no ?? <span style={{ color: '#e2e8f0' }}>-</span>}
-                                    </td>
+                                {isCostCode ? (
+                                    <>
+                                        <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap' }}>{item.name}</td>
+                                        <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px' }}>{item.division || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                        <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px' }}>{item.cost_center || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                        <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px' }}>{item.activity || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                        <td style={{ padding: '12px 20px', color: '#0f172a', fontSize: '12.5px' }}>{item.expense_description || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                        <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{item.agu_per_class || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                        <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{item.agu_per_stat || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                        <td style={{ padding: '12px 20px' }}>
+                                            <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: '99px', fontSize: '11px', fontWeight: 600, background: item.is_active ? '#f0fdf4' : '#fef2f2', color: item.is_active ? '#15803d' : '#dc2626' }}>
+                                                {item.is_active ? 'Active' : 'Inactive'}
+                                            </span>
+                                        </td>
+                                    </>
+                                ) : (
+                                    <>
+                                        {isPriority && (
+                                            <td style={{ padding: '12px 20px', color: '#334155', fontSize: '12px', fontWeight: 700, width: '90px' }}>
+                                                {item.sequence_no ?? <span style={{ color: '#e2e8f0' }}>-</span>}
+                                            </td>
+                                        )}
+                                        <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a' }}>{item.name}</td>
+                                        <td style={{ padding: '12px 20px', color: '#94a3b8', fontSize: '12.5px' }}>
+                                            {item.description ?? <span style={{ color: '#e2e8f0' }}>—</span>}
+                                        </td>
+                                        <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                            {formatDateTime(item.created_at)}
+                                        </td>
+                                    </>
                                 )}
-                                <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a' }}>{item.name}</td>
-                                <td style={{ padding: '12px 20px', color: '#94a3b8', fontSize: '12.5px' }}>
-                                    {item.description ?? <span style={{ color: '#e2e8f0' }}>—</span>}
-                                </td>
-                                <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                    {formatDateTime(item.created_at)}
-                                </td>
                                 <td style={{ padding: '12px 20px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
                                         <IconBtn title="Edit" onClick={() => onEdit(item)}>
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                         </IconBtn>
-                                        <IconBtn title="Delete" color="#dc2626" onClick={() => onDelete(item)}>
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                                        </IconBtn>
+                                        <ToggleSwitch active={item.is_active !== false} onClick={() => onToggle(item)} />
                                     </div>
                                 </td>
                             </tr>
@@ -645,11 +655,11 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
 }
 
 // ── Supplier Table ───────────────────────────────────────────────────────────
-function SupplierTable({ suppliers, onAdd, onEdit, onDelete }: {
+function SupplierTable({ suppliers, onAdd, onEdit, onToggle }: {
     suppliers: Supplier[];
     onAdd: () => void;
     onEdit: (s: Supplier) => void;
-    onDelete: (s: Supplier) => void;
+    onToggle: (s: Supplier) => void;
 }) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [importing, setImporting] = useState(false);
@@ -711,7 +721,7 @@ function SupplierTable({ suppliers, onAdd, onEdit, onDelete }: {
                                 </td>
                             </tr>
                         ) : paginated.map((s, idx) => (
-                            <tr key={s.id} style={{ borderBottom: '1px solid #f8fafc' }}
+                            <tr key={s.id} style={{ borderBottom: '1px solid #f8fafc', opacity: s.is_active === false ? 0.5 : 1 }}
                                 onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                                 <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{(safePage - 1) * PER_PAGE + idx + 1}</td>
@@ -721,13 +731,11 @@ function SupplierTable({ suppliers, onAdd, onEdit, onDelete }: {
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.mobile_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{formatDateTime(s.created_at)}</td>
                                 <td style={{ padding: '12px 20px' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
                                         <IconBtn title="Edit" onClick={() => onEdit(s)}>
                                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                         </IconBtn>
-                                        <IconBtn title="Delete" color="#dc2626" onClick={() => onDelete(s)}>
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                                        </IconBtn>
+                                        <ToggleSwitch active={s.is_active !== false} onClick={() => onToggle(s)} />
                                     </div>
                                 </td>
                             </tr>
@@ -741,25 +749,98 @@ function SupplierTable({ suppliers, onAdd, onEdit, onDelete }: {
     );
 }
 
-// ── Supplier Delete Confirm ──────────────────────────────────────────────────
-function SupplierDeleteModal({ supplier, onClose }: { supplier: Supplier; onClose: () => void }) {
-    const [deleting, setDeleting] = useState(false);
-    const handleDelete = () => {
-        setDeleting(true);
-        router.delete(route('master.suppliers.destroy', supplier.id), { onFinish: () => { setDeleting(false); onClose(); } });
+// ── Cost Code Modal (add / edit — all GL-code fields) ────────────────────────
+function CostCodeModal({ costCode, onClose }: { costCode: MasterItem | null; onClose: () => void }) {
+    const isEdit = !!costCode;
+    const [name,       setName]       = useState(costCode?.name ?? '');
+    const [division,   setDivision]   = useState(costCode?.division ?? '');
+    const [costCenter, setCostCenter] = useState(costCode?.cost_center ?? '');
+    const [activity,   setActivity]   = useState(costCode?.activity ?? '');
+    const [expense,    setExpense]    = useState(costCode?.expense_description ?? '');
+    const [aguClass,   setAguClass]   = useState(costCode?.agu_per_class ?? '');
+    const [aguStat,    setAguStat]    = useState(costCode?.agu_per_stat ?? '');
+    const [isActive,   setIsActive]   = useState(costCode?.is_active ?? true);
+    const [submitting, setSubmitting] = useState(false);
+
+    const field: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#0f172a' };
+    const lbl: React.CSSProperties = { fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' };
+
+    const handleSubmit = () => {
+        if (!name.trim()) return;
+        setSubmitting(true);
+        const data = {
+            name: name.trim(),
+            division: division.trim() || null,
+            cost_center: costCenter.trim() || null,
+            activity: activity.trim() || null,
+            expense_description: expense.trim() || null,
+            agu_per_class: aguClass.trim() || null,
+            agu_per_stat: aguStat.trim() || null,
+            is_active: isActive,
+        };
+        if (isEdit) {
+            router.put(route('master.cost-codes.update', costCode!.id), data, { onFinish: () => { setSubmitting(false); onClose(); } });
+        } else {
+            router.post(route('master.cost-codes.store'), data, { onFinish: () => { setSubmitting(false); onClose(); } });
+        }
     };
+
     return (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(15,23,42,0.4)', backdropFilter: 'blur(2px)' }} />
-            <div style={{ position: 'relative', background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '380px', boxShadow: '0 24px 64px rgba(0,0,0,0.14)', zIndex: 201, padding: '24px 24px 20px' }}>
-                <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', marginBottom: '6px' }}>Delete Supplier</div>
-                <div style={{ fontSize: '13px', color: '#64748b', marginBottom: '20px', lineHeight: 1.5 }}>
-                    Are you sure you want to delete <strong style={{ color: '#0f172a' }}>"{supplier.company}"</strong>? This action cannot be undone.
+            <div style={{ position: 'relative', background: '#fff', borderRadius: '14px', width: '100%', maxWidth: '520px', boxShadow: '0 24px 64px rgba(0,0,0,0.14)', zIndex: 201, overflow: 'hidden', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '18px 22px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div>
+                        <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>{isEdit ? 'Edit Cost Code' : 'Add New Cost Code'}</div>
+                        <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>Cost Codes Master List</div>
+                    </div>
+                    <button onClick={onClose} style={{ width: '30px', height: '30px', borderRadius: '7px', border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+                <div style={{ padding: '20px 22px', display: 'grid', gap: '14px', overflowY: 'auto' }}>
+                    <div>
+                        <label style={lbl}>GL Code <span style={{ color: '#ef4444' }}>*</span></label>
+                        <input type="text" value={name} onChange={e => setName(e.target.value)} autoFocus placeholder="e.g. 1.01.01.003.000" style={field} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                            <label style={lbl}>Division</label>
+                            <input type="text" value={division} onChange={e => setDivision(e.target.value)} placeholder="Division" style={field} />
+                        </div>
+                        <div>
+                            <label style={lbl}>Cost Center</label>
+                            <input type="text" value={costCenter} onChange={e => setCostCenter(e.target.value)} placeholder="Cost Center" style={field} />
+                        </div>
+                    </div>
+                    <div>
+                        <label style={lbl}>Activity</label>
+                        <input type="text" value={activity} onChange={e => setActivity(e.target.value)} placeholder="Activity" style={field} />
+                    </div>
+                    <div>
+                        <label style={lbl}>Expense Description</label>
+                        <input type="text" value={expense} onChange={e => setExpense(e.target.value)} placeholder="Readable account name" style={field} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                        <div>
+                            <label style={lbl}>Class (AGU_PER_CLASS)</label>
+                            <input type="text" value={aguClass} onChange={e => setAguClass(e.target.value)} placeholder="e.g. Non Ledger" style={field} />
+                        </div>
+                        <div>
+                            <label style={lbl}>Status (AGU_PER_STAT)</label>
+                            <input type="text" value={aguStat} onChange={e => setAguStat(e.target.value)} placeholder="e.g. Open" style={field} />
+                        </div>
+                    </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '13px', color: '#374151', fontWeight: 500 }}>
+                        <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#2563eb' }} />
+                        Active
+                    </label>
+                </div>
+                <div style={{ padding: '14px 22px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                     <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12.5px', cursor: 'pointer', color: '#374151', fontWeight: 500 }}>Cancel</button>
-                    <button onClick={handleDelete} disabled={deleting} style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', background: '#dc2626', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: deleting ? 'not-allowed' : 'pointer', opacity: deleting ? 0.7 : 1 }}>
-                        {deleting ? 'Deleting…' : 'Delete'}
+                    <button onClick={handleSubmit} disabled={submitting || !name.trim()}
+                        style={{ padding: '8px 20px', borderRadius: '7px', border: 'none', background: submitting || !name.trim() ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 600, cursor: submitting || !name.trim() ? 'not-allowed' : 'pointer' }}>
+                        {submitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Cost Code'}
                     </button>
                 </div>
             </div>
@@ -786,13 +867,15 @@ export default function MasterData({
     const [activeTab,    setActiveTab]    = useState<TabKey>('job_types');
     const [modalTab,     setModalTab]     = useState<TabKey>('job_types');
     const [editTarget,   setEditTarget]   = useState<MasterItem | null>(null);
-    const [deleteTarget, setDeleteTarget] = useState<MasterItem | null>(null);
     const [showModal,    setShowModal]    = useState(false);
 
-    // Suppliers have their own record shape, so they get dedicated modals.
+    // Suppliers have their own record shape, so they get a dedicated modal.
     const [showSupplierModal, setShowSupplierModal] = useState(false);
     const [editSupplier,      setEditSupplier]      = useState<Supplier | null>(null);
-    const [deleteSupplier,    setDeleteSupplier]    = useState<Supplier | null>(null);
+
+    // Cost codes carry many extra columns, so they get a dedicated modal too.
+    const [showCostCodeModal, setShowCostCodeModal] = useState(false);
+    const [editCostCode,      setEditCostCode]      = useState<MasterItem | null>(null);
 
     const { props: pageProps } = usePage<{ flash?: { success?: string; error?: string }; errors?: Record<string, string> }>();
     const flash = pageProps.flash;
@@ -814,15 +897,31 @@ export default function MasterData({
     };
 
     const openAdd = (tab: TabKey) => {
+        if (tab === 'cost_codes') {
+            setEditCostCode(null);
+            setShowCostCodeModal(true);
+            return;
+        }
         setModalTab(tab);
         setEditTarget(null);
         setShowModal(true);
     };
 
     const openEdit = (tab: TabKey, item: MasterItem) => {
+        if (tab === 'cost_codes') {
+            setEditCostCode(item);
+            setShowCostCodeModal(true);
+            return;
+        }
         setModalTab(tab);
         setEditTarget(item);
         setShowModal(true);
+    };
+
+    // Flip active/inactive for any master record. `slug` is the route segment
+    // (e.g. job-types, suppliers); the page reloads with the fresh flag.
+    const toggleActive = (slug: string, id: number) => {
+        router.patch(route('master.toggle', [slug, id]), {}, { preserveScroll: true });
     };
 
     const totalEntries = Object.values(dataMap).reduce((sum, arr) => sum + arr.length, 0) + suppliers.length;
@@ -852,20 +951,12 @@ export default function MasterData({
                 />
             )}
 
-            {deleteTarget && (
-                <DeleteModal
-                    tab={activeTab}
-                    item={deleteTarget}
-                    onClose={() => setDeleteTarget(null)}
-                />
-            )}
-
             {showSupplierModal && (
                 <SupplierModal supplier={editSupplier} onClose={() => setShowSupplierModal(false)} />
             )}
 
-            {deleteSupplier && (
-                <SupplierDeleteModal supplier={deleteSupplier} onClose={() => setDeleteSupplier(null)} />
+            {showCostCodeModal && (
+                <CostCodeModal costCode={editCostCode} onClose={() => setShowCostCodeModal(false)} />
             )}
 
             {/* Page Header */}
@@ -917,7 +1008,7 @@ export default function MasterData({
                         suppliers={suppliers}
                         onAdd={() => { setEditSupplier(null); setShowSupplierModal(true); }}
                         onEdit={s => { setEditSupplier(s); setShowSupplierModal(true); }}
-                        onDelete={s => setDeleteSupplier(s)}
+                        onToggle={s => toggleActive('suppliers', s.id)}
                     />
                 ) : (
                     <TabTable
@@ -926,7 +1017,7 @@ export default function MasterData({
                         items={dataMap[activeTab]}
                         onAdd={() => openAdd(activeTab)}
                         onEdit={item => openEdit(activeTab, item)}
-                        onDelete={item => setDeleteTarget(item)}
+                        onToggle={item => toggleActive(ROUTE_MAP[activeTab].replace('master.', ''), item.id)}
                     />
                 )}
             </div>

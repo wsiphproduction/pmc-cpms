@@ -36,7 +36,7 @@ class DashboardController extends Controller
     {
         /** @var User $user */
         $user = auth()->user();
-        $isDeptUser = !$user->hasRole(['approver', 'admin']);
+        $isDeptUser = !$user->hasRole(['approver', 'assistant_manager', 'admin']);
         $today = now()->startOfDay();
 
         $projectsQuery = Project::query()

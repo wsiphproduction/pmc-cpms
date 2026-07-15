@@ -49,7 +49,7 @@ interface Project {
     budget_total: number;
     budget_paid: number;
     completion_percent: number;
-    project_health: 'On-Time' | 'Delayed' | 'Advanced';
+    project_health: 'On-Time' | 'Delayed' | 'Ahead' | 'Completed' | 'Advanced';
     // Details
     asset_id: string;
     cost_code: string;
@@ -73,10 +73,20 @@ interface Project {
     proposal_document_url: string | null;
     completion: CompletionData | null;
     signatories: Signatories;
+    parent: { id: number; project_no: string; title: string } | null;
+    sub_projects: SubProject[];
     can: {
         update: boolean;
         delete: boolean;
     };
+}
+
+interface SubProject {
+    id: number;
+    project_no: string;
+    title: string;
+    status: string;
+    completion_percent: number;
 }
 
 interface Props {
@@ -84,6 +94,7 @@ interface Props {
     active_section?: string;
     hub_data?: Record<string, any>;
     hub_counts?: Record<string, number>;
+    is_dept_view?: boolean;
 }
 
 // ── Status Meta ────────────────────────────────────────────────────────────
@@ -145,10 +156,10 @@ function renderHubSection(
         case 'vof':     return <VofHub     project={hubProject} vofs={hubData.vofs ?? []} canEdit={canEdit} />;
         case 'qpp':     return <QppHub     project={hubProject} qpps={hubData.qpps ?? []} canEdit={canEdit} />;
         case 'mtr':     return <MtrHub     project={hubProject} mtrs={hubData.mtrs ?? []} canEdit={canEdit} />;
-        case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
+        case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} ntps={hubData.ntps ?? []} canEdit={canEdit} canManageStatus={!!hubData.can_manage_status} />;
         case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} costCodes={hubData.cost_codes ?? []} canEdit={canEdit} />;
         case 'acr':     return <AcrHub     project={hubProject} iocs={hubData.iocs ?? []} canEdit={canEdit} />;
-        case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} canEdit={canEdit} />;
+        case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
         case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} canEdit={canEdit} />;
         default:        return <RfqHub     project={hubProject} rfqs={[]} canEdit={canEdit} />;
@@ -236,12 +247,14 @@ function PlanCard({ label, required }: { label: string; required: boolean }) {
 
 // ── Health Badge ───────────────────────────────────────────────────────────
 function HealthBadge({ health }: { health: Project['project_health'] }) {
-    const map = {
-        'On-Time': { bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', icon: '✓' },
-        'Delayed':  { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca', icon: '!' },
-        'Advanced': { bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe', icon: '↑' },
+    const map: Record<string, { bg: string; color: string; border: string; icon: string }> = {
+        'On-Time':   { bg: '#dcfce7', color: '#15803d', border: '#bbf7d0', icon: '✓' },
+        'Delayed':   { bg: '#fee2e2', color: '#b91c1c', border: '#fecaca', icon: '!' },
+        'Ahead':     { bg: '#ecfdf5', color: '#047857', border: '#a7f3d0', icon: '⚡' },
+        'Completed': { bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe', icon: '✓' },
+        'Advanced':  { bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe', icon: '↑' },
     };
-    const s = map[health];
+    const s = map[health] ?? map['On-Time'];
     return (
         <span style={{ padding: '8px 18px', borderRadius: '50px', fontWeight: 800, fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', background: s.bg, color: s.color, border: `1px solid ${s.border}` }}>
             {s.icon} {health.toUpperCase()}
@@ -394,7 +407,7 @@ function StatusUpdateModal({
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function ProjectShow({ project, active_section, hub_data = {}, hub_counts = {} }: Props) {
+export default function ProjectShow({ project, active_section, hub_data = {}, hub_counts = {}, is_dept_view = false }: Props) {
     const [showStatusModal, setShowStatusModal] = useState(false);
     const [currentStatusKey, setCurrentStatusKey] = useState(project.status_key);
     const [logs, setLogs] = useState<StatusLog[]>(project.status_logs ?? []);
@@ -479,6 +492,23 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                     )}
                 </div>
             </div>
+
+            {/* Sub-project → parent link */}
+            {project.parent && (
+                <div className="print-hide" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 18px', marginBottom: '20px', borderRadius: '10px', background: '#eef2ff', border: '1px solid #c7d2fe' }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4338ca" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M9 18l6-6-6-6"/></svg>
+                    <div style={{ fontSize: '12.5px', color: '#3730a3' }}>
+                        This is a sub-project of{' '}
+                        <button
+                            type="button"
+                            onClick={() => router.visit(route('projects.show', project.parent!.id))}
+                            style={{ padding: 0, border: 'none', background: 'none', color: '#4338ca', fontWeight: 700, cursor: 'pointer', fontSize: 'inherit', textDecoration: 'underline', fontFamily: 'inherit' }}
+                        >
+                            {project.parent.project_no} — {project.parent.title}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Record Card */}
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '32px' }}>
@@ -715,7 +745,60 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 </div>
             </div>
 
-            {/* Operations Hub */}
+            {/* Sub-Projects — instances spawned from this project's issued NTPs. */}
+            {!is_dept_view && project.sub_projects.length > 0 && (
+                <div className="print-hide" style={{ marginBottom: '32px' }}>
+                    <h5 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4338ca" strokeWidth="2"><path d="M3 3v18h18"/><path d="M7 16l4-4 3 3 5-5"/></svg>
+                        Sub-Projects
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#4338ca', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '999px', padding: '2px 9px' }}>{project.sub_projects.length}</span>
+                    </h5>
+                    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                            <thead>
+                                <tr style={{ background: '#f8fafc' }}>
+                                    {['Project #', 'Title', 'Completion', 'Status', ''].map((h, i, arr) => (
+                                        <th key={h} style={{ padding: '10px 16px', textAlign: i === arr.length - 1 ? 'center' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>{h}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {project.sub_projects.map(sp => (
+                                    <tr key={sp.id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                        <td style={{ padding: '12px 16px', fontWeight: 600, color: '#4338ca', fontSize: '11.5px', whiteSpace: 'nowrap' }}>{sp.project_no}</td>
+                                        <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0f172a', fontSize: '12.5px' }}>{sp.title}</td>
+                                        <td style={{ padding: '12px 16px', color: '#334155', fontWeight: 700, fontSize: '12px' }}>{sp.completion_percent}%</td>
+                                        <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px' }}>{sp.status}</td>
+                                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => router.visit(route('projects.show', sp.id))}
+                                                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #c7d2fe', background: '#eef2ff', color: '#4338ca', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                            >
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                                Open
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
+            {/* Department users get a read-only RFQ panel; the full operations hub is hidden. */}
+            {is_dept_view ? (
+                <div className="print-hide" style={{ marginBottom: '32px' }}>
+                    <h5 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        Request for Quotations
+                    </h5>
+                    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', padding: '4px' }}>
+                        <RfqHub project={hubProject} rfqs={hub_data.rfqs ?? []} canEdit={false} />
+                    </div>
+                </div>
+            ) : (
             <div className="print-hide" style={{ marginBottom: '32px' }}>
                 <h5 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
@@ -789,6 +872,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                     </div>
                 </div>
             </div>
+            )}
         </AuthenticatedLayout>
     );
 }

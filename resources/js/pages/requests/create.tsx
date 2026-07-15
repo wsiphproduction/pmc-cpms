@@ -7,7 +7,7 @@ interface UploadRow {
     id: number;
     file: File | null;
     description: string;
-    type: 'picture' | 'drawing' | 'report';
+    type: 'picture' | 'drawing' | 'report' | 'other';
 }
 
 interface FormData {
@@ -188,6 +188,7 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
     const [pictureRows, setPictureRows] = useState<UploadRow[]>(() => [makeRow('picture')]);
     const [drawingRows, setDrawingRows] = useState<UploadRow[]>(() => [makeRow('drawing')]);
     const [reportRows,  setReportRows]  = useState<UploadRow[]>(() => [makeRow('report')]);
+    const [otherRows,   setOtherRows]   = useState<UploadRow[]>(() => [makeRow('other')]);
 
     const addRow     = (s: React.Dispatch<React.SetStateAction<UploadRow[]>>, t: UploadRow['type']) => s(p => [...p, makeRow(t)]);
     const removeRow  = (s: React.Dispatch<React.SetStateAction<UploadRow[]>>, id: number) => s(p => p.filter(r => r.id !== id));
@@ -222,15 +223,11 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
         }
         setFundingError('');
 
-        const totalFiles = [...pictureRows, ...drawingRows, ...reportRows].filter(r => r.file).length;
-        if (totalFiles === 0) {
-            setAttachmentError('At least one attachment is required.');
-            return;
-        }
+        // Attachments are optional — submit whatever (if any) was added.
         setAttachmentError('');
         setProcessing(true);
 
-        const attachments = [...pictureRows, ...drawingRows, ...reportRows]
+        const attachments = [...pictureRows, ...drawingRows, ...reportRows, ...otherRows]
             .filter(row => row.file)
             .map(row => ({ file: row.file as File, type: row.type, description: row.description ?? '' }));
 
@@ -338,14 +335,14 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                     </div>
                 </div>
 
-                <SectionTitle>Supporting Documents &amp; Media</SectionTitle>
+                <SectionTitle>Supporting Documents &amp; Media (Optional)</SectionTitle>
                 {attachmentError && (
                     <p style={{ fontSize: '12px', color: '#dc2626', margin: '-12px 0 16px', display: 'flex', alignItems: 'center', gap: '5px' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                         {attachmentError}
                     </p>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '20px', marginBottom: '32px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px', marginBottom: '32px' }}>
                     <UploadSection
                         label="Picture Attachments" accept="image/*" placeholder="Image description" rows={pictureRows}
                         onAdd={() => addRow(setPictureRows, 'picture')} onRemove={id => removeRow(setPictureRows, id)}
@@ -359,10 +356,16 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                         icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><path d="M18 8l-6-6-6 6"/><path d="M6 20V14"/></svg>}
                     />
                     <UploadSection
-                        label="Reports Attachments" accept=".pdf,.doc,.docx" placeholder="Report summary" rows={reportRows}
+                        label="Reports Attachments" accept=".pdf,.doc,.docx,.zip,.rar" placeholder="Report summary" rows={reportRows}
                         onAdd={() => addRow(setReportRows, 'report')} onRemove={id => removeRow(setReportRows, id)}
                         onFileChange={(id, f) => updateFile(setReportRows, id, f)} onDescChange={(id, v) => updateDesc(setReportRows, id, v)}
                         icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>}
+                    />
+                    <UploadSection
+                        label="Other Attachments" accept=".zip,.rar,.7z,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,application/zip,application/x-rar-compressed,application/vnd.rar,application/x-7z-compressed" placeholder="File description" rows={otherRows}
+                        onAdd={() => addRow(setOtherRows, 'other')} onRemove={id => removeRow(setOtherRows, id)}
+                        onFileChange={(id, f) => updateFile(setOtherRows, id, f)} onDescChange={(id, v) => updateDesc(setOtherRows, id, v)}
+                        icon={<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>}
                     />
                 </div>
 

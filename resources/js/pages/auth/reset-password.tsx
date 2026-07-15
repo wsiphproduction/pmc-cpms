@@ -183,7 +183,6 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
                                 onChange={e => setData('password', e.target.value)}
                                 onFocus={() => setFocused('password')}
                                 onBlur={() => setFocused(null)}
-                                placeholder="Enter new password"
                                 style={inputStyle('password', !!errors.password, true)}
                             />
                             <EyeToggle show={showPassword} onToggle={() => setShowPassword(p => !p)} />
@@ -211,7 +210,6 @@ export default function ResetPassword({ token, email }: ResetPasswordProps) {
                                 onChange={e => setData('password_confirmation', e.target.value)}
                                 onFocus={() => setFocused('confirm')}
                                 onBlur={() => setFocused(null)}
-                                placeholder="Re-enter new password"
                                 style={inputStyle('confirm', !!errors.password_confirmation, true)}
                             />
                             <EyeToggle show={showConfirm} onToggle={() => setShowConfirm(p => !p)} />
