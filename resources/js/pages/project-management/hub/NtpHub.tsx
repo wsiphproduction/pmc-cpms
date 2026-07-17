@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
-import { DataTable, HubProject, HubShell, InfoStrip, SectionTitle } from './Common';
+import { DataTable, HubProject, HubShell, InfoStrip, SectionTitle, SubTag } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
 interface ScopeItem {
@@ -25,6 +25,10 @@ interface NtpData {
     issued_date: string;
     reviewed_by: string | null;
     review_remarks: string | null;
+    // The sub-project spawned FROM this issued NTP (own rows only).
+    spawned_sub_id: number | null;
+    spawned_sub_no: string | null;
+    // The sub-project this NTP itself belongs to (roll-up tag; null = own).
     sub_project_id: number | null;
     sub_project_no: string | null;
     scope_items: ScopeItem[];
@@ -47,6 +51,7 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
     const [selected, setSelected] = useState<NtpData | null>(null);
     const printRef = useRef<HTMLDivElement>(null);
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+    const hasSubRows = ntps.some(n => !!n.sub_project_id);
 
     // Only rejected NTPs may be deleted — issued/pending ones are protected.
     const handleDelete = (ntp: NtpData) => {
@@ -96,8 +101,8 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['NTP No.', 'Contractor', 'Baseline Start', 'Baseline End', 'Approved Cost', 'Status', 'Issued Date', ''].map(h => (
-                                    <th key={h} style={{ padding: '9px 14px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>{h}</th>
+                                {['NTP No.', ...(hasSubRows ? ['Project'] : []), 'Contractor', 'Baseline Start', 'Baseline End', 'Approved Cost', 'Status', 'Issued Date', ''].map((h, hi) => (
+                                    <th key={`${h}-${hi}`} style={{ padding: '9px 14px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>{h}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -105,6 +110,7 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                             {ntps.map((ntp, i) => (
                                 <tr key={ntp.id} style={{ background: i % 2 === 0 ? '#fff' : '#f8fafc' }}>
                                     <td style={{ padding: '10px 14px', fontSize: '13px', fontWeight: 700, color: '#059669', borderBottom: '1px solid #f1f5f9' }}>{ntp.ntp_no}</td>
+                                    {hasSubRows && <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}><SubTag no={ntp.sub_project_no} /></td>}
                                     <td style={{ padding: '10px 14px', fontSize: '13px', color: '#0f172a', borderBottom: '1px solid #f1f5f9' }}>{ntp.contractor}</td>
                                     <td style={{ padding: '10px 14px', fontSize: '13px', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{ntp.baseline_start}</td>
                                     <td style={{ padding: '10px 14px', fontSize: '13px', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{ntp.baseline_end}</td>
@@ -128,39 +134,54 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                                 View
                                             </button>
-                                            {/* Sub-project: one per issued NTP. Create it, or jump to it if it exists. */}
-                                            {ntp.status === 'issued' && ntp.sub_project_id && (
+                                            {ntp.sub_project_id ? (
+                                                /* This NTP belongs to a sub-project — read-only; jump to that sub-project's NTP hub. */
                                                 <button
                                                     type="button"
-                                                    title={`Open sub-project ${ntp.sub_project_no ?? ''}`}
-                                                    onClick={() => router.visit(route('projects.show', ntp.sub_project_id!))}
+                                                    title={`Open ${ntp.sub_project_no ?? 'sub-project'}`}
+                                                    onClick={() => router.visit(route('projects.hub.ntp', ntp.sub_project_id!))}
                                                     style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #c7d2fe', background: '#eef2ff', color: '#4338ca', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
                                                 >
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M7 16l4-4 3 3 5-5"/></svg>
-                                                    View Sub-Project
+                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M7 7h10v10"/></svg>
+                                                    Open Sub-Project
                                                 </button>
-                                            )}
-                                            {canEdit && ntp.status === 'issued' && !ntp.sub_project_id && (
-                                                <button
-                                                    type="button"
-                                                    title="Create a sub-project from this issued NTP"
-                                                    onClick={() => router.visit(route('projects.create', { parent: project.id, ntp: ntp.id }))}
-                                                    style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#047857', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                                                >
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                                    Create Sub-Project
-                                                </button>
-                                            )}
-                                            {canEdit && ntp.status === 'rejected' && (
-                                                <button
-                                                    type="button"
-                                                    title="Delete rejected NTP"
-                                                    onClick={() => handleDelete(ntp)}
-                                                    style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                                                >
-                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                                                    Delete
-                                                </button>
+                                            ) : (
+                                                <>
+                                                    {/* Sub-project: one per issued NTP. Create it, or jump to it if it exists. */}
+                                                    {ntp.status === 'issued' && ntp.spawned_sub_id && (
+                                                        <button
+                                                            type="button"
+                                                            title={`Open sub-project ${ntp.spawned_sub_no ?? ''}`}
+                                                            onClick={() => router.visit(route('projects.show', ntp.spawned_sub_id!))}
+                                                            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #c7d2fe', background: '#eef2ff', color: '#4338ca', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                                        >
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M7 16l4-4 3 3 5-5"/></svg>
+                                                            View Sub-Project
+                                                        </button>
+                                                    )}
+                                                    {canEdit && ntp.status === 'issued' && !ntp.spawned_sub_id && (
+                                                        <button
+                                                            type="button"
+                                                            title="Create a sub-project from this issued NTP"
+                                                            onClick={() => router.visit(route('projects.create', { parent: project.id, ntp: ntp.id }))}
+                                                            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#047857', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                                        >
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                                            Create Sub-Project
+                                                        </button>
+                                                    )}
+                                                    {canEdit && ntp.status === 'rejected' && (
+                                                        <button
+                                                            type="button"
+                                                            title="Delete rejected NTP"
+                                                            onClick={() => handleDelete(ntp)}
+                                                            style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                                                        >
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                                            Delete
+                                                        </button>
+                                                    )}
+                                                </>
                                             )}
                                         </div>
                                     </td>

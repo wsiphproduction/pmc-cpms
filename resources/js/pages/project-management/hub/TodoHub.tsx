@@ -1,12 +1,14 @@
 import { useRef, useState } from 'react';
 import { router } from '@inertiajs/react';
-import { HubProject, HubShell } from './Common';
+import { HubProject, HubShell, SubTag } from './Common';
 
 interface Task {
     id: number;
     task_name: string;
     target_date: string;
     status: 'pending' | 'done';
+    sub_project_id: number | null;
+    sub_project_no: string | null;
 }
 
 const ACCENT = '#7c3aed';
@@ -50,6 +52,10 @@ export default function TodoHub({ project, tasks, canEdit = true }: { project: H
     const handleDelete = (task: Task) => {
         if (!confirm(`Delete "${task.task_name}"?`)) return;
         router.delete(route('hub.todo.destroy', { project: project.id, task: task.id }), { preserveScroll: true });
+    };
+
+    const handleOpen = (task: Task) => {
+        router.visit(route('projects.hub.todo', task.sub_project_id!));
     };
 
     const pending = tasks.filter(t => t.status === 'pending');
@@ -115,7 +121,7 @@ export default function TodoHub({ project, tasks, canEdit = true }: { project: H
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '24px' }}>
                                 {pending.map(task => (
-                                    <TaskRow key={task.id} task={task} onToggle={handleToggle} onDelete={handleDelete} canEdit={canEdit} />
+                                    <TaskRow key={task.id} task={task} onToggle={handleToggle} onDelete={handleDelete} onOpen={handleOpen} canEdit={canEdit} />
                                 ))}
                             </div>
                         </>
@@ -130,7 +136,7 @@ export default function TodoHub({ project, tasks, canEdit = true }: { project: H
                             </div>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                                 {done.map(task => (
-                                    <TaskRow key={task.id} task={task} onToggle={handleToggle} onDelete={handleDelete} canEdit={canEdit} />
+                                    <TaskRow key={task.id} task={task} onToggle={handleToggle} onDelete={handleDelete} onOpen={handleOpen} canEdit={canEdit} />
                                 ))}
                             </div>
                         </>
@@ -141,9 +147,12 @@ export default function TodoHub({ project, tasks, canEdit = true }: { project: H
     );
 }
 
-function TaskRow({ task, onToggle, onDelete, canEdit = true }: { task: Task; onToggle: (t: Task) => void; onDelete: (t: Task) => void; canEdit?: boolean }) {
+function TaskRow({ task, onToggle, onDelete, onOpen, canEdit = true }: { task: Task; onToggle: (t: Task) => void; onDelete: (t: Task) => void; onOpen: (t: Task) => void; canEdit?: boolean }) {
     const done    = task.status === 'done';
     const overdue = isOverdue(task.target_date, task.status);
+    // Sub-project tasks are read-only here — toggle disabled, open to manage.
+    const isSub   = !!task.sub_project_id;
+    const editable = canEdit && !isSub;
 
     const fmtDate = (d: string) => {
         const dt = new Date(d + 'T00:00:00');
@@ -161,14 +170,14 @@ function TaskRow({ task, onToggle, onDelete, canEdit = true }: { task: Task; onT
             {/* Toggle checkbox */}
             <button
                 type="button"
-                onClick={() => canEdit && onToggle(task)}
-                disabled={!canEdit}
-                title={canEdit ? (done ? 'Mark as pending' : 'Mark as done') : undefined}
+                onClick={() => editable && onToggle(task)}
+                disabled={!editable}
+                title={editable ? (done ? 'Mark as pending' : 'Mark as done') : undefined}
                 style={{
                     width: '20px', height: '20px', borderRadius: '5px', flexShrink: 0,
                     border: `2px solid ${done ? '#16a34a' : '#cbd5e1'}`,
                     background: done ? '#16a34a' : '#fff',
-                    cursor: canEdit ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: editable ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}
             >
                 {done && (
@@ -177,8 +186,9 @@ function TaskRow({ task, onToggle, onDelete, canEdit = true }: { task: Task; onT
             </button>
 
             {/* Task name */}
-            <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: done ? '#6b7280' : '#0f172a', textDecoration: done ? 'line-through' : 'none' }}>
+            <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: done ? '#6b7280' : '#0f172a', textDecoration: done ? 'line-through' : 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 {task.task_name}
+                {isSub && <SubTag no={task.sub_project_no} />}
             </span>
 
             {/* Target date */}
@@ -203,8 +213,17 @@ function TaskRow({ task, onToggle, onDelete, canEdit = true }: { task: Task; onT
                 {task.status}
             </span>
 
-            {/* Delete */}
-            {canEdit && (
+            {/* Sub-project tasks: open to manage. Own tasks: delete. */}
+            {isSub ? (
+                <button
+                    type="button"
+                    onClick={() => onOpen(task)}
+                    title={`Open ${task.sub_project_no ?? 'sub-project'}`}
+                    style={{ width: '26px', height: '26px', borderRadius: '6px', border: '1px solid #c7d2fe', background: '#eef2ff', color: '#4338ca', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M7 17L17 7M7 7h10v10"/></svg>
+                </button>
+            ) : canEdit && (
                 <button
                     type="button"
                     onClick={() => onDelete(task)}

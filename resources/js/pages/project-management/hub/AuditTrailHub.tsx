@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { DataTable, Field, HubProject, HubShell, inputStyle } from './Common';
+import { DataTable, Field, HubProject, HubShell, inputStyle, SubTag } from './Common';
 
-interface LogRow { date: string; time: string; user: string; action: string; module: string; ip: string; type: string }
+interface LogRow { date: string; time: string; user: string; action: string; module: string; ip: string; type: string; sub_project_no: string | null }
 
 const MODULE_COLORS: Record<string, [string, string]> = {
     'RFQ':     ['#eff6ff', '#2563eb'],
@@ -52,6 +52,7 @@ export default function AuditTrailHub({ project: _, logs }: { project: HubProjec
 
     const PER_PAGE = 15;
     const modules  = ['all', ...Array.from(new Set(logs.map(l => l.module))).sort()];
+    const hasSubRows = logs.some(l => !!l.sub_project_no);
 
     const resetPage = () => setPage(1);
 
@@ -126,13 +127,14 @@ export default function AuditTrailHub({ project: _, logs }: { project: HubProjec
                 </div>
             ) : (
                 <DataTable
-                    headers={['Date & Time', 'User', 'Module', 'Activity', 'IP Address']}
+                    headers={['Date & Time', 'User', ...(hasSubRows ? ['Project'] : []), 'Module', 'Activity', 'IP Address']}
                     rows={paginated.map(log => [
                         <div>
                             <div style={{ fontWeight: 700, fontSize: '12px', color: '#0f172a' }}>{log.date}</div>
                             <div style={{ fontSize: '11px', color: '#94a3b8' }}>{log.time}</div>
                         </div>,
                         <div style={{ fontWeight: 600, fontSize: '13px', color: '#334155' }}>{log.user}</div>,
+                        ...(hasSubRows ? [<SubTag no={log.sub_project_no} />] : []),
                         <ModuleBadge module={log.module} />,
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                             <TypeBadge type={log.type} />

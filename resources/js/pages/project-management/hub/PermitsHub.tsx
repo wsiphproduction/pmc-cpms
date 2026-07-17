@@ -1,10 +1,10 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
-import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, inputStyle } from './Common';
+import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
 interface PermitFile { id: number; filename: string; url: string; mime: string }
-interface PermitRow  { id: number; label: string; doc_type: string; files: PermitFile[] }
+interface PermitRow  { id: number; label: string; doc_type: string; files: PermitFile[]; sub_project_id: number | null; sub_project_no: string | null }
 
 export default function PermitsHub({ project, permits, canEdit = true }: { project: HubProject; permits: PermitRow[]; canEdit?: boolean }) {
     const [label, setLabel]     = useState('');
@@ -33,6 +33,8 @@ export default function PermitsHub({ project, permits, canEdit = true }: { proje
             onFinish: () => setSaving(false),
         });
     };
+
+    const hasSubRows = permits.some(p => !!p.sub_project_id);
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
@@ -103,9 +105,10 @@ export default function PermitsHub({ project, permits, canEdit = true }: { proje
             )}
 
             <DataTable
-                headers={['Seq#', 'Label & Attached Files', 'Type', 'Actions']}
+                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Label & Attached Files', 'Type', 'Actions']}
                 rows={permits.map((permit, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
+                    ...(hasSubRows ? [<SubTag no={permit.sub_project_no} />] : []),
                     <div>
                         <strong>{permit.label}</strong>
                         <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
@@ -118,7 +121,14 @@ export default function PermitsHub({ project, permits, canEdit = true }: { proje
                         </div>
                     </div>,
                     <Badge>{permit.doc_type}</Badge>,
-                    <ActionBtns download del={canEdit} onDownload={() => handleDownload(permit)} onDelete={() => handleDelete(permit)} />,
+                    <ActionBtns
+                        download
+                        del={canEdit && !permit.sub_project_id}
+                        open={!!permit.sub_project_id}
+                        onDownload={() => handleDownload(permit)}
+                        onDelete={() => handleDelete(permit)}
+                        onOpen={() => router.visit(route('projects.hub.permits', permit.sub_project_id!))}
+                    />,
                 ])}
             />
         </HubShell>

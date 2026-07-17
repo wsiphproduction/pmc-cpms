@@ -144,6 +144,15 @@ const DlIcon     = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="n
 const PrintIcon  = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>;
 const TrophyIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9H2V3h4"/><path d="M22 3h-4v6"/><path d="M8 21h8"/><path d="M12 17v4"/><path d="M2 3h20"/><path d="M6 9a6 6 0 0 0 12 0"/></svg>;
 const RefreshIcon = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4.5"/></svg>;
+const OpenIcon    = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M7 7h10v10"/></svg>;
+
+// A pill that tags a hub row as belonging to a sub-project (blank for the
+// project's own rows). Used by the parent's read-only roll-up views.
+export function SubTag({ no }: { no: string | null | undefined }) {
+    return no
+        ? <span style={{ fontSize: '11px', fontWeight: 700, color: '#4338ca', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '5px', padding: '2px 7px', whiteSpace: 'nowrap' }}>{no}</span>
+        : <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>This project</span>;
+}
 
 function mkBtn(bg: string, border: string, color: string, title: string, icon: React.ReactNode, onClick?: () => void) {
     return (
@@ -154,11 +163,11 @@ function mkBtn(bg: string, border: string, color: string, title: string, icon: R
 }
 
 export function ActionBtns({
-    view, edit, del, download, print, trophy, refresh,
-    onView, onEdit, onDelete, onDownload, onPrint, onTrophy, onRefresh,
+    view, edit, del, download, print, trophy, refresh, open,
+    onView, onEdit, onDelete, onDownload, onPrint, onTrophy, onRefresh, onOpen,
 }: {
-    view?: boolean; edit?: boolean; del?: boolean; download?: boolean; print?: boolean; trophy?: boolean; refresh?: boolean;
-    onView?: () => void; onEdit?: () => void; onDelete?: () => void; onDownload?: () => void; onPrint?: () => void; onTrophy?: () => void; onRefresh?: () => void;
+    view?: boolean; edit?: boolean; del?: boolean; download?: boolean; print?: boolean; trophy?: boolean; refresh?: boolean; open?: boolean;
+    onView?: () => void; onEdit?: () => void; onDelete?: () => void; onDownload?: () => void; onPrint?: () => void; onTrophy?: () => void; onRefresh?: () => void; onOpen?: () => void;
 }) {
     return (
         <div style={{ display: 'flex', gap: '4px' }}>
@@ -168,6 +177,7 @@ export function ActionBtns({
             {edit     && mkBtn('#eff6ff', '#bfdbfe', '#2563eb', 'Edit',     <PencilIcon />,  onEdit)}
             {trophy   && mkBtn('#f0fdf4', '#bbf7d0', '#15803d', 'Award',    <TrophyIcon />,  onTrophy)}
             {refresh  && mkBtn('#fef2f2', '#fecaca', '#dc2626', 'Resend',   <RefreshIcon />, onRefresh)}
+            {open     && mkBtn('#eef2ff', '#c7d2fe', '#4338ca', 'Open sub-project', <OpenIcon />, onOpen)}
             {del      && mkBtn('#fef2f2', '#fecaca', '#dc2626', 'Delete',   <TrashIcon />,   onDelete)}
         </div>
     );

@@ -421,6 +421,10 @@ class ProjectController extends Controller
         $validSections = ['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
+        // RFQ and NTP are procurement steps owned by the main project (NTP is
+        // what spawns sub-projects) — sub-projects never have their own.
+        abort_if($project->parent_id && in_array($section, ['rfq', 'ntp'], true), 404);
+
         $project->load(['manager', 'creator', 'statusLogs.user', 'completion', 'parent', 'children']);
 
         // Department users only ever see the read-only RFQ list, never the rest
@@ -438,19 +442,25 @@ class ProjectController extends Controller
 
     private function hubCounts(Project $project): array
     {
+        // Counts span the project and its sub-projects, matching the rolled-up
+        // hub views so the sidebar badges agree with what's listed.
+        $ids = collect([$project->id])->concat($project->children->pluck('id'))->all();
+        $countAcross = fn (string $relation) => $project->newQuery()
+            ->whereIn('id', $ids)->withCount($relation)->get()->sum("{$relation}_count");
+
         return [
-            'rfq'     => $project->rfqs()->count(),
-            'ntp'     => $project->ntps()->count(),
-            'permits' => $project->permits()->count(),
-            'vof'     => $project->variationOrders()->count(),
-            'qpp'     => $project->qualityDocs()->count(),
-            'mtr'     => $project->mtrDocs()->count(),
-            'rfp'     => $project->billings()->count(),
-            'ioc'     => $project->iocItems()->count(),
-            'acr'     => $project->iocItems()->count(),
-            'psr'     => $project->weeklyReports()->count(),
-            'at'      => AuditTrail::where('reference_type', Project::class)->where('reference_id', $project->id)->count(),
-            'todo'    => $project->tasks()->count(),
+            'rfq'     => $countAcross('rfqs'),
+            'ntp'     => $countAcross('ntps'),
+            'permits' => $countAcross('permits'),
+            'vof'     => $countAcross('variationOrders'),
+            'qpp'     => $countAcross('qualityDocs'),
+            'mtr'     => $countAcross('mtrDocs'),
+            'rfp'     => $countAcross('billings'),
+            'ioc'     => $countAcross('iocItems'),
+            'acr'     => $countAcross('iocItems'),
+            'psr'     => $countAcross('weeklyReports'),
+            'at'      => AuditTrail::where('reference_type', Project::class)->whereIn('reference_id', $ids)->count(),
+            'todo'    => $countAcross('tasks'),
         ];
     }
 
@@ -476,134 +486,40 @@ class ProjectController extends Controller
 
         return match ($section) {
             'rfq' => [
-                'rfqs' => $project->rfqs()->with('items')->get()->map(fn ($rfq) => [
-                    'id'              => $rfq->id,
-                    'contractor'      => $rfq->contractor_name,
-                    'sent'            => optional($rfq->sent_date)->format('M d, Y') ?? '-',
-                    'due'             => optional($rfq->due_date)->format('M d, Y') ?? '-',
-                    'due_raw'         => optional($rfq->due_date)->format('Y-m-d'),
-                    'status'          => ucfirst($rfq->status),
-                    'scope_of_work'   => $rfq->scope_of_work,
-                    'duration_days'   => $rfq->duration_days,
-                    'terms'           => $rfq->terms_conditions,
-                    'inclusions'      => $rfq->inclusions,
-                    'exclusions'      => $rfq->exclusions,
-                    'quotation_file'  => $rfq->quotation_file ? Storage::disk('public')->url($rfq->quotation_file) : null,
-                    'recipient_email' => $rfq->recipient_email,
-                    // A rejected NTP no longer blocks the RFQ — treat it as "no NTP".
-                    'has_ntp'         => $project->ntps()->where('project_rfq_id', $rfq->id)->where('status', '!=', 'rejected')->exists(),
-                    'ntp_status'      => optional($project->ntps()->where('project_rfq_id', $rfq->id)->where('status', '!=', 'rejected')->first())->status,
-                    'audit_trail'     => ($rfqAudits[$rfq->id] ?? collect())->map(fn ($a) => [
-                        'action' => $a->action,
-                        'user'   => $a->user?->name ?? 'System',
-                        'date'   => $a->created_at?->format('M d, Y h:i A') ?? '-',
-                        'type'   => $a->changes['type'] ?? 'update',
-                    ])->values(),
-                    'items'           => $rfq->items->map(fn ($item) => [
-                        'seq'        => $item->seq,
-                        'description'=> $item->description,
-                        'qty'        => $item->qty,
-                        'unit'       => $item->unit,
-                        'unit_cost'  => $item->unit_cost,
-                        'total_cost' => $item->total_cost,
-                    ]),
-                ])->values(),
+                // Own RFQs plus, for a parent, its sub-projects' RFQs (read-only,
+                // tagged). NTP status is resolved against each row's owning project.
+                'rfqs' => $this->collectHubRows(
+                    $project,
+                    fn ($p) => $p->rfqs()->with('items')->get(),
+                    fn ($rfq, $sub) => $this->rfqRow($rfq, $sub ?? $project, $sub, $sub ? collect() : ($rfqAudits[$rfq->id] ?? collect())),
+                ),
                 'suppliers' => Supplier::where('is_active', true)->orderBy('company')->get(['company', 'email'])
                     ->map(fn ($s) => ['name' => $s->company, 'email' => $s->email ?? ''])
                     ->values(),
             ],
 
             'ntp' => [
-                'ntps' => $project->ntps()->with('rfq.items', 'reviewer')->get()->map(fn ($ntp) => [
-                    'id'             => $ntp->id,
-                    'ntp_no'         => $ntp->ntp_no,
-                    'contractor'     => $ntp->contractor_name,
-                    'baseline_start' => optional($ntp->baseline_start)->format('M d, Y') ?? '-',
-                    'baseline_end'   => optional($ntp->baseline_end)->format('M d, Y') ?? '-',
-                    'approved_cost'  => (float) $ntp->approved_cost,
-                    'status'         => $ntp->status,
-                    'issued_date'    => optional($ntp->issued_date)->format('M d, Y') ?? '-',
-                    'reviewed_by'    => $ntp->reviewer->name ?? null,
-                    'review_remarks' => $ntp->review_remarks,
-                    // One sub-project per issued NTP — drives the Create/View button.
-                    'sub_project_id' => optional($subProjectsByNtp->get($ntp->id))->id,
-                    'sub_project_no' => optional($subProjectsByNtp->get($ntp->id))->project_no,
-                    'scope_items'    => $ntp->rfq
-                        ? $ntp->rfq->items->map(fn ($item) => [
-                            'seq'         => $item->seq,
-                            'description' => $item->description,
-                            'qty'         => $item->qty,
-                            'unit'        => $item->unit,
-                            'unit_cost'   => $item->unit_cost !== null ? (float) $item->unit_cost : null,
-                            'total_cost'  => $item->total_cost !== null ? (float) $item->total_cost : null,
-                        ])->values()->all()
-                        : [],
-                ])->values(),
+                'ntps' => $this->collectHubRows(
+                    $project,
+                    fn ($p) => $p->ntps()->with('rfq.items', 'reviewer')->get(),
+                    fn ($ntp, $sub) => $this->ntpRow($ntp, $sub, $subProjectsByNtp),
+                ),
             ],
 
             'permits' => [
-                'permits' => $project->permits()->with('files')->get()->map(fn ($permit) => [
-                    'id'       => $permit->id,
-                    'label'    => $permit->label,
-                    'doc_type' => $permit->doc_type,
-                    'files'    => $permit->files->map(fn ($f) => [
-                        'id'       => $f->id,
-                        'filename' => $f->filename,
-                        'url'      => Storage::disk('public')->url($f->path),
-                        'mime'     => $f->mime_type,
-                    ]),
-                ])->values(),
+                'permits' => $this->collectHubRows($project, fn ($p) => $p->permits()->with('files')->get(), fn ($m, $sub) => $this->permitRow($m, $sub)),
             ],
 
             'vof' => [
-                'vofs' => $project->variationOrders()->get()->map(fn ($vo) => [
-                    'id'                => $vo->id,
-                    'vo_no'             => $vo->vo_no,
-                    'title'             => $vo->title,
-                    'description'       => $vo->description,
-                    'amount'            => (float) $vo->amount,
-                    'duration_days'     => $vo->duration_days,
-                    'status'            => ucfirst($vo->status),
-                    'submitted_date'    => optional($vo->submitted_date)->format('M d, Y') ?? '-',
-                    'approved_date'     => optional($vo->approved_date)->format('Y-m-d'),
-                    'requestor'         => $vo->requestor,
-                    'date_of_request'   => optional($vo->date_of_request)->format('Y-m-d'),
-                    'priority'          => $vo->priority,
-                    'attachment_url'    => $vo->attachment ? Storage::disk('public')->url($vo->attachment) : null,
-                    'scope_original'    => $vo->scope_original,
-                    'scope_proposed'    => $vo->scope_proposed,
-                    'scope_remark'      => $vo->scope_remark,
-                    'schedule_original' => $vo->schedule_original,
-                    'schedule_proposed' => $vo->schedule_proposed,
-                    'schedule_remark'   => $vo->schedule_remark,
-                    'cost_original'     => $vo->cost_original,
-                    'cost_proposed'     => $vo->cost_proposed,
-                    'cost_remark'       => $vo->cost_remark,
-                ])->values(),
+                'vofs' => $this->collectHubRows($project, fn ($p) => $p->variationOrders()->get(), fn ($m, $sub) => $this->vofRow($m, $sub)),
             ],
 
             'qpp' => [
-                'qpps' => $project->qualityDocs()->get()->map(fn ($doc) => [
-                    'id'       => $doc->id,
-                    'label'    => $doc->label,
-                    'doc_type' => $doc->doc_type,
-                    'filename' => $doc->filename,
-                    'url'      => Storage::disk('public')->url($doc->file_path),
-                    'remarks'  => $doc->remarks,
-                    'created'  => $doc->created_at?->format('M d, Y') ?? '-',
-                ])->values(),
+                'qpps' => $this->collectHubRows($project, fn ($p) => $p->qualityDocs()->get(), fn ($m, $sub) => $this->qppRow($m, $sub)),
             ],
 
             'mtr' => [
-                'mtrs' => $project->mtrDocs()->get()->map(fn ($doc) => [
-                    'id'            => $doc->id,
-                    'label'         => $doc->label,
-                    'material_type' => $doc->material_type,
-                    'test_date'     => optional($doc->test_date)->format('M d, Y') ?? '-',
-                    'filename'      => $doc->filename,
-                    'url'           => Storage::disk('public')->url($doc->file_path),
-                    'remarks'       => $doc->remarks,
-                ])->values(),
+                'mtrs' => $this->collectHubRows($project, fn ($p) => $p->mtrDocs()->get(), fn ($m, $sub) => $this->mtrRow($m, $sub)),
             ],
 
             'rfp' => [
@@ -623,15 +539,7 @@ class ProjectController extends Controller
                 'cost_codes' => CostCode::where('is_active', true)->orderBy('name')->get(['name'])
                     ->map(fn ($row) => ['value' => (string) $row->name, 'label' => (string) $row->name])
                     ->values(),
-                'iocs' => $project->iocItems()->get()->map(fn ($item) => [
-                    'id'          => $item->id,
-                    'description' => $item->description,
-                    'cost_code'   => $item->cost_code,
-                    'amount'      => (float) $item->amount,
-                    'filename'    => $item->filename,
-                    'url'         => $item->file_path ? Storage::disk('public')->url($item->file_path) : null,
-                    'created'     => $item->created_at?->format('M d, Y') ?? '-',
-                ])->values(),
+                'iocs' => $this->collectHubRows($project, fn ($p) => $p->iocItems()->get(), fn ($m, $sub) => $this->iocRow($m, $sub)),
             ],
 
             'psr' => [
@@ -646,30 +554,33 @@ class ProjectController extends Controller
             ],
 
             'at' => [
-                'logs' => AuditTrail::where('reference_type', Project::class)
-                    ->where('reference_id', $project->id)
-                    ->with('user')
-                    ->latest()
-                    ->limit(200)
-                    ->get()
-                    ->map(fn ($log) => [
-                        'date'   => $log->created_at?->format('M d, Y') ?? '-',
-                        'time'   => $log->created_at?->format('h:i A') ?? '-',
-                        'user'   => $log->user?->name ?? 'System',
-                        'action' => $log->action,
-                        'module' => $log->changes['module'] ?? 'Project',
-                        'ip'     => $log->ip_address ?? ($log->changes['ip'] ?? '—'),
-                        'type'   => $log->changes['type'] ?? 'update',
-                    ])->values(),
+                // Own logs plus, for a parent, its sub-projects' logs, tagged with
+                // the originating project. Combined and re-sorted, newest first.
+                'logs' => (function () use ($project) {
+                    $noById = collect([$project])->concat($project->children)
+                        ->mapWithKeys(fn ($p) => [$p->id => $p->id === $project->id ? null : $p->project_no]);
+
+                    return AuditTrail::where('reference_type', Project::class)
+                        ->whereIn('reference_id', $noById->keys())
+                        ->with('user')
+                        ->latest()
+                        ->limit(300)
+                        ->get()
+                        ->map(fn ($log) => [
+                            'date'   => $log->created_at?->format('M d, Y') ?? '-',
+                            'time'   => $log->created_at?->format('h:i A') ?? '-',
+                            'user'   => $log->user?->name ?? 'System',
+                            'action' => $log->action,
+                            'module' => $log->changes['module'] ?? 'Project',
+                            'ip'     => $log->ip_address ?? ($log->changes['ip'] ?? '—'),
+                            'type'   => $log->changes['type'] ?? 'update',
+                            'sub_project_no' => $noById->get($log->reference_id),
+                        ])->values();
+                })(),
             ],
 
             'todo' => [
-                'tasks' => $project->tasks()->get()->map(fn ($t) => [
-                    'id'          => $t->id,
-                    'task_name'   => $t->task_name,
-                    'target_date' => $t->target_date,
-                    'status'      => $t->status,
-                ])->values(),
+                'tasks' => $this->collectHubRows($project, fn ($p) => $p->tasks()->get(), fn ($m, $sub) => $this->todoRow($m, $sub)),
             ],
 
             default => [],
@@ -749,6 +660,185 @@ class ProjectController extends Controller
             // null for the project's own rows; set for a sub-project's rows.
             'sub_project_id'    => $sub?->id,
             'sub_project_no'    => $sub?->project_no,
+        ];
+    }
+
+    /** $owner is the project the row belongs to (parent or the sub itself). */
+    private function rfqRow($rfq, Project $owner, ?Project $sub, $audits): array
+    {
+        $activeNtp = $owner->ntps()->where('project_rfq_id', $rfq->id)->where('status', '!=', 'rejected');
+
+        return [
+            'id'              => $rfq->id,
+            'contractor'      => $rfq->contractor_name,
+            'sent'            => optional($rfq->sent_date)->format('M d, Y') ?? '-',
+            'due'             => optional($rfq->due_date)->format('M d, Y') ?? '-',
+            'due_raw'         => optional($rfq->due_date)->format('Y-m-d'),
+            'status'          => ucfirst($rfq->status),
+            'scope_of_work'   => $rfq->scope_of_work,
+            'duration_days'   => $rfq->duration_days,
+            'terms'           => $rfq->terms_conditions,
+            'inclusions'      => $rfq->inclusions,
+            'exclusions'      => $rfq->exclusions,
+            'quotation_file'  => $rfq->quotation_file ? Storage::disk('public')->url($rfq->quotation_file) : null,
+            'recipient_email' => $rfq->recipient_email,
+            // A rejected NTP no longer blocks the RFQ — treat it as "no NTP".
+            'has_ntp'         => (clone $activeNtp)->exists(),
+            'ntp_status'      => optional((clone $activeNtp)->first())->status,
+            'audit_trail'     => collect($audits)->map(fn ($a) => [
+                'action' => $a->action,
+                'user'   => $a->user?->name ?? 'System',
+                'date'   => $a->created_at?->format('M d, Y h:i A') ?? '-',
+                'type'   => $a->changes['type'] ?? 'update',
+            ])->values(),
+            'sub_project_id'  => $sub?->id,
+            'sub_project_no'  => $sub?->project_no,
+            'items'           => $rfq->items->map(fn ($item) => [
+                'seq'        => $item->seq,
+                'description'=> $item->description,
+                'qty'        => $item->qty,
+                'unit'       => $item->unit,
+                'unit_cost'  => $item->unit_cost,
+                'total_cost' => $item->total_cost,
+            ]),
+        ];
+    }
+
+    private function ntpRow($ntp, ?Project $sub, $spawnedByNtp): array
+    {
+        $spawned = $spawnedByNtp->get($ntp->id);
+
+        return [
+            'id'             => $ntp->id,
+            'ntp_no'         => $ntp->ntp_no,
+            'contractor'     => $ntp->contractor_name,
+            'baseline_start' => optional($ntp->baseline_start)->format('M d, Y') ?? '-',
+            'baseline_end'   => optional($ntp->baseline_end)->format('M d, Y') ?? '-',
+            'approved_cost'  => (float) $ntp->approved_cost,
+            'status'         => $ntp->status,
+            'issued_date'    => optional($ntp->issued_date)->format('M d, Y') ?? '-',
+            'reviewed_by'    => $ntp->reviewer->name ?? null,
+            'review_remarks' => $ntp->review_remarks,
+            // The sub-project spawned FROM this issued NTP (parent rows only).
+            'spawned_sub_id' => optional($spawned)->id,
+            'spawned_sub_no' => optional($spawned)->project_no,
+            // The sub-project this NTP itself belongs to (roll-up tag).
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
+            'scope_items'    => $ntp->rfq
+                ? $ntp->rfq->items->map(fn ($item) => [
+                    'seq'         => $item->seq,
+                    'description' => $item->description,
+                    'qty'         => $item->qty,
+                    'unit'        => $item->unit,
+                    'unit_cost'   => $item->unit_cost !== null ? (float) $item->unit_cost : null,
+                    'total_cost'  => $item->total_cost !== null ? (float) $item->total_cost : null,
+                ])->values()->all()
+                : [],
+        ];
+    }
+
+    private function permitRow($permit, ?Project $sub): array
+    {
+        return [
+            'id'       => $permit->id,
+            'label'    => $permit->label,
+            'doc_type' => $permit->doc_type,
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
+            'files'    => $permit->files->map(fn ($f) => [
+                'id'       => $f->id,
+                'filename' => $f->filename,
+                'url'      => Storage::disk('public')->url($f->path),
+                'mime'     => $f->mime_type,
+            ]),
+        ];
+    }
+
+    private function vofRow($vo, ?Project $sub): array
+    {
+        return [
+            'id'                => $vo->id,
+            'vo_no'             => $vo->vo_no,
+            'title'             => $vo->title,
+            'description'       => $vo->description,
+            'amount'            => (float) $vo->amount,
+            'duration_days'     => $vo->duration_days,
+            'status'            => ucfirst($vo->status),
+            'submitted_date'    => optional($vo->submitted_date)->format('M d, Y') ?? '-',
+            'approved_date'     => optional($vo->approved_date)->format('Y-m-d'),
+            'requestor'         => $vo->requestor,
+            'date_of_request'   => optional($vo->date_of_request)->format('Y-m-d'),
+            'priority'          => $vo->priority,
+            'attachment_url'    => $vo->attachment ? Storage::disk('public')->url($vo->attachment) : null,
+            'scope_original'    => $vo->scope_original,
+            'scope_proposed'    => $vo->scope_proposed,
+            'scope_remark'      => $vo->scope_remark,
+            'schedule_original' => $vo->schedule_original,
+            'schedule_proposed' => $vo->schedule_proposed,
+            'schedule_remark'   => $vo->schedule_remark,
+            'cost_original'     => $vo->cost_original,
+            'cost_proposed'     => $vo->cost_proposed,
+            'cost_remark'       => $vo->cost_remark,
+            'sub_project_id'    => $sub?->id,
+            'sub_project_no'    => $sub?->project_no,
+        ];
+    }
+
+    private function qppRow($doc, ?Project $sub): array
+    {
+        return [
+            'id'       => $doc->id,
+            'label'    => $doc->label,
+            'doc_type' => $doc->doc_type,
+            'filename' => $doc->filename,
+            'url'      => Storage::disk('public')->url($doc->file_path),
+            'remarks'  => $doc->remarks,
+            'created'  => $doc->created_at?->format('M d, Y') ?? '-',
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
+        ];
+    }
+
+    private function mtrRow($doc, ?Project $sub): array
+    {
+        return [
+            'id'            => $doc->id,
+            'label'         => $doc->label,
+            'material_type' => $doc->material_type,
+            'test_date'     => optional($doc->test_date)->format('M d, Y') ?? '-',
+            'filename'      => $doc->filename,
+            'url'           => Storage::disk('public')->url($doc->file_path),
+            'remarks'       => $doc->remarks,
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
+        ];
+    }
+
+    private function iocRow($item, ?Project $sub): array
+    {
+        return [
+            'id'          => $item->id,
+            'description' => $item->description,
+            'cost_code'   => $item->cost_code,
+            'amount'      => (float) $item->amount,
+            'filename'    => $item->filename,
+            'url'         => $item->file_path ? Storage::disk('public')->url($item->file_path) : null,
+            'created'     => $item->created_at?->format('M d, Y') ?? '-',
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
+        ];
+    }
+
+    private function todoRow($t, ?Project $sub): array
+    {
+        return [
+            'id'          => $t->id,
+            'task_name'   => $t->task_name,
+            'target_date' => $t->target_date,
+            'status'      => $t->status,
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
         ];
     }
 

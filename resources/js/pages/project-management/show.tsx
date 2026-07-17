@@ -815,7 +815,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                         <div style={{ padding: '10px 14px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
                             <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Action Menu</span>
                         </div>
-                        {OPS_MENU.map(item => {
+                        {(project.parent ? OPS_MENU.filter(m => m.key !== 'rfq' && m.key !== 'ntp') : OPS_MENU).map(item => {
                             const isActive = activeMenu === item.key;
                             // Audit Trail has no meaningful "pending" count — hide its badge.
                             const count = item.key === 'at' ? 0 : (hub_counts[item.key] ?? 0);

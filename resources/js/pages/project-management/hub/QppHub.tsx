@@ -1,9 +1,9 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
-import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, InfoStrip, inputStyle } from './Common';
+import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, InfoStrip, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface QppRow { id: number; label: string; doc_type: string; filename: string; url: string; created: string }
+interface QppRow { id: number; label: string; doc_type: string; filename: string; url: string; created: string; sub_project_id: number | null; sub_project_no: string | null }
 
 export default function QppHub({ project, qpps, canEdit = true }: { project: HubProject; qpps: QppRow[]; canEdit?: boolean }) {
     const [label, setLabel]   = useState('');
@@ -33,6 +33,8 @@ export default function QppHub({ project, qpps, canEdit = true }: { project: Hub
             onFinish: () => setSaving(false),
         });
     };
+
+    const hasSubRows = qpps.some(q => !!q.sub_project_id);
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
@@ -78,13 +80,21 @@ export default function QppHub({ project, qpps, canEdit = true }: { project: Hub
                 </div>
             )}
             <DataTable
-                headers={['Seq#', 'Label', 'Type of Document', 'Date', 'Actions']}
+                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Label', 'Type of Document', 'Date', 'Actions']}
                 rows={qpps.map((doc, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
+                    ...(hasSubRows ? [<SubTag no={doc.sub_project_no} />] : []),
                     <strong>{doc.label}</strong>,
                     <Badge tone="blue">{doc.doc_type}</Badge>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{doc.created}</span>,
-                    <ActionBtns download del={canEdit} onDownload={() => window.open(doc.url)} onDelete={() => handleDelete(doc)} />,
+                    <ActionBtns
+                        download
+                        del={canEdit && !doc.sub_project_id}
+                        open={!!doc.sub_project_id}
+                        onDownload={() => window.open(doc.url)}
+                        onDelete={() => handleDelete(doc)}
+                        onOpen={() => router.visit(route('projects.hub.qpp', doc.sub_project_id!))}
+                    />,
                 ])}
             />
         </HubShell>

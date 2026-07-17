@@ -1,9 +1,9 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
-import { ActionBtns, DataTable, Field, HubProject, HubShell, Modal, inputStyle, money } from './Common';
+import { ActionBtns, DataTable, Field, HubProject, HubShell, Modal, SubTag, inputStyle, money } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface IocRow { id: number; description: string; amount: number; filename: string | null; url: string | null; created: string }
+interface IocRow { id: number; description: string; amount: number; filename: string | null; url: string | null; created: string; sub_project_id: number | null; sub_project_no: string | null; }
 
 // ── Small helpers ──────────────────────────────────────────────────────────
 function Metric({ label, value, sub, color = '#0f172a', align = 'left' }: {
@@ -110,7 +110,8 @@ export default function AcrHub({ project, iocs, canEdit = true }: { project: Hub
     const [editing, setEditing] = useState<IocRow | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
-    const otherCosts  = iocs.reduce((s, r) => s + r.amount, 0);
+    const hasSubRows  = iocs.some(r => !!r.sub_project_id);
+    const otherCosts  = iocs.filter(r => !r.sub_project_id).reduce((s, r) => s + r.amount, 0);
     const paidBilling = project.budget_paid ?? 0;
     const totalActual = otherCosts + paidBilling;
     const variance    = project.budget_total - totalActual;
@@ -148,7 +149,7 @@ export default function AcrHub({ project, iocs, canEdit = true }: { project: Hub
         <HubShell>
             {confirmDialog}
             {viewing && !editing && (
-                <ViewModal item={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} canEdit={canEdit} />
+                <ViewModal item={viewing} onClose={() => setViewing(null)} onEdit={() => { setEditing(viewing); setViewing(null); }} canEdit={canEdit && !viewing.sub_project_id} />
             )}
             {editing && (
                 <EditModal project={project} item={editing} onClose={() => setEditing(null)} />
@@ -205,19 +206,21 @@ export default function AcrHub({ project, iocs, canEdit = true }: { project: Hub
 
             {/* ── Expenditure Table ── */}
             <DataTable
-                headers={['Seq#', 'Description', 'Actual Cost (PhP)', 'Date Logged', 'Attachment', 'Actions']}
+                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Description', 'Actual Cost (PhP)', 'Date Logged', 'Attachment', 'Actions']}
                 rows={iocs.map((item, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
+                    ...(hasSubRows ? [<SubTag no={item.sub_project_no} />] : []),
                     item.description,
                     <strong>{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                     <span style={{ color: '#64748b', fontSize: '12px' }}>{item.created}</span>,
                     item.filename
                         ? <a href={item.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700 }}>{item.filename}</a>
                         : <span style={{ color: '#94a3b8' }}>—</span>,
-                    <ActionBtns view edit={canEdit} del={canEdit}
+                    <ActionBtns view edit={canEdit && !item.sub_project_id} del={canEdit && !item.sub_project_id} open={!!item.sub_project_id}
                         onView={() => setViewing(item)}
                         onEdit={() => setEditing(item)}
                         onDelete={() => handleDelete(item)}
+                        onOpen={() => router.visit(route('projects.hub.acr', item.sub_project_id!))}
                     />,
                 ])}
             />

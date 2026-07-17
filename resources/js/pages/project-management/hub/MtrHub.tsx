@@ -1,9 +1,9 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
-import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, InfoStrip, inputStyle } from './Common';
+import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, InfoStrip, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface MtrRow { id: number; label: string; material_type: string; test_date: string; filename: string; url: string }
+interface MtrRow { id: number; label: string; material_type: string; test_date: string; filename: string; url: string; sub_project_id: number | null; sub_project_no: string | null }
 
 export default function MtrHub({ project, mtrs, canEdit = true }: { project: HubProject; mtrs: MtrRow[]; canEdit?: boolean }) {
     const [label, setLabel]           = useState('');
@@ -33,6 +33,8 @@ export default function MtrHub({ project, mtrs, canEdit = true }: { project: Hub
             onFinish: () => setSaving(false),
         });
     };
+
+    const hasSubRows = mtrs.some(m => !!m.sub_project_id);
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
@@ -78,13 +80,21 @@ export default function MtrHub({ project, mtrs, canEdit = true }: { project: Hub
                 </div>
             )}
             <DataTable
-                headers={['Seq#', 'Report Name', 'Type of Report', 'Date Logged', 'Actions']}
+                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Report Name', 'Type of Report', 'Date Logged', 'Actions']}
                 rows={mtrs.map((doc, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
+                    ...(hasSubRows ? [<SubTag no={doc.sub_project_no} />] : []),
                     <strong>{doc.label}</strong>,
                     <Badge tone="yellow">{doc.material_type}</Badge>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{doc.test_date}</span>,
-                    <ActionBtns download del={canEdit} onDownload={() => window.open(doc.url)} onDelete={() => handleDelete(doc)} />,
+                    <ActionBtns
+                        download
+                        del={canEdit && !doc.sub_project_id}
+                        open={!!doc.sub_project_id}
+                        onDownload={() => window.open(doc.url)}
+                        onDelete={() => handleDelete(doc)}
+                        onOpen={() => router.visit(route('projects.hub.mtr', doc.sub_project_id!))}
+                    />,
                 ])}
             />
         </HubShell>

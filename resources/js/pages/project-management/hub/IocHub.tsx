@@ -1,10 +1,10 @@
 import { router } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActionBtns, DataTable, Field, HubProject, HubShell, Modal, inputStyle } from './Common';
+import { ActionBtns, DataTable, Field, HubProject, HubShell, Modal, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
 interface CostCodeOption { value: string; label: string }
-interface IocRow { id: number; description: string; cost_code: string | null; amount: number; filename: string | null; url: string | null; created: string }
+interface IocRow { id: number; description: string; cost_code: string | null; amount: number; filename: string | null; url: string | null; created: string; sub_project_id: number | null; sub_project_no: string | null }
 
 function CostCodeSelect({ value, onChange, options, id }: {
     value: string;
@@ -168,7 +168,8 @@ export default function IocHub({ project, iocs, costCodes = [], canEdit = true }
     const [editing, setEditing] = useState<IocRow | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
-    const total = iocs.reduce((s, r) => s + r.amount, 0);
+    const hasSubRows = iocs.some(r => !!r.sub_project_id);
+    const total = iocs.filter(r => !r.sub_project_id).reduce((s, r) => s + r.amount, 0);
 
     const handleSave = () => {
         if (!desc.trim()) { setError('Description of expense is required.'); return; }
@@ -205,7 +206,7 @@ export default function IocHub({ project, iocs, costCodes = [], canEdit = true }
                     item={viewing}
                     onClose={() => setViewing(null)}
                     onEdit={() => { setEditing(viewing); setViewing(null); }}
-                    canEdit={canEdit}
+                    canEdit={canEdit && !viewing.sub_project_id}
                 />
             )}
             {editing && (
@@ -253,19 +254,21 @@ export default function IocHub({ project, iocs, costCodes = [], canEdit = true }
             )}
 
             <DataTable
-                headers={['Seq#', 'Description', 'Cost Code', 'Cost (PhP)', 'Attachment', 'Actions']}
+                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Description', 'Cost Code', 'Cost (PhP)', 'Attachment', 'Actions']}
                 rows={iocs.map((item, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
+                    ...(hasSubRows ? [<SubTag no={item.sub_project_no} />] : []),
                     item.description,
                     item.cost_code ?? <span style={{ color: '#94a3b8' }}>-</span>,
                     <strong>{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                     item.filename
                         ? <a href={item.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700 }}>{item.filename}</a>
                         : <span style={{ color: '#94a3b8' }}>—</span>,
-                    <ActionBtns view edit={canEdit} del={canEdit}
+                    <ActionBtns view edit={canEdit && !item.sub_project_id} del={canEdit && !item.sub_project_id} open={!!item.sub_project_id}
                         onView={() => setViewing(item)}
                         onEdit={() => setEditing(item)}
                         onDelete={() => handleDelete(item)}
+                        onOpen={() => router.visit(route('projects.hub.ioc', item.sub_project_id!))}
                     />,
                 ])}
             />

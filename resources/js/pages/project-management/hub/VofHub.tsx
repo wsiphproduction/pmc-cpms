@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
-import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, InfoStrip, Modal, ModalSection, inputStyle } from './Common';
+import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, InfoStrip, Modal, ModalSection, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
 interface VofRow {
@@ -26,6 +26,8 @@ interface VofRow {
     cost_original: string | null;
     cost_proposed: string | null;
     cost_remark: string | null;
+    sub_project_id: number | null;
+    sub_project_no: string | null;
 }
 
 const ACCENT = '#f59e0b';
@@ -449,6 +451,8 @@ export default function VofHub({ project, vofs, canEdit = true }: { project: Hub
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
+    const hasSubRows = vofs.some(v => !!v.sub_project_id);
+
     const handleDelete = (vof: VofRow) => {
         showConfirm(`Delete variation order ${vof.vo_no}?`, () => {
             router.delete(route('hub.vof.destroy', [project.id, vof.id]), { preserveScroll: true });
@@ -483,18 +487,25 @@ export default function VofHub({ project, vofs, canEdit = true }: { project: Hub
                 </div>
             ) : (
                 <DataTable
-                    headers={['VO No.', 'Title', 'Amount (PhP)', 'Status', 'Date Submitted', 'Actions']}
+                    headers={['VO No.', ...(hasSubRows ? ['Project'] : []), 'Title', 'Amount (PhP)', 'Status', 'Date Submitted', 'Actions']}
                     rows={vofs.map(vo => [
                         <strong style={{ color: ACCENT }}>{vo.vo_no}</strong>,
+                        ...(hasSubRows ? [<SubTag no={vo.sub_project_no} />] : []),
                         <span style={{ fontWeight: 600, color: '#1e293b' }}>{vo.title}</span>,
                         <strong>PhP {vo.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                         <Badge tone={STATUS_TONE[vo.status] ?? 'slate'}>{vo.status}</Badge>,
                         <span style={{ fontSize: '12px', color: '#64748b' }}>{vo.submitted_date}</span>,
-                        <div style={{ display: 'flex', gap: '4px' }}>
-                            {canEdit && vo.status === 'Pending' && quickStatusBtn('#f0fdf4', '#bbf7d0', '#15803d', 'Approve', <CheckIcon />, () => handleQuickStatus(vo, 'approved'))}
-                            {canEdit && vo.status === 'Pending' && quickStatusBtn('#fef2f2', '#fecaca', '#dc2626', 'Reject',  <XIcon />,     () => handleQuickStatus(vo, 'rejected'))}
-                            <ActionBtns view edit={canEdit} del={canEdit} onView={() => setViewVof(vo)} onEdit={() => setEditVof(vo)} onDelete={() => handleDelete(vo)} />
-                        </div>,
+                        vo.sub_project_id ? (
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                <ActionBtns view open onView={() => setViewVof(vo)} onOpen={() => router.visit(route('projects.hub.vof', vo.sub_project_id!))} />
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                                {canEdit && vo.status === 'Pending' && quickStatusBtn('#f0fdf4', '#bbf7d0', '#15803d', 'Approve', <CheckIcon />, () => handleQuickStatus(vo, 'approved'))}
+                                {canEdit && vo.status === 'Pending' && quickStatusBtn('#fef2f2', '#fecaca', '#dc2626', 'Reject',  <XIcon />,     () => handleQuickStatus(vo, 'rejected'))}
+                                <ActionBtns view edit={canEdit} del={canEdit} onView={() => setViewVof(vo)} onEdit={() => setEditVof(vo)} onDelete={() => handleDelete(vo)} />
+                            </div>
+                        ),
                     ])}
                 />
             )}

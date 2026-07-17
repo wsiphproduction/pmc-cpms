@@ -1,6 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
-import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, inputStyle } from './Common';
+import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
 type RfqStatus = 'Awarded' | 'Submitted' | 'Pending' | 'Expired';
@@ -24,6 +24,8 @@ interface RfqRow {
     ntp_status?: 'pending_review' | 'issued' | 'rejected' | null;
     audit_trail?: { action: string; user: string; date: string; type: string }[];
     items?: RfqItem[];
+    sub_project_id: number | null;
+    sub_project_no: string | null;
 }
 
 interface RfqPageProps {
@@ -607,7 +609,10 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
     const [sendError, setSendError]       = useState('');
 
     // Set of contractors that already have an RFQ on this project
-    const usedContractors = new Set(rfqs.map(r => r.contractor));
+    // Own rows only — sub-project RFQs are shown read-only and shouldn't block
+    // dispatching to the same contractor on this project.
+    const usedContractors = new Set(rfqs.filter(r => !r.sub_project_id).map(r => r.contractor));
+    const hasSubRows = rfqs.some(r => !!r.sub_project_id);
 
     const selectedContractor = suppliers.find(c => c.name === dispatchContractor) ?? null;
 
@@ -712,6 +717,18 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
     );
 
     const actionCell = (row: RfqRow) => {
+        // Sub-project RFQs are read-only in the parent — view/print, or open the sub-project.
+        if (row.sub_project_id) return (
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                <ActionBtns
+                    view print open
+                    onView={() => setViewRow(row)}
+                    onPrint={() => handlePrint(row)}
+                    onOpen={() => router.visit(route('projects.hub.rfq', row.sub_project_id!))}
+                />
+                {historyBtn(row)}
+            </div>
+        );
         if (row.status === 'Awarded') return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
@@ -798,7 +815,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                     onSend={handleSend}
                 />
             )}
-            {viewRow       && <RfqViewModal row={viewRow} project={project} onClose={() => setViewRow(null)} canEdit={canEditRfq(viewRow)} />}
+            {viewRow       && <RfqViewModal row={viewRow} project={project} onClose={() => setViewRow(null)} canEdit={canEditRfq(viewRow) && !viewRow.sub_project_id} />}
             {ntpRow        && <NtpModal row={ntpRow} project={project} onClose={() => setNtpRow(null)} />}
             {historyRow    && <RfqHistoryModal row={historyRow} onClose={() => setHistoryRow(null)} />}
 
@@ -846,11 +863,12 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             </div>
 
             <DataTable
-                headers={['Contractor Name', 'Scope of Work', 'Sent Date', 'Due Date', 'Status', 'Total Amount', 'Actions']}
+                headers={['Contractor Name', ...(hasSubRows ? ['Project'] : []), 'Scope of Work', 'Sent Date', 'Due Date', 'Status', 'Total Amount', 'Actions']}
                 rows={rfqs.map(row => {
                     const grandTotal = (row.items ?? []).reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
                     return [
                         <strong>{row.contractor}</strong>,
+                        ...(hasSubRows ? [<SubTag no={row.sub_project_no} />] : []),
                         row.scope_of_work
                             ? <span title={row.scope_of_work} style={{ display: 'block', minWidth: '220px', maxWidth: '440px', fontSize: '12.5px', color: '#475569', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>{row.scope_of_work}</span>
                             : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
