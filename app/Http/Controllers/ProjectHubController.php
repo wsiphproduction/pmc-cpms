@@ -642,6 +642,18 @@ class ProjectHubController extends Controller
         ]);
     }
 
+    /**
+     * Physical completion tracks the latest weekly report. Recompute it from the
+     * most recent remaining report (0 when none are left) so deleting reports
+     * doesn't leave a stale value behind. The weeklyReports relation is already
+     * ordered latest-submitted-first.
+     */
+    private function recalculateCompletionPercent(Project $project): void
+    {
+        $latest = $project->weeklyReports()->first();
+        $project->update(['completion_percent' => $latest?->completion_pct ?? 0]);
+    }
+
     // ── IOC ───────────────────────────────────────────────────────────────────
 
     public function storeIoc(Request $request, Project $project): RedirectResponse
@@ -743,8 +755,8 @@ class ProjectHubController extends Controller
             'created_by'        => auth()->id(),
         ]);
 
-        // Update project completion percent
-        $project->update(['completion_percent' => $data['completion_pct']]);
+        // Reflect the latest report's progress on the project.
+        $this->recalculateCompletionPercent($project);
 
         AuditTrail::log("Weekly report {$report->week_code} submitted — {$data['completion_pct']}% complete", $project, ['module' => 'PSR', 'type' => 'upload']);
 
@@ -802,7 +814,6 @@ class ProjectHubController extends Controller
         };
 
         $imported = 0;
-        $latestPct = null;
 
         while (($row = fgetcsv($handle)) !== false) {
             $week = $cell($row, $weekIdx);
@@ -836,7 +847,6 @@ class ProjectHubController extends Controller
                 'created_by'        => auth()->id(),
             ]);
 
-            $latestPct = $pct;
             $imported++;
         }
         fclose($handle);
@@ -845,10 +855,8 @@ class ProjectHubController extends Controller
             return back()->with('error', 'No valid weekly reports found in the CSV.');
         }
 
-        // Reflect the most recent imported report's progress on the project.
-        if ($latestPct !== null) {
-            $project->update(['completion_percent' => $latestPct]);
-        }
+        // Reflect the latest report's progress on the project.
+        $this->recalculateCompletionPercent($project);
 
         AuditTrail::log("Imported {$imported} weekly report(s) from CSV", $project, ['module' => 'PSR', 'type' => 'upload']);
 
@@ -877,6 +885,9 @@ class ProjectHubController extends Controller
             Storage::disk('public')->delete($psr->file_path);
         }
         $psr->delete();
+
+        // Deleting a report may change (or clear) the project's latest progress.
+        $this->recalculateCompletionPercent($project);
 
         return back()->with('success', 'Weekly report deleted.');
     }

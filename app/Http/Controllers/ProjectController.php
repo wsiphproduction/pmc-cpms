@@ -48,7 +48,9 @@ class ProjectController extends Controller
     {
         // Sub-projects live under their parent's operations hub and are never
         // listed here — the management list only shows top-level projects.
-        $query = Project::with(['manager', 'creator'])->whereNull('parent_id')->latest();
+        // Children are eager-loaded for the completion roll-up.
+        $query = Project::with(['manager', 'creator', 'children:id,parent_id,completion_percent'])
+            ->whereNull('parent_id')->latest();
 
         $user = $request->user();
         if (!$user->hasRole(['approver', 'assistant_manager', 'admin'])) {
@@ -612,38 +614,9 @@ class ProjectController extends Controller
                     'contractor'    => $n->contractor_name,
                     'approved_cost' => (float) $n->approved_cost,
                 ])->values(),
-                'billings' => $project->billings()->with(['ntp', 'statusLogs.user'])->get()->map(fn ($b) => [
-                    'id'              => $b->id,
-                    'stmt_no'         => $b->stmt_no,
-                    'billing_type'    => $b->billing_type,
-                    'period_from'     => optional($b->period_from)->format('M d, Y') ?? '-',
-                    'period_to'       => optional($b->period_to)->format('M d, Y') ?? '-',
-                    'period_from_raw' => optional($b->period_from)->format('Y-m-d'),
-                    'period_to_raw'   => optional($b->period_to)->format('Y-m-d'),
-                    'amount'          => (float) $b->amount,
-                    'progress_pct'    => $b->progress_pct !== null ? (float) $b->progress_pct : null,
-                    'summary'         => $b->summary,
-                    'remarks'         => $b->remarks,
-                    'status'          => ucfirst($b->status),
-                    'status_raw'      => $b->status,
-                    'filename'        => $b->filename,
-                    'url'             => $b->file_path ? Storage::disk('public')->url($b->file_path) : null,
-                    'attachments'         => $b->attachments ?? [],
-                    'recommendation'      => $b->recommendation,
-                    'ntp_id'              => $b->project_ntp_id,
-                    'ntp_no'              => $b->ntp?->ntp_no,
-                    'ntp_date'            => optional($b->ntp?->issued_date)->format('M d, Y'),
-                    'ntp_contractor'      => $b->ntp?->contractor_name,
-                    'ntp_approved_cost'   => $b->ntp ? (float) $b->ntp->approved_cost : null,
-                    'status_logs'         => $b->statusLogs->map(fn ($log) => [
-                        'id'      => $log->id,
-                        'date'    => $log->created_at?->format('M d, Y') ?? '-',
-                        'time'    => $log->created_at?->format('h:i A') ?? '-',
-                        'user'    => $log->user?->name ?? 'System',
-                        'status'  => ucfirst($log->status),
-                        'remarks' => $log->remarks ?? '—',
-                    ])->values(),
-                ])->values(),
+                // Own billings plus, for a parent, its sub-projects' billings
+                // (read-only in the UI, tagged with their sub-project).
+                'billings' => $this->collectHubRows($project, fn ($p) => $p->billings()->with(['ntp', 'statusLogs.user'])->get(), fn ($b, $sub) => $this->billingRow($b, $sub)),
             ],
 
             'ioc', 'acr' => [
@@ -667,19 +640,9 @@ class ProjectController extends Controller
                     'ntp_no'     => $n->ntp_no,
                     'contractor' => $n->contractor_name,
                 ])->values(),
-                'reports' => $project->weeklyReports()->with('ntp')->get()->map(fn ($r) => [
-                    'id'                => $r->id,
-                    'week_code'         => $r->week_code,
-                    'completion_pct'    => $r->completion_pct,
-                    'identified_issues' => $r->identified_issues,
-                    'progress_updates'  => $r->progress_updates,
-                    'submitted_date'    => optional($r->submitted_date)->format('M d, Y') ?? '-',
-                    'filename'          => $r->filename,
-                    'url'               => $r->file_path ? Storage::disk('public')->url($r->file_path) : null,
-                    'ntp_id'            => $r->project_ntp_id,
-                    'ntp_no'            => $r->ntp?->ntp_no,
-                    'ntp_contractor'    => $r->ntp?->contractor_name,
-                ])->values(),
+                // Own reports plus, for a parent, its sub-projects' reports
+                // (read-only in the UI, tagged with their sub-project).
+                'reports' => $this->collectHubRows($project, fn ($p) => $p->weeklyReports()->with('ntp')->get(), fn ($r, $sub) => $this->weeklyReportRow($r, $sub)),
             ],
 
             'at' => [
@@ -711,6 +674,82 @@ class ProjectController extends Controller
 
             default => [],
         };
+    }
+
+    /**
+     * Collect a hub section's rows for a project and, when it's a parent, its
+     * sub-projects too. Each sub-project's rows are tagged (via $mapRow's second
+     * arg) so the UI can render them read-only. `$fetch` returns a project's raw
+     * models; `$mapRow($model, ?Project $sub)` serializes one row.
+     */
+    private function collectHubRows(Project $project, callable $fetch, callable $mapRow): array
+    {
+        $rows = $fetch($project)->map(fn ($m) => $mapRow($m, null));
+
+        foreach ($project->children as $child) {
+            $rows = $rows->concat($fetch($child)->map(fn ($m) => $mapRow($m, $child)));
+        }
+
+        return $rows->values()->all();
+    }
+
+    private function billingRow($b, ?Project $sub): array
+    {
+        return [
+            'id'              => $b->id,
+            'stmt_no'         => $b->stmt_no,
+            'billing_type'    => $b->billing_type,
+            'period_from'     => optional($b->period_from)->format('M d, Y') ?? '-',
+            'period_to'       => optional($b->period_to)->format('M d, Y') ?? '-',
+            'period_from_raw' => optional($b->period_from)->format('Y-m-d'),
+            'period_to_raw'   => optional($b->period_to)->format('Y-m-d'),
+            'amount'          => (float) $b->amount,
+            'progress_pct'    => $b->progress_pct !== null ? (float) $b->progress_pct : null,
+            'summary'         => $b->summary,
+            'remarks'         => $b->remarks,
+            'status'          => ucfirst($b->status),
+            'status_raw'      => $b->status,
+            'filename'        => $b->filename,
+            'url'             => $b->file_path ? Storage::disk('public')->url($b->file_path) : null,
+            'attachments'         => $b->attachments ?? [],
+            'recommendation'      => $b->recommendation,
+            'ntp_id'              => $b->project_ntp_id,
+            'ntp_no'              => $b->ntp?->ntp_no,
+            'ntp_date'            => optional($b->ntp?->issued_date)->format('M d, Y'),
+            'ntp_contractor'      => $b->ntp?->contractor_name,
+            'ntp_approved_cost'   => $b->ntp ? (float) $b->ntp->approved_cost : null,
+            // null for the project's own rows; set for a sub-project's rows.
+            'sub_project_id'      => $sub?->id,
+            'sub_project_no'      => $sub?->project_no,
+            'status_logs'         => $b->statusLogs->map(fn ($log) => [
+                'id'      => $log->id,
+                'date'    => $log->created_at?->format('M d, Y') ?? '-',
+                'time'    => $log->created_at?->format('h:i A') ?? '-',
+                'user'    => $log->user?->name ?? 'System',
+                'status'  => ucfirst($log->status),
+                'remarks' => $log->remarks ?? '—',
+            ])->values(),
+        ];
+    }
+
+    private function weeklyReportRow($r, ?Project $sub): array
+    {
+        return [
+            'id'                => $r->id,
+            'week_code'         => $r->week_code,
+            'completion_pct'    => $r->completion_pct,
+            'identified_issues' => $r->identified_issues,
+            'progress_updates'  => $r->progress_updates,
+            'submitted_date'    => optional($r->submitted_date)->format('M d, Y') ?? '-',
+            'filename'          => $r->filename,
+            'url'               => $r->file_path ? Storage::disk('public')->url($r->file_path) : null,
+            'ntp_id'            => $r->project_ntp_id,
+            'ntp_no'            => $r->ntp?->ntp_no,
+            'ntp_contractor'    => $r->ntp?->contractor_name,
+            // null for the project's own rows; set for a sub-project's rows.
+            'sub_project_id'    => $sub?->id,
+            'sub_project_no'    => $sub?->project_no,
+        ];
     }
 
     private function validatedProjectData(Request $request): array
@@ -854,7 +893,7 @@ class ProjectController extends Controller
             'project_no' => $project->project_no,
             'title' => $project->title,
             'type' => $this->projectType($project->class_name),
-            'progress' => $project->completion_percent,
+            'progress' => $project->effectiveCompletionPercent(),
             'project_manager' => $project->project_manager_name ?? $project->manager?->name ?? 'Unassigned',
             'encoded_by' => $project->creator?->name ?? 'Unassigned',
             'dept_owner' => $project->dept_owner,
@@ -891,7 +930,7 @@ class ProjectController extends Controller
             'days_remaining' => $daysRemaining,
             'budget_total' => (float) $project->budget_total,
             'budget_paid' => (float) $project->budget_paid,
-            'completion_percent' => $project->completion_percent,
+            'completion_percent' => $project->effectiveCompletionPercent(),
             'project_health' => $project->health(),
             'asset_id' => $project->asset_id,
             'cost_code' => $project->cost_code,

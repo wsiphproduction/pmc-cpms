@@ -163,6 +163,48 @@ class Project extends Model
         return $this->hasMany(ProjectTask::class)->orderBy('target_date');
     }
 
+    // ── Sub-project roll-ups ──────────────────────────────────────────────
+    //
+    // A project always reports its own physical completion (its own weekly
+    // reports). When it also has sub-projects, its headline completion blends
+    // the project's own value with each sub-project's, equally weighted — but
+    // entries still at 0% (not yet started/reported) are skipped so a freshly
+    // created sub-project doesn't drag the number down (own 40% + sub 0% → 40%;
+    // own 40% + subs 30% & 60% → 43%). Financials stay independent.
+
+    /** Children used for roll-ups; prefers the eager-loaded relation to avoid N+1. */
+    private function rollupChildren()
+    {
+        return $this->relationLoaded('children') ? $this->children : $this->children()->get();
+    }
+
+    public function hasSubProjects(): bool
+    {
+        return $this->rollupChildren()->isNotEmpty();
+    }
+
+    /**
+     * Physical completion. With no sub-projects it's the project's own value;
+     * with sub-projects it's the equal-weighted average of the project's own
+     * value and each sub-project's, ignoring entries that are still at 0%.
+     * When every entry is 0%, the result is 0%.
+     */
+    public function effectiveCompletionPercent(): int
+    {
+        $children = $this->rollupChildren();
+
+        if ($children->isEmpty()) {
+            return (int) $this->completion_percent;
+        }
+
+        $reported = $children->pluck('completion_percent')
+            ->push($this->completion_percent)
+            ->map(fn ($v) => (float) $v)
+            ->filter(fn ($v) => $v > 0);
+
+        return $reported->isEmpty() ? 0 : (int) round($reported->avg());
+    }
+
     // ── Health / KPI ──────────────────────────────────────────────────────
 
     public function daysElapsed(): int
@@ -184,7 +226,9 @@ class Project extends Model
      */
     public function health(): string
     {
-        if ($this->completion_percent >= 100) {
+        $completion = $this->effectiveCompletionPercent();
+
+        if ($completion >= 100) {
             // Finished on or before the deadline is "Ahead"; finished after
             // (or with no deadline to beat) is simply "Completed".
             if ($this->deadline && now()->startOfDay()->lte(Carbon::parse($this->deadline)->startOfDay())) {
@@ -208,7 +252,7 @@ class Project extends Model
         }
 
         $kpiThreshold = (float) Setting::get('project_completion_kpi', 80);
-        $onTrackRatio = ($this->completion_percent / $expectedPercent) * 100;
+        $onTrackRatio = ($completion / $expectedPercent) * 100;
 
         return $onTrackRatio < $kpiThreshold ? 'Delayed' : 'On-Time';
     }

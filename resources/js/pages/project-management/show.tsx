@@ -638,7 +638,11 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                                 {project.completion_percent}%
                             </div>
                         </div>
-                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>Based on latest weekly report</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+                            {project.sub_projects.length > 0
+                                ? `Blend of own + ${project.sub_projects.length} sub-project${project.sub_projects.length === 1 ? '' : 's'}`
+                                : 'Based on latest weekly report'}
+                        </div>
                     </div>
 
                     {/* Health */}

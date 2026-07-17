@@ -33,6 +33,8 @@ interface BillingRow {
     ntp_date: string | null;
     ntp_contractor: string | null;
     ntp_approved_cost: number | null;
+    sub_project_id: number | null;
+    sub_project_no: string | null;
     status_logs?: BillingStatusLog[];
 }
 
@@ -957,6 +959,9 @@ export default function RfpHub({ project, billings, ntps, canEdit = true, canMan
     const [ntpFilter, setNtpFilter] = useState('');
     const [contractorFilter, setContractorFilter] = useState('');
 
+    // When a parent project's billings include sub-project rows, show a Project column.
+    const hasSubRows = billings.some(b => !!b.sub_project_id);
+
     // Distinct NTP numbers / contractors present on this project's billings.
     const ntpOptions        = Array.from(new Set(billings.map(b => b.ntp_no).filter((v): v is string => !!v))).sort();
     const contractorOptions = Array.from(new Set(billings.map(b => b.ntp_contractor).filter((v): v is string => !!v))).sort();
@@ -978,6 +983,23 @@ export default function RfpHub({ project, billings, ntps, canEdit = true, canMan
     };
 
     const actionCell = (b: BillingRow) => {
+        // Sub-project billings are read-only here — view, or jump to the
+        // sub-project's own RFP hub to manage them.
+        if (b.sub_project_id) {
+            return (
+                <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                    <button type="button" title="View" onClick={() => setViewing(b)}
+                        style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fff', border: '1px solid #e2e8f0', color: '#475569' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    </button>
+                    <button type="button" title={`Open ${b.sub_project_no}`} onClick={() => router.visit(route('projects.hub.rfp', b.sub_project_id!))}
+                        style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M7 7h10v10"/></svg>
+                    </button>
+                </div>
+            );
+        }
+
         return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 <button type="button" title="View" onClick={() => setViewing(b)}
@@ -1009,7 +1031,7 @@ export default function RfpHub({ project, billings, ntps, canEdit = true, canMan
                     billing={viewing}
                     onClose={() => setViewing(null)}
                     onEdit={() => { setEditing(viewing); setViewing(null); }}
-                    canEdit={canEdit}
+                    canEdit={canEdit && !viewing.sub_project_id}
                 />
             )}
             {editing && (
@@ -1073,10 +1095,15 @@ export default function RfpHub({ project, billings, ntps, canEdit = true, canMan
             </div>
 
             <DataTable
-                headers={['Seq#', 'Control#', 'NTP No.', 'NTP Date', 'Contractor (NTP)', 'Billing Type', 'Billed Amount', 'Progress %', 'Status', 'Actions']}
+                headers={['Seq#', 'Control#', ...(hasSubRows ? ['Project'] : []), 'NTP No.', 'NTP Date', 'Contractor (NTP)', 'Billing Type', 'Billed Amount', 'Progress %', 'Status', 'Actions']}
                 rows={filteredBillings.map((b, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
                     <strong>{b.stmt_no}</strong>,
+                    ...(hasSubRows ? [
+                        b.sub_project_no
+                            ? <span style={{ fontSize: '11px', fontWeight: 700, color: '#4338ca', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '5px', padding: '2px 7px', whiteSpace: 'nowrap' }}>{b.sub_project_no}</span>
+                            : <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>This project</span>,
+                    ] : []),
                     b.ntp_no
                         ? <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>{b.ntp_no}</span>
                         : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
@@ -1087,7 +1114,7 @@ export default function RfpHub({ project, billings, ntps, canEdit = true, canMan
                     b.billing_type,
                     <strong>PhP {b.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                     b.progress_pct != null ? `${b.progress_pct}%` : '—',
-                    canManageStatus ? (
+                    canManageStatus && !b.sub_project_id ? (
                         <button type="button" title="Click to change status" onClick={() => setStatusTarget(b)}
                             style={{ padding: 0, border: 'none', background: 'transparent', cursor: 'pointer' }}>
                             <Badge tone={STATUS_TONE[b.status] ?? 'slate'}>{b.status} ✎</Badge>

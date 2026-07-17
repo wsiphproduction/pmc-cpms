@@ -39,7 +39,10 @@ class DashboardController extends Controller
         $isDeptUser = !$user->hasRole(['approver', 'assistant_manager', 'admin']);
         $today = now()->startOfDay();
 
+        // Sub-projects are components of their parent, not standalone entries —
+        // exclude them everywhere on the dashboard so counts/averages don't double up.
         $projectsQuery = Project::query()
+            ->whereNull('parent_id')
             ->when($isDeptUser, fn (Builder $q) => $q->whereHas('projectRequest', fn ($rq) => $rq->where('requester_id', $user->id)));
 
         $requestsQuery = ProjectRequest::query()
@@ -53,17 +56,23 @@ class DashboardController extends Controller
                 : $this->engineerStats($today),
             'kpi' => $isDeptUser ? null : [
                 'target' => (int) Setting::get('project_completion_kpi', 80),
-                'actual' => (int) round((float) Project::avg('completion_percent')),
+                // Average the effective (rolled-up) completion of top-level projects.
+                'actual' => (int) round(
+                    Project::whereNull('parent_id')
+                        ->with('children:id,parent_id,completion_percent')
+                        ->get()
+                        ->avg(fn (Project $p) => $p->effectiveCompletionPercent()) ?? 0
+                ),
             ],
             'tables' => [
                 'notifications' => $this->notifications($user->id),
-                'projects' => (clone $projectsQuery)->latest()->take(5)->get()->map(fn (Project $p) => [
+                'projects' => (clone $projectsQuery)->with('children:id,parent_id,completion_percent')->latest()->take(5)->get()->map(fn (Project $p) => [
                     'id' => $p->id,
                     'project_no' => $p->project_no,
                     'title' => $p->title,
                     'status' => self::STATUS_LABELS[$p->status_key] ?? $p->status_key,
                     'health' => $p->health(),
-                    'progress' => $p->completion_percent,
+                    'progress' => $p->effectiveCompletionPercent(),
                 ]),
                 'requests' => (clone $requestsQuery)->with('requester')->latest()->take(5)->get()->map(fn (ProjectRequest $r) => [
                     'id' => $r->id,
@@ -104,12 +113,16 @@ class DashboardController extends Controller
 
     private function engineerStats(Carbon $today): array
     {
-        $activeProjects = Project::whereNotIn('status_key', self::INACTIVE_STATUSES)->get();
+        $activeProjects = Project::whereNull('parent_id')
+            ->whereNotIn('status_key', self::INACTIVE_STATUSES)
+            ->with('children:id,parent_id,completion_percent')
+            ->get();
 
         return [
             'active_project' => $activeProjects->count(),
             'delayed' => $activeProjects->filter(fn (Project $p) => $p->health() === 'Delayed')->count(),
-            'about_to_lapse' => Project::whereNotIn('status_key', self::INACTIVE_STATUSES)
+            'about_to_lapse' => Project::whereNull('parent_id')
+                ->whereNotIn('status_key', self::INACTIVE_STATUSES)
                 ->whereBetween('deadline', [$today, $today->copy()->addDays(7)])
                 ->count(),
             'pending_request' => ProjectRequest::where('status', 'pending')->count(),

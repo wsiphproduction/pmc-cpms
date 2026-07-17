@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Button, DataTable, Field, HubProject, HubShell, Modal, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface PsrRow { id: number; week_code: string; completion_pct: number; identified_issues: string | null; progress_updates: string | null; submitted_date: string; filename: string | null; url: string | null; ntp_id: number | null; ntp_no: string | null; ntp_contractor: string | null }
+interface PsrRow { id: number; week_code: string; completion_pct: number; identified_issues: string | null; progress_updates: string | null; submitted_date: string; filename: string | null; url: string | null; ntp_id: number | null; ntp_no: string | null; ntp_contractor: string | null; sub_project_id: number | null; sub_project_no: string | null }
 interface NtpOption { id: number; ntp_no: string; contractor: string }
 
 function ProgressBar({ value }: { value: number }) {
@@ -299,7 +299,11 @@ export default function PsrHub({ project, reports, ntps = [], canEdit = true }: 
     const [showImport, setShowImport] = useState(false);
     const [viewing, setViewing]       = useState<PsrRow | null>(null);
     const [ntpFilter, setNtpFilter]   = useState('');
-    const progress = reports[0]?.completion_pct ?? project.completion_percent ?? 0;
+    // Use the project's effective (blended) completion for the headline.
+    const progress = project.completion_percent ?? 0;
+
+    // When a parent project's reports include sub-project rows, show a Project column.
+    const hasSubRows = reports.some(r => !!r.sub_project_id);
 
     const ntpOptions = Array.from(new Set(reports.map(r => r.ntp_no).filter((v): v is string => !!v))).sort();
     const filteredReports = reports.filter(r => !ntpFilter || r.ntp_no === ntpFilter);
@@ -371,9 +375,14 @@ export default function PsrHub({ project, reports, ntps = [], canEdit = true }: 
             )}
 
             <DataTable
-                headers={['Week#', 'NTP / Contractor', '% Completion', 'Identified Issues', 'Submitted Date', 'Attachment', 'Actions']}
+                headers={['Week#', ...(hasSubRows ? ['Project'] : []), 'NTP / Contractor', '% Completion', 'Identified Issues', 'Submitted Date', 'Attachment', 'Actions']}
                 rows={filteredReports.map(r => [
                     <strong style={{ color: '#2563eb' }}>{r.week_code}</strong>,
+                    ...(hasSubRows ? [
+                        r.sub_project_no
+                            ? <span style={{ fontSize: '11px', fontWeight: 700, color: '#4338ca', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: '5px', padding: '2px 7px', whiteSpace: 'nowrap' }}>{r.sub_project_no}</span>
+                            : <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>This project</span>,
+                    ] : []),
                     r.ntp_no
                         ? <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>{r.ntp_no}{r.ntp_contractor ? ` — ${r.ntp_contractor}` : ''}</span>
                         : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>Whole project</span>,
@@ -383,10 +392,17 @@ export default function PsrHub({ project, reports, ntps = [], canEdit = true }: 
                     r.filename
                         ? <a href={r.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700, fontSize: '12.5px' }}>{r.filename}</a>
                         : <span style={{ color: '#94a3b8' }}>—</span>,
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                        <button type="button" title="View" onClick={() => setViewing(r)} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fff', border: '1px solid #e2e8f0', color: '#475569' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-                        {canEdit && <button type="button" title="Delete" onClick={() => handleDelete(r)} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>}
-                    </div>,
+                    r.sub_project_id ? (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                            <button type="button" title="View" onClick={() => setViewing(r)} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fff', border: '1px solid #e2e8f0', color: '#475569' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                            <button type="button" title={`Open ${r.sub_project_no}`} onClick={() => router.visit(route('projects.hub.psr', r.sub_project_id!))} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#eef2ff', border: '1px solid #c7d2fe', color: '#4338ca' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 17L17 7M7 7h10v10"/></svg></button>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                            <button type="button" title="View" onClick={() => setViewing(r)} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fff', border: '1px solid #e2e8f0', color: '#475569' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+                            {canEdit && <button type="button" title="Delete" onClick={() => handleDelete(r)} style={{ width: '28px', height: '28px', padding: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: '6px', cursor: 'pointer', background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626' }}><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>}
+                        </div>
+                    ),
                 ])}
             />
         </HubShell>
