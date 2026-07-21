@@ -21,12 +21,14 @@ class NtpReviewController extends Controller
     {
         $user = $request->user();
 
-        $query = ProjectNtp::with(['project.projectRequest', 'creator', 'rfq.items'])
-            ->where('status', 'pending_review')
+        // Show the full history — records for review, issued, and rejected — not
+        // just those pending review. Ordered so pending-review surfaces first.
+        $query = ProjectNtp::with(['project.projectRequest', 'creator', 'reviewer', 'rfq.items'])
+            ->orderByRaw("CASE WHEN status = 'pending_review' THEN 0 ELSE 1 END")
             ->latest();
 
         // A department user only reviews NTPs on the projects they requested.
-        // Admins can see every pending NTP.
+        // Admins can see every NTP.
         if (!$user->hasRole('admin')) {
             $query->whereHas('project.projectRequest', fn ($q) => $q->where('requester_id', $user->id));
         }
@@ -128,11 +130,16 @@ class NtpReviewController extends Controller
             'id'             => $ntp->id,
             'ntp_no'         => $ntp->ntp_no,
             'contractor'     => $ntp->contractor_name,
+            'status'         => $ntp->status,
             'baseline_start' => optional($ntp->baseline_start)->format('M d, Y'),
             'baseline_end'   => optional($ntp->baseline_end)->format('M d, Y'),
             'approved_cost'  => (float) $ntp->approved_cost,
             'submitted_at'   => optional($ntp->created_at)->format('M d, Y h:i A'),
             'prepared_by'    => $ntp->creator->name ?? '—',
+            'issued_date'    => optional($ntp->issued_date)->format('M d, Y'),
+            'reviewed_by'    => $ntp->reviewer->name ?? null,
+            'reviewed_at'    => optional($ntp->reviewed_at)->format('M d, Y h:i A'),
+            'review_remarks' => $ntp->review_remarks,
             'scope_of_work'  => $rfq->scope_of_work ?? null,
             'project'        => [
                 'id'         => $ntp->project->id,

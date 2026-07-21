@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditTrail;
 use App\Models\Notification;
 use App\Models\Project;
+use App\Models\ProjectNtp;
 use App\Models\ProjectRequest;
 use App\Models\Setting;
 use App\Models\User;
@@ -64,6 +65,24 @@ class DashboardController extends Controller
                         ->avg(fn (Project $p) => $p->effectiveCompletionPercent()) ?? 0
                 ),
             ],
+            // Dept users review NTPs submitted on the projects they requested.
+            'ntps_for_review' => $isDeptUser
+                ? ProjectNtp::with(['project', 'creator'])
+                    ->where('status', 'pending_review')
+                    ->whereHas('project.projectRequest', fn (Builder $q) => $q->where('requester_id', $user->id))
+                    ->latest()
+                    ->take(6)
+                    ->get()
+                    ->map(fn (ProjectNtp $n) => [
+                        'id'            => $n->id,
+                        'ntp_no'        => $n->ntp_no,
+                        'contractor'    => $n->contractor_name,
+                        'project_no'    => $n->project?->project_no,
+                        'project_title' => $n->project?->title,
+                        'prepared_by'   => $n->creator?->name ?? '—',
+                        'submitted_at'  => optional($n->created_at)->format('M d, Y'),
+                    ])
+                : [],
             'tables' => [
                 'notifications' => $this->notifications($user->id),
                 'projects' => (clone $projectsQuery)->with('children:id,parent_id,completion_percent')->latest()->take(5)->get()->map(fn (Project $p) => [

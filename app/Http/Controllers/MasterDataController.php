@@ -38,7 +38,7 @@ class MasterDataController extends Controller
             'serviceTypes' => ServiceType::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'workForces'   => WorkForce::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'structures'   => Structure::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
-            'suppliers'    => Supplier::latest()->get(['id', 'company', 'email', 'telephone_no', 'mobile_no', 'is_active', 'created_at']),
+            'suppliers'    => Supplier::latest()->get(['id', 'company', 'accredited', 'email', 'telephone_no', 'mobile_no', 'is_active', 'created_at']),
         ]);
     }
 
@@ -195,10 +195,12 @@ class MasterDataController extends Controller
     {
         $data = $request->validate([
             'company'      => 'required|string|max:191|unique:suppliers,company',
+            'accredited'   => 'nullable|boolean',
             'email'        => 'nullable|email|max:191',
             'telephone_no' => 'nullable|string|max:100',
             'mobile_no'    => 'nullable|string|max:100',
         ]);
+        $data['accredited'] = $request->boolean('accredited');
 
         Supplier::create($data);
 
@@ -209,10 +211,12 @@ class MasterDataController extends Controller
     {
         $data = $request->validate([
             'company'      => 'required|string|max:191|unique:suppliers,company,' . $supplier->id,
+            'accredited'   => 'nullable|boolean',
             'email'        => 'nullable|email|max:191',
             'telephone_no' => 'nullable|string|max:100',
             'mobile_no'    => 'nullable|string|max:100',
         ]);
+        $data['accredited'] = $request->boolean('accredited');
 
         $supplier->update($data);
 

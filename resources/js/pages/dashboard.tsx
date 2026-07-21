@@ -51,9 +51,20 @@ interface AuditRow {
     module: string;
 }
 
+interface NtpForReviewRow {
+    id: number;
+    ntp_no: string;
+    contractor: string;
+    project_no: string | null;
+    project_title: string | null;
+    prepared_by: string;
+    submitted_at: string | null;
+}
+
 interface DashboardProps {
     stats: Stats;
     kpi: Kpi | null;
+    ntps_for_review?: NtpForReviewRow[];
     tables: {
         notifications: NotificationRow[];
         projects: ProjectRow[];
@@ -255,7 +266,7 @@ function NotificationsCard({ notifications }: { notifications: NotificationRow[]
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function Dashboard({ stats, kpi, tables }: DashboardProps) {
+export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: DashboardProps) {
     const { props } = usePage<PageProps>();
     const role = props.auth?.user?.role;
     const isDeptUser = role !== 'approver' && role !== 'assistant_manager' && role !== 'admin';
@@ -339,6 +350,50 @@ export default function Dashboard({ stats, kpi, tables }: DashboardProps) {
                                 icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="32" height="32"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>} />
                         </div>
                     </>
+                )}
+
+                {isDeptUser && ntps_for_review.length > 0 && (
+                    <div style={{ background: '#fff', border: '1px solid #fde68a', borderLeft: '4px solid #f59e0b', borderRadius: '12px', marginBottom: '20px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #fef3c7', background: '#fffbeb' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '30px', height: '30px', borderRadius: '8px', background: '#fef3c7', color: '#b45309' }}>
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                                </span>
+                                <div>
+                                    <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#92400e' }}>NTP for Review</div>
+                                    <div style={{ fontSize: '11.5px', color: '#b45309' }}>{ntps_for_review.length} Notice{ntps_for_review.length === 1 ? '' : 's'} to Proceed awaiting your review</div>
+                                </div>
+                            </div>
+                            <Link href={route('ntp-reviews.index')} style={{ fontSize: '12px', fontWeight: 700, color: '#b45309', textDecoration: 'none', padding: '6px 12px', borderRadius: '7px', border: '1px solid #fcd34d', background: '#fff' }}>
+                                Review all →
+                            </Link>
+                        </div>
+                        <div style={{ overflowX: 'auto' }}>
+                            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12.5px' }}>
+                                <thead>
+                                    <tr style={{ background: '#fafafa' }}>
+                                        {['NTP No', 'Project', 'Contractor', 'Prepared By', 'Submitted', ''].map((h, i) => (
+                                            <th key={i} style={{ padding: '8px 16px', textAlign: i === 5 ? 'right' : 'left', fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {ntps_for_review.map(n => (
+                                        <tr key={n.id} style={{ borderBottom: '1px solid #f8fafc' }}>
+                                            <td style={{ padding: '10px 16px', fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{n.ntp_no}</td>
+                                            <td style={{ padding: '10px 16px', color: '#475569' }}>{n.project_no ? <><strong style={{ color: '#334155' }}>{n.project_no}</strong> — {n.project_title}</> : '—'}</td>
+                                            <td style={{ padding: '10px 16px', color: '#475569' }}>{n.contractor}</td>
+                                            <td style={{ padding: '10px 16px', color: '#64748b' }}>{n.prepared_by}</td>
+                                            <td style={{ padding: '10px 16px', color: '#64748b', whiteSpace: 'nowrap' }}>{n.submitted_at ?? '—'}</td>
+                                            <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                                                <Link href={route('ntp-reviews.index')} style={{ fontSize: '11.5px', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}>Review →</Link>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>

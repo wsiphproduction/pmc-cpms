@@ -22,7 +22,7 @@ interface RfqRow {
     recipient_email?: string | null;
     has_ntp: boolean;
     ntp_status?: 'pending_review' | 'issued' | 'rejected' | null;
-    audit_trail?: { action: string; user: string; date: string; type: string }[];
+    audit_trail?: { action: string; user: string; date: string; type: string; fields?: { field: string; old: string; new: string }[] }[];
     items?: RfqItem[];
     sub_project_id: number | null;
     sub_project_no: string | null;
@@ -563,6 +563,39 @@ function SupplierSelect({ suppliers, value, onChange, usedContractors }: {
     );
 }
 
+// Renders a "field: old → new" list for audit entries carrying change detail.
+// Short values render inline; long/multi-line values (e.g. line items) stack.
+function ChangeDetail({ fields }: { fields?: { field: string; old: string; new: string }[] }) {
+    if (!fields || fields.length === 0) return null;
+    const oldPill: React.CSSProperties = { padding: '2px 7px', borderRadius: '4px', background: '#fef2f2', color: '#b91c1c', whiteSpace: 'pre-wrap', wordBreak: 'break-word' };
+    const newPill: React.CSSProperties = { padding: '2px 7px', borderRadius: '4px', background: '#f0fdf4', color: '#15803d', whiteSpace: 'pre-wrap', wordBreak: 'break-word' };
+    const empty = (v: string) => v.trim() === '';
+    return (
+        <div style={{ marginTop: '7px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {fields.map((f, i) => {
+                const isBlock = f.old.length > 45 || f.new.length > 45 || f.old.includes('\n') || f.new.includes('\n');
+                return (
+                    <div key={i} style={{ fontSize: '11.5px', color: '#64748b' }}>
+                        <span style={{ fontWeight: 700, color: '#475569' }}>{f.field}:</span>
+                        {isBlock ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '3px' }}>
+                                <div><span style={{ color: '#94a3b8', fontWeight: 600 }}>Old </span><span style={{ ...oldPill, textDecoration: empty(f.old) ? 'none' : 'line-through' }}>{empty(f.old) ? '—' : f.old}</span></div>
+                                <div><span style={{ color: '#94a3b8', fontWeight: 600 }}>New </span><span style={newPill}>{empty(f.new) ? '—' : f.new}</span></div>
+                            </div>
+                        ) : (
+                            <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+                                <span style={{ ...oldPill, textDecoration: empty(f.old) ? 'none' : 'line-through' }}>{empty(f.old) ? '—' : f.old}</span>
+                                <span style={{ color: '#94a3b8' }}>→</span>
+                                <span style={newPill}>{empty(f.new) ? '—' : f.new}</span>
+                            </span>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 // ── RFQ Audit Trail Modal ──────────────────────────────────────────────────
 function RfqHistoryModal({ row, onClose }: { row: RfqRow; onClose: () => void }) {
     const entries = row.audit_trail ?? [];
@@ -571,7 +604,7 @@ function RfqHistoryModal({ row, onClose }: { row: RfqRow; onClose: () => void })
     };
 
     return (
-        <Modal title={`Audit Trail — ${row.contractor}`} onClose={onClose} size="520px" headerBg="#0f172a"
+        <Modal title={`Audit Trail — ${row.contractor}`} onClose={onClose} size="820px" headerBg="#0f172a"
             footer={<button type="button" onClick={onClose} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#0f172a', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Close</button>}
         >
             {entries.length === 0 ? (
@@ -583,9 +616,10 @@ function RfqHistoryModal({ row, onClose }: { row: RfqRow; onClose: () => void })
                     {entries.map((e, i) => (
                         <div key={i} style={{ display: 'flex', gap: '12px', padding: '10px 4px', borderBottom: i < entries.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
                             <div style={{ width: '9px', height: '9px', borderRadius: '50%', background: dotColor[e.type] ?? '#64748b', marginTop: '4px', flexShrink: 0 }} />
-                            <div style={{ flex: 1 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b', lineHeight: 1.4 }}>{e.action}</div>
                                 <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '2px' }}>{e.date} · {e.user}</div>
+                                <ChangeDetail fields={e.fields} />
                             </div>
                         </div>
                     ))}
@@ -870,7 +904,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                         <strong>{row.contractor}</strong>,
                         ...(hasSubRows ? [<SubTag no={row.sub_project_no} />] : []),
                         row.scope_of_work
-                            ? <span title={row.scope_of_work} style={{ display: 'block', minWidth: '220px', maxWidth: '440px', fontSize: '12.5px', color: '#475569', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>{row.scope_of_work}</span>
+                            ? <span title={row.scope_of_work} style={{ display: 'block', minWidth: '160px', maxWidth: '260px', fontSize: '12.5px', color: '#475569', whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.45 }}>{row.scope_of_work.length > 50 ? row.scope_of_work.slice(0, 50) + '…' : row.scope_of_work}</span>
                             : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
                         row.sent,
                         row.due,

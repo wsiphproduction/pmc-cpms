@@ -11,6 +11,7 @@ interface NavItem {
     href: string;
     icon: React.ReactNode;
     children?: NavChild[];
+    badge?: number;
 }
 
 interface SidebarProps {
@@ -22,6 +23,7 @@ interface SidebarProps {
 
 interface PageProps {
     auth: { user: { role?: string } };
+    ntp_reviews_count?: number;
     [key: string]: unknown;
 }
 
@@ -33,6 +35,7 @@ export default function Sidebar({
 }: SidebarProps) {
     const { url, props } = usePage<PageProps>();
     const role = props.auth?.user?.role;
+    const ntpReviewsCount = props.ntp_reviews_count ?? 0;
     const isRequestor = role === 'requestor';
     const isAdmin = role === 'admin';
     // User management is admin-only.
@@ -69,6 +72,7 @@ export default function Sidebar({
         ...(isRequestor ? [{
             label: 'NTP Reviews',
             href: route('ntp-reviews.index'),
+            badge: ntpReviewsCount,
             icon: (
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
@@ -251,11 +255,24 @@ export default function Sidebar({
                                 )}
                             </>
                         ) : (
-                            <Link href={item.href} onClick={onNavigate} title={isCompact ? item.label : undefined} style={navLinkStyle(isActive(item.href))}>
-                                <span style={{ color: isActive(item.href) ? '#2563eb' : '#9ca3af', flexShrink: 0 }}>
+                            <Link href={item.href} onClick={onNavigate} title={isCompact ? item.label : undefined}
+                                style={{
+                                    ...navLinkStyle(isActive(item.href)) as React.CSSProperties,
+                                    // Highlight when there are items needing attention.
+                                    ...(item.badge && item.badge > 0 && !isActive(item.href)
+                                        ? { background: '#fffbeb', color: '#b45309', fontWeight: 600 }
+                                        : {}),
+                                }}>
+                                <span style={{ color: item.badge && item.badge > 0 && !isActive(item.href) ? '#d97706' : (isActive(item.href) ? '#2563eb' : '#9ca3af'), flexShrink: 0, position: 'relative' }}>
                                     {item.icon}
+                                    {isCompact && item.badge && item.badge > 0 ? (
+                                        <span style={{ position: 'absolute', top: '-6px', right: '-8px', minWidth: '15px', height: '15px', padding: '0 3px', borderRadius: '999px', background: '#dc2626', color: '#fff', fontSize: '9px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{item.badge}</span>
+                                    ) : null}
                                 </span>
-                                {!isCompact && item.label}
+                                {!isCompact && <span style={{ flex: 1 }}>{item.label}</span>}
+                                {!isCompact && item.badge && item.badge > 0 ? (
+                                    <span style={{ minWidth: '18px', height: '18px', padding: '0 5px', borderRadius: '999px', background: '#dc2626', color: '#fff', fontSize: '10.5px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box' }}>{item.badge}</span>
+                                ) : null}
                             </Link>
                         )}
                     </div>

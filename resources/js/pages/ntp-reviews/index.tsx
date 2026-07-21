@@ -24,21 +24,35 @@ interface RfqDetail {
     items: QuotationItem[];
 }
 
+type NtpStatus = 'pending_review' | 'issued' | 'rejected';
+
 interface NtpReview {
     id: number;
     ntp_no: string;
     contractor: string;
+    status: NtpStatus;
     baseline_start: string | null;
     baseline_end: string | null;
     approved_cost: number;
     submitted_at: string | null;
     prepared_by: string;
+    issued_date: string | null;
+    reviewed_by: string | null;
+    reviewed_at: string | null;
+    review_remarks: string | null;
     scope_of_work: string | null;
     project: { id: number; project_no: string; title: string };
     rfq: RfqDetail | null;
 }
 
 const peso = (n: number) => `PhP ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// Status → display label + badge colors. "pending_review" is shown as "For Review".
+const STATUS_META: Record<NtpStatus, { label: string; bg: string; color: string }> = {
+    pending_review: { label: 'For Review', bg: '#fef3c7', color: '#92400e' },
+    issued:         { label: 'Issued',     bg: '#dcfce7', color: '#166534' },
+    rejected:       { label: 'Rejected',   bg: '#fee2e2', color: '#b91c1c' },
+};
 
 const sectionLabel: React.CSSProperties = { fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' };
 const thStyle: React.CSSProperties = { padding: '8px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', background: '#f1f5f9' };
@@ -91,9 +105,26 @@ function RejectModal({ ntp, onClose }: { ntp: NtpReview; onClose: () => void }) 
     );
 }
 
+type TabKey = 'all' | NtpStatus;
+
 export default function NtpReviewsIndex({ ntps }: Props) {
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
     const [rejectNtp, setRejectNtp] = useState<NtpReview | null>(null);
+    const [tab, setTab] = useState<TabKey>('all');
+
+    const counts = {
+        all: ntps.length,
+        pending_review: ntps.filter(n => n.status === 'pending_review').length,
+        issued: ntps.filter(n => n.status === 'issued').length,
+        rejected: ntps.filter(n => n.status === 'rejected').length,
+    };
+    const tabs: { key: TabKey; label: string }[] = [
+        { key: 'all', label: 'All' },
+        { key: 'pending_review', label: 'For Review' },
+        { key: 'issued', label: 'Issued' },
+        { key: 'rejected', label: 'Rejected' },
+    ];
+    const filtered = tab === 'all' ? ntps : ntps.filter(n => n.status === tab);
 
     const approve = (ntp: NtpReview) => {
         showConfirm(
@@ -109,42 +140,68 @@ export default function NtpReviewsIndex({ ntps }: Props) {
             {confirmDialog}
             {rejectNtp && <RejectModal ntp={rejectNtp} onClose={() => setRejectNtp(null)} />}
 
-            <div style={{ marginBottom: '20px' }}>
+            <div style={{ marginBottom: '16px' }}>
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>NTP Reviews</h1>
                 <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-                    Notices to Proceed awaiting your review. Approving one issues it and commits its cost to the project budget.
+                    Notices to Proceed and their review history. Approving one for review issues it and commits its cost to the project budget.
                 </p>
             </div>
 
-            {ntps.length === 0 ? (
+            {/* Status tabs */}
+            <div style={{ display: 'flex', gap: '6px', marginBottom: '18px', flexWrap: 'wrap' }}>
+                {tabs.map(t => {
+                    const active = tab === t.key;
+                    const count = counts[t.key];
+                    return (
+                        <button key={t.key} type="button" onClick={() => setTab(t.key)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 14px', borderRadius: '8px', border: `1px solid ${active ? '#2563eb' : '#e2e8f0'}`, background: active ? '#2563eb' : '#fff', color: active ? '#fff' : '#475569', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>
+                            {t.label}
+                            <span style={{ padding: '1px 7px', borderRadius: '999px', background: active ? 'rgba(255,255,255,0.25)' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontSize: '11px', fontWeight: 700 }}>{count}</span>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {filtered.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '56px 24px', border: '1px dashed #e2e8f0', borderRadius: '12px', color: '#94a3b8', background: '#fff' }}>
                     <div style={{ fontSize: '30px', marginBottom: '10px' }}>✅</div>
-                    <div style={{ fontWeight: 700, color: '#64748b', marginBottom: '4px' }}>No NTPs pending review</div>
+                    <div style={{ fontWeight: 700, color: '#64748b', marginBottom: '4px' }}>No NTP records{tab !== 'all' ? ` in "${tabs.find(t => t.key === tab)?.label}"` : ''}</div>
                     <div style={{ fontSize: '12.5px' }}>New Notices to Proceed will appear here when an engineer submits one.</div>
                 </div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                    {ntps.map(ntp => (
+                    {filtered.map(ntp => (
                         <div key={ntp.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px 22px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                                 <div>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
                                         <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>{ntp.ntp_no}</span>
-                                        <span style={{ padding: '2px 10px', borderRadius: '999px', background: '#fef3c7', color: '#92400e', fontSize: '11px', fontWeight: 700 }}>Pending Review</span>
+                                        <span style={{ padding: '2px 10px', borderRadius: '999px', background: STATUS_META[ntp.status].bg, color: STATUS_META[ntp.status].color, fontSize: '11px', fontWeight: 700 }}>{STATUS_META[ntp.status].label}</span>
                                     </div>
                                     <div style={{ fontSize: '12.5px', color: '#64748b' }}>
                                         Project <strong style={{ color: '#334155' }}>{ntp.project.project_no}</strong> — {ntp.project.title}
                                     </div>
                                 </div>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button type="button" onClick={() => approve(ntp)} style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', background: '#059669', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
-                                        ✓ Approve &amp; Issue
-                                    </button>
-                                    <button type="button" onClick={() => setRejectNtp(ntp)} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
-                                        Reject
-                                    </button>
-                                </div>
+                                {ntp.status === 'pending_review' && (
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <button type="button" onClick={() => approve(ntp)} style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', background: '#059669', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
+                                            ✓ Approve &amp; Issue
+                                        </button>
+                                        <button type="button" onClick={() => setRejectNtp(ntp)} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
+                                            Reject
+                                        </button>
+                                    </div>
+                                )}
                             </div>
+
+                            {/* Review outcome for records that have been acted on */}
+                            {ntp.status !== 'pending_review' && (
+                                <div style={{ marginTop: '12px', padding: '10px 14px', borderRadius: '8px', background: ntp.status === 'issued' ? '#f0fdf4' : '#fef2f2', border: `1px solid ${ntp.status === 'issued' ? '#bbf7d0' : '#fecaca'}`, fontSize: '12.5px', color: '#475569' }}>
+                                    {ntp.status === 'issued'
+                                        ? <span><strong style={{ color: '#166534' }}>Issued</strong>{ntp.issued_date ? ` on ${ntp.issued_date}` : ''}{ntp.reviewed_by ? ` · reviewed by ${ntp.reviewed_by}` : ''}{ntp.reviewed_at ? ` (${ntp.reviewed_at})` : ''}</span>
+                                        : <span><strong style={{ color: '#b91c1c' }}>Rejected</strong>{ntp.reviewed_by ? ` by ${ntp.reviewed_by}` : ''}{ntp.reviewed_at ? ` (${ntp.reviewed_at})` : ''}{ntp.review_remarks ? ` — ${ntp.review_remarks}` : ''}</span>}
+                                </div>
+                            )}
 
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
                                 {[

@@ -493,7 +493,8 @@ class ProjectController extends Controller
                     fn ($p) => $p->rfqs()->with('items')->get(),
                     fn ($rfq, $sub) => $this->rfqRow($rfq, $sub ?? $project, $sub, $sub ? collect() : ($rfqAudits[$rfq->id] ?? collect())),
                 ),
-                'suppliers' => Supplier::where('is_active', true)->orderBy('company')->get(['company', 'email'])
+                // Only accredited (and active) suppliers are selectable when dispatching RFQs.
+                'suppliers' => Supplier::where('is_active', true)->where('accredited', true)->orderBy('company')->get(['company', 'email'])
                     ->map(fn ($s) => ['name' => $s->company, 'email' => $s->email ?? ''])
                     ->values(),
             ],
@@ -574,6 +575,7 @@ class ProjectController extends Controller
                             'module' => $log->changes['module'] ?? 'Project',
                             'ip'     => $log->ip_address ?? ($log->changes['ip'] ?? '—'),
                             'type'   => $log->changes['type'] ?? 'update',
+                            'fields' => $log->changes['fields'] ?? [],
                             'sub_project_no' => $noById->get($log->reference_id),
                         ])->values();
                 })(),
@@ -690,6 +692,7 @@ class ProjectController extends Controller
                 'user'   => $a->user?->name ?? 'System',
                 'date'   => $a->created_at?->format('M d, Y h:i A') ?? '-',
                 'type'   => $a->changes['type'] ?? 'update',
+                'fields' => $a->changes['fields'] ?? [],
             ])->values(),
             'sub_project_id'  => $sub?->id,
             'sub_project_no'  => $sub?->project_no,
@@ -879,7 +882,8 @@ class ProjectController extends Controller
         $option = fn ($row) => ['value' => (string) $row->name, 'label' => (string) $row->name];
 
         return [
-            'managers' => User::orderBy('name')->get(['id', 'name'])
+            // Project Managers are drawn from Project Engineers (the "approver" role).
+            'managers' => User::role('approver')->orderBy('name')->get(['id', 'name'])
                 ->map(fn (User $user) => ['value' => (string) $user->id, 'label' => $user->name]),
             'sites' => Site::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
             'assets' => Structure::where('is_active', true)->orderBy('name')->get(['name'])->map($option),

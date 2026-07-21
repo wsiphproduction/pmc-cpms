@@ -93,40 +93,111 @@ class ProjectHubController extends Controller
             'quotation_file'      => ['nullable', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx'],
         ]);
 
-        $rfq->update([
+        // Capture field-level old → new changes for the audit trail.
+        $labels = [
+            'scope_of_work'    => 'Scope of Work',
+            'due_date'         => 'Due Date',
+            'duration_days'    => 'Duration (days)',
+            'terms_conditions' => 'Terms & Conditions',
+            'inclusions'       => 'Inclusions',
+            'exclusions'       => 'Exclusions',
+        ];
+        $newValues = [
             'scope_of_work'    => ($data['scope_of_work']    ?? '') ?: null,
             'due_date'         => ($data['due_date']         ?? '') ?: null,
             'duration_days'    => ($data['duration_days']    ?? '') ?: null,
             'terms_conditions' => ($data['terms_conditions'] ?? '') ?: null,
             'inclusions'       => ($data['inclusions']       ?? '') ?: null,
             'exclusions'       => ($data['exclusions']       ?? '') ?: null,
-        ]);
+        ];
+        $stringify = function ($value) {
+            if ($value === null) return '';
+            if ($value instanceof \DateTimeInterface) return $value->format('Y-m-d');
+            return (string) $value;
+        };
+        $changedFields = [];
+        foreach ($newValues as $field => $newValue) {
+            $oldStr = $stringify($rfq->getOriginal($field));
+            $newStr = $stringify($newValue);
+            if ($oldStr !== $newStr) {
+                $changedFields[] = ['field' => $labels[$field], 'old' => $oldStr, 'new' => $newStr];
+            }
+        }
+
+        // Snapshot the file and line items *before* they are changed below, so we
+        // can record their old → new values in the audit trail too.
+        $oldFile  = $rfq->quotation_file;
+        $oldItems = $rfq->items()->get(['description', 'qty', 'unit', 'unit_cost', 'total_cost'])
+            ->map(fn ($it) => [
+                'description' => $it->description,
+                'qty'         => $it->qty !== null ? (float) $it->qty : null,
+                'unit'        => $it->unit,
+                'unit_cost'   => $it->unit_cost !== null ? (float) $it->unit_cost : null,
+                'total_cost'  => $it->total_cost !== null ? (float) $it->total_cost : null,
+            ])->all();
+
+        // Renders a line-item list as one line per item for a readable diff.
+        $fmtItems = function (array $items): string {
+            $num = fn ($n) => $n === null ? '—' : number_format((float) $n, 2);
+            $lines = [];
+            foreach ($items as $it) {
+                $desc = trim((string) ($it['description'] ?? '')) ?: '(no description)';
+                $lines[] = sprintf(
+                    '%s — %s %s @ %s = %s',
+                    $desc,
+                    $it['qty'] !== null ? rtrim(rtrim(number_format((float) $it['qty'], 2), '0'), '.') : '—',
+                    trim((string) ($it['unit'] ?? '')) ?: '—',
+                    $num($it['unit_cost'] ?? null),
+                    $num($it['total_cost'] ?? null),
+                );
+            }
+            return implode("\n", $lines);
+        };
+
+        $rfq->update($newValues);
 
         if (!empty($data['quotation_file'])) {
-            $oldPath = $rfq->fresh()->quotation_file;
-            if ($oldPath) {
-                Storage::disk('public')->delete($oldPath);
+            if ($oldFile) {
+                Storage::disk('public')->delete($oldFile);
             }
             $path = $data['quotation_file']->store('rfq-files', 'public');
             $rfq->update(['quotation_file' => $path]);
+
+            $changedFields[] = [
+                'field' => 'Quotation File',
+                'old'   => $oldFile ? basename($oldFile) : '',
+                'new'   => basename($path),
+            ];
         }
 
         if (!empty($data['items'])) {
-            $rfq->items()->delete();
-            foreach (array_values($data['items']) as $i => $item) {
+            // Build the normalized new item list first so it can feed both the
+            // insert and the audit diff.
+            $newItems = [];
+            foreach (array_values($data['items']) as $item) {
                 if (empty($item['description'])) continue;
-                $rfq->items()->create([
-                    'seq'         => $i + 1,
+                $newItems[] = [
                     'description' => $item['description'],
                     'qty'         => ($item['qty']        ?? '') !== '' ? (float) $item['qty']        : null,
                     'unit'        => ($item['unit']       ?? '') ?: null,
                     'unit_cost'   => ($item['unit_cost']  ?? '') !== '' ? (float) $item['unit_cost']  : null,
                     'total_cost'  => ($item['total_cost'] ?? '') !== '' ? (float) $item['total_cost'] : null,
-                ]);
+                ];
+            }
+
+            $rfq->items()->delete();
+            foreach ($newItems as $i => $item) {
+                $rfq->items()->create(array_merge(['seq' => $i + 1], $item));
+            }
+
+            $oldItemsStr = $fmtItems($oldItems);
+            $newItemsStr = $fmtItems($newItems);
+            if ($oldItemsStr !== $newItemsStr) {
+                $changedFields[] = ['field' => 'Line Items', 'old' => $oldItemsStr, 'new' => $newItemsStr];
             }
         }
 
-        AuditTrail::log("Updated RFQ details for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id]);
+        AuditTrail::log("Updated RFQ details for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id, 'fields' => $changedFields]);
 
         return back()->with('success', 'Quotation details saved.');
     }
@@ -137,9 +208,14 @@ class ProjectHubController extends Controller
             'status' => ['required', 'in:pending,submitted,awarded,expired'],
         ]);
 
+        $oldStatus = (string) $rfq->getOriginal('status');
         $rfq->update($data);
 
-        AuditTrail::log("RFQ status updated to {$data['status']} for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id]);
+        $statusFields = $oldStatus !== $data['status']
+            ? [['field' => 'Status', 'old' => $oldStatus, 'new' => $data['status']]]
+            : [];
+
+        AuditTrail::log("RFQ status updated to {$data['status']} for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id, 'fields' => $statusFields]);
 
         return back()->with('success', 'RFQ status updated.');
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Notification;
+use App\Models\ProjectNtp;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -68,6 +69,16 @@ class HandleInertiaRequests extends Middleware
                 : [],
             'unread_notifications_count' => $request->user()
                 ? Notification::where('recipient', $request->user()->id)->where('is_read', false)->count()
+                : 0,
+            // NTPs awaiting review, scoped the same way as NtpReviewController::index
+            // (admins see all pending; everyone else only their requested projects).
+            'ntp_reviews_count' => $request->user()
+                ? ProjectNtp::where('status', 'pending_review')
+                    ->when(
+                        ! $request->user()->hasRole('admin'),
+                        fn ($q) => $q->whereHas('project.projectRequest', fn ($rq) => $rq->where('requester_id', $request->user()->id))
+                    )
+                    ->count()
                 : 0,
         ]);
     }

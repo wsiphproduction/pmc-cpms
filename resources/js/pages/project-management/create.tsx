@@ -1,6 +1,7 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import { SharedData } from '@/types';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface SelectOption {
@@ -242,10 +243,19 @@ export default function ProjectCreate({
     // When the project was started from a project request, its WR/request number
     // is carried over and must not be changed. Editable only when none was passed.
     const requestNoLocked = Boolean(project?.project_request_id);
+
+    // Default the Project Manager to the logged-in Project Engineer. `managers`
+    // only contains approver (Project Engineer) users, so if the current user's
+    // id is present there, they're an engineer and we pre-select them.
+    const { auth } = usePage<SharedData>().props;
+    const currentUserIsEngineer = managers.some(m => m.value === String(auth.user.id));
+    const defaultManager = project?.project_manager
+        ?? (currentUserIsEngineer ? String(auth.user.id) : '');
+
     const { data, setData, processing, errors, setError, clearErrors } = useForm<ProjectFormData>({
         project_request_id: project?.project_request_id ?? '',
         title:           project?.title ?? '',
-        project_manager: project?.project_manager ?? '',
+        project_manager: defaultManager,
         site:            project?.site ?? '',
         asset_id:        project?.asset_id ?? '',
         cls:             project?.cls ?? '',
@@ -479,19 +489,8 @@ export default function ProjectCreate({
 
                     {/* ── Section 02 ──────────────────────────────────── */}
                     <SectionLabel num="02">Work Request & Classification</SectionLabel>
-                    <div style={{ ...col4, marginBottom: '20px' }}>
-                        <div>
-                            <FormLabel required>Class</FormLabel>
-                            <SelectField
-                                id="class-options"
-                                value={data.cls}
-                                onChange={set('cls')}
-                                options={classes}
-                                placeholder="Select Class"
-                                required
-                                error={errors.cls}
-                            />
-                        </div>
+                    {/* Class field intentionally hidden per requirement; data.cls stays '' and is still submitted. */}
+                    <div style={{ ...col3, marginBottom: '20px' }}>
                         <div>
                             <FormLabel required>Priority No.</FormLabel>
                             <SelectField

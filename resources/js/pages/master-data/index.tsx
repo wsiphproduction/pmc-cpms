@@ -22,6 +22,7 @@ interface MasterItem {
 interface Supplier {
     id: number;
     company: string;
+    accredited?: boolean;
     email?: string | null;
     telephone_no?: string | null;
     mobile_no?: string | null;
@@ -587,21 +588,42 @@ function TabTable({
 }
 
 // ── Supplier Modal (add / edit) ─────────────────────────────────────────────
-function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClose: () => void }) {
+function SupplierModal({ supplier, suppliers, onClose }: { supplier: Supplier | null; suppliers: Supplier[]; onClose: () => void }) {
     const isEdit = !!supplier;
     const [company,  setCompany]  = useState(supplier?.company ?? '');
+    const [accredited, setAccredited] = useState(supplier?.accredited ?? true);
     const [email,    setEmail]    = useState(supplier?.email ?? '');
     const [tel,      setTel]      = useState(supplier?.telephone_no ?? '');
     const [mobile,   setMobile]   = useState(supplier?.mobile_no ?? '');
     const [submitting, setSubmitting] = useState(false);
+    const [showSuggest, setShowSuggest] = useState(false);
 
     const field: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#0f172a' };
     const lbl: React.CSSProperties = { fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' };
 
+    // Suggestions: accredited suppliers whose company matches what's being typed
+    // (excluding the record currently being edited). Prevents duplicates and lets
+    // the user pick an existing accredited supplier.
+    const needle = company.trim().toLowerCase();
+    const suggestions = needle
+        ? suppliers
+            .filter(s => s.accredited !== false && s.id !== supplier?.id && s.company.toLowerCase().includes(needle) && s.company.toLowerCase() !== needle)
+            .slice(0, 6)
+        : [];
+
+    const pickSuggestion = (s: Supplier) => {
+        setCompany(s.company);
+        setAccredited(s.accredited ?? true);
+        setEmail(s.email ?? '');
+        setTel(s.telephone_no ?? '');
+        setMobile(s.mobile_no ?? '');
+        setShowSuggest(false);
+    };
+
     const handleSubmit = () => {
         if (!company.trim()) return;
         setSubmitting(true);
-        const data = { company: company.trim(), email: email.trim() || null, telephone_no: tel.trim() || null, mobile_no: mobile.trim() || null };
+        const data = { company: company.trim(), accredited, email: email.trim() || null, telephone_no: tel.trim() || null, mobile_no: mobile.trim() || null };
         if (isEdit) {
             router.put(route('master.suppliers.update', supplier!.id), data, { onFinish: () => { setSubmitting(false); onClose(); } });
         } else {
@@ -623,10 +645,41 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
                     </button>
                 </div>
                 <div style={{ padding: '20px 22px', display: 'grid', gap: '14px' }}>
-                    <div>
+                    <div style={{ position: 'relative' }}>
                         <label style={lbl}>Company <span style={{ color: '#ef4444' }}>*</span></label>
-                        <input type="text" value={company} onChange={e => setCompany(e.target.value)} autoFocus placeholder="Company name…" style={field} />
+                        <input
+                            type="text"
+                            value={company}
+                            onChange={e => { setCompany(e.target.value); setShowSuggest(true); }}
+                            onFocus={() => setShowSuggest(true)}
+                            onBlur={() => setTimeout(() => setShowSuggest(false), 150)}
+                            autoFocus
+                            autoComplete="off"
+                            placeholder="Company name…"
+                            style={field}
+                        />
+                        {showSuggest && suggestions.length > 0 && (
+                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.10)', zIndex: 10, overflow: 'hidden' }}>
+                                {suggestions.map(s => (
+                                    <button
+                                        key={s.id}
+                                        type="button"
+                                        onMouseDown={e => { e.preventDefault(); pickSuggestion(s); }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: '13px', color: '#0f172a' }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                        <span style={{ fontWeight: 600 }}>{s.company}</span>
+                                        <span style={{ marginLeft: 'auto', fontSize: '10.5px', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Accredited</span>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '9px', cursor: 'pointer', userSelect: 'none' }}>
+                        <ToggleSwitch active={accredited} onClick={() => setAccredited(v => !v)} />
+                        <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#374151' }}>Accredited supplier</span>
+                    </label>
                     <div>
                         <label style={lbl}>Email</label>
                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" style={field} />
@@ -680,7 +733,7 @@ function SupplierTable({ suppliers, onAdd, onEdit, onToggle }: {
         });
     };
 
-    const headers = ['#', 'Company', 'Email', 'Telephone', 'Mobile', 'Created At', 'Actions'];
+    const headers = ['#', 'Company', 'Accredited', 'Email', 'Telephone', 'Mobile', 'Created At', 'Actions'];
 
     return (
         <div>
@@ -726,6 +779,11 @@ function SupplierTable({ suppliers, onAdd, onEdit, onToggle }: {
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                                 <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{(safePage - 1) * PER_PAGE + idx + 1}</td>
                                 <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a' }}>{s.company}</td>
+                                <td style={{ padding: '12px 20px' }}>
+                                    {s.accredited !== false
+                                        ? <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: '999px', background: '#dcfce7', color: '#166534', fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Accredited</span>
+                                        : <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: '999px', background: '#f1f5f9', color: '#94a3b8', fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>—</span>}
+                                </td>
                                 <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px' }}>{s.email || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.telephone_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.mobile_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
@@ -952,7 +1010,7 @@ export default function MasterData({
             )}
 
             {showSupplierModal && (
-                <SupplierModal supplier={editSupplier} onClose={() => setShowSupplierModal(false)} />
+                <SupplierModal supplier={editSupplier} suppliers={suppliers} onClose={() => setShowSupplierModal(false)} />
             )}
 
             {showCostCodeModal && (

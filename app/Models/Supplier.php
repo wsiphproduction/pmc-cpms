@@ -11,6 +11,7 @@ class Supplier extends Model
 
     protected $fillable = [
         'company',
+        'accredited',
         'email',
         'telephone_no',
         'mobile_no',
@@ -18,6 +19,7 @@ class Supplier extends Model
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
+        'accredited' => 'boolean',
+        'is_active'  => 'boolean',
     ];
 }

@@ -1,7 +1,44 @@
 import { useState } from 'react';
 import { DataTable, Field, HubProject, HubShell, inputStyle, SubTag } from './Common';
 
-interface LogRow { date: string; time: string; user: string; action: string; module: string; ip: string; type: string; sub_project_no: string | null }
+interface FieldChange { field: string; old: string; new: string }
+interface LogRow { date: string; time: string; user: string; action: string; module: string; ip: string; type: string; fields?: FieldChange[]; sub_project_no: string | null }
+
+// Renders a "field: old → new" list for audit entries that carry field-level
+// change detail (currently RFQ updates). Short single-line values render inline;
+// long or multi-line values (e.g. line items) render as stacked blocks.
+function ChangeDetail({ fields }: { fields?: FieldChange[] }) {
+    if (!fields || fields.length === 0) return null;
+
+    const oldPill: React.CSSProperties = { padding: '2px 7px', borderRadius: '4px', background: '#fef2f2', color: '#b91c1c', whiteSpace: 'pre-wrap', wordBreak: 'break-word' };
+    const newPill: React.CSSProperties = { padding: '2px 7px', borderRadius: '4px', background: '#f0fdf4', color: '#15803d', whiteSpace: 'pre-wrap', wordBreak: 'break-word' };
+    const empty = (v: string) => v.trim() === '';
+
+    return (
+        <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            {fields.map((f, i) => {
+                const isBlock = f.old.length > 55 || f.new.length > 55 || f.old.includes('\n') || f.new.includes('\n');
+                return (
+                    <div key={i} style={{ fontSize: '11.5px', color: '#64748b' }}>
+                        <span style={{ fontWeight: 700, color: '#475569' }}>{f.field}:</span>
+                        {isBlock ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', marginTop: '3px' }}>
+                                <div><span style={{ color: '#94a3b8', fontWeight: 600 }}>Old </span><span style={{ ...oldPill, textDecoration: empty(f.old) ? 'none' : 'line-through' }}>{empty(f.old) ? '—' : f.old}</span></div>
+                                <div><span style={{ color: '#94a3b8', fontWeight: 600 }}>New </span><span style={newPill}>{empty(f.new) ? '—' : f.new}</span></div>
+                            </div>
+                        ) : (
+                            <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px', marginLeft: '6px' }}>
+                                <span style={{ ...oldPill, textDecoration: empty(f.old) ? 'none' : 'line-through' }}>{empty(f.old) ? '—' : f.old}</span>
+                                <span style={{ color: '#94a3b8' }}>→</span>
+                                <span style={newPill}>{empty(f.new) ? '—' : f.new}</span>
+                            </span>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
 
 const MODULE_COLORS: Record<string, [string, string]> = {
     'RFQ':     ['#eff6ff', '#2563eb'],
@@ -136,9 +173,12 @@ export default function AuditTrailHub({ project: _, logs }: { project: HubProjec
                         <div style={{ fontWeight: 600, fontSize: '13px', color: '#334155' }}>{log.user}</div>,
                         ...(hasSubRows ? [<SubTag no={log.sub_project_no} />] : []),
                         <ModuleBadge module={log.module} />,
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
                             <TypeBadge type={log.type} />
-                            <span style={{ fontSize: '13px', color: log.type === 'delete' ? '#dc2626' : '#334155' }}>{log.action}</span>
+                            <div>
+                                <span style={{ fontSize: '13px', color: log.type === 'delete' ? '#dc2626' : '#334155' }}>{log.action}</span>
+                                <ChangeDetail fields={log.fields} />
+                            </div>
                         </div>,
                         <span style={{ fontSize: '12px', color: '#94a3b8', fontFamily: 'monospace' }}>{log.ip}</span>,
                     ])}
