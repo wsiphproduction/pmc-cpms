@@ -29,20 +29,8 @@ use Inertia\Response;
 
 class ProjectController extends Controller
 {
-    private const STATUS_LABELS = [
-        'PLANNING' => 'For Planning',
-        'RFQ_SUBMITTED' => 'RFQ/RFP Submitted',
-        'PROPOSAL_REVIEW' => 'Proposal Under Review',
-        'DESIGN_REVIEW' => 'Detailed Design Under Review',
-        'EXEC_ENDORSED' => 'Endorsed for Executive Approval',
-        'NTP_PROCESSING' => 'NTP & Contract Processing',
-        'SCHEDULING' => 'For Scheduling',
-        'ONGOING' => 'Ongoing',
-        'ON_HOLD' => 'On Hold',
-        'COMPLETED' => 'Completed',
-        'CLOSED' => 'Closed',
-        'CANCELED' => 'Canceled',
-    ];
+    /** Defined on the model so exports and reports share one mapping. */
+    private const STATUS_LABELS = Project::STATUS_LABELS;
 
     public function index(Request $request): Response
     {
@@ -544,6 +532,11 @@ class ProjectController extends Controller
             ],
 
             'psr' => [
+                // Form definition, so the submission form, the report view and the
+                // import template all render the same checklist.
+                'checklist'   => config('psr.checklist'),
+                'issue_rows'  => config('psr.issue_rows'),
+                'statuses'    => config('psr.statuses'),
                 'ntps' => $project->ntps()->get()->map(fn ($n) => [
                     'id'         => $n->id,
                     'ntp_no'     => $n->ntp_no,
@@ -653,6 +646,8 @@ class ProjectController extends Controller
             'completion_pct'    => $r->completion_pct,
             'identified_issues' => $r->identified_issues,
             'progress_updates'  => $r->progress_updates,
+            'checklist'         => $r->checklist ?? [],
+            'issues'            => $r->issues ?? [],
             'submitted_date'    => optional($r->submitted_date)->format('M d, Y') ?? '-',
             'filename'          => $r->filename,
             'url'               => $r->file_path ? Storage::disk('public')->url($r->file_path) : null,

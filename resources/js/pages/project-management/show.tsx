@@ -159,7 +159,7 @@ function renderHubSection(
         case 'rfp':     return <RfpHub     project={hubProject} billings={hubData.billings ?? []} ntps={hubData.ntps ?? []} canEdit={canEdit} canManageStatus={!!hubData.can_manage_status} />;
         case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} costCodes={hubData.cost_codes ?? []} canEdit={canEdit} />;
         case 'acr':     return <AcrHub     project={hubProject} iocs={hubData.iocs ?? []} canEdit={canEdit} />;
-        case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
+        case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} ntps={hubData.ntps ?? []} checklist={hubData.checklist ?? []} issueRows={hubData.issue_rows ?? 3} statuses={hubData.statuses ?? []} canEdit={canEdit} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
         case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} canEdit={canEdit} />;
         default:        return <RfqHub     project={hubProject} rfqs={[]} canEdit={canEdit} />;

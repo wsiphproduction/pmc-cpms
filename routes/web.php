@@ -9,6 +9,7 @@ use App\Http\Controllers\NtpReviewController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectHubController;
 use App\Http\Controllers\ProjectRequestController;
+use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\TechnicalFeedbackController;
 use App\Http\Controllers\UserController;
@@ -47,6 +48,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('requests/{projectRequest}/feedback', [TechnicalFeedbackController::class, 'store'])->name('requests.feedback.store');
     Route::patch('feedback/{technicalFeedback}',      [TechnicalFeedbackController::class, 'update'])->name('requests.feedback.update');
     Route::delete('feedback/{technicalFeedback}',     [TechnicalFeedbackController::class, 'destroy'])->name('requests.feedback.destroy');
+
+    // ── Reports ───────────────────────────────────────────────────────────
+    Route::get('reports',                [ReportController::class, 'index'])->name('reports.index');
+    Route::get('reports/accomplishment', [ReportController::class, 'accomplishment'])->name('reports.accomplishment');
 
     // ── NTP Reviews (department-user approval of NTPs) ─────────────────────
     Route::get('ntp-reviews',                 [NtpReviewController::class, 'index'])->name('ntp-reviews.index');
@@ -101,6 +106,7 @@ Route::middleware(['auth'])->group(function () {
         // PSR
         Route::post('psr',                     [ProjectHubController::class, 'storePsr'])->name('hub.psr.store');
         Route::post('psr/import',              [ProjectHubController::class, 'importPsr'])->name('hub.psr.import');
+        Route::get('psr/template',             [ProjectHubController::class, 'psrTemplate'])->name('hub.psr.template');
         Route::delete('psr/{psr}',             [ProjectHubController::class, 'destroyPsr'])->name('hub.psr.destroy');
         // Todo
         Route::post('todo',                    [ProjectHubController::class, 'storeTodo'])->name('hub.todo.store');

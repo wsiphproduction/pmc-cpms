@@ -1,23 +1,20 @@
 import { ReactNode, useEffect, useState } from 'react';
 import Topbar from './_Topbar';
-import Sidebar from './_Sidebar';
 
 interface Props {
     children: ReactNode;
 }
 
 export default function AuthenticatedLayout({ children }: Props) {
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    // The horizontal nav needs more room than the page padding does, so it
+    // folds into a toggle earlier than the mobile breakpoint.
+    const [navCollapsed, setNavCollapsed] = useState(false);
 
     useEffect(() => {
         const syncViewport = () => {
-            const mobile = window.innerWidth < 768;
-            setIsMobile(mobile);
-            if (!mobile) {
-                setMobileSidebarOpen(false);
-            }
+            setIsMobile(window.innerWidth < 768);
+            setNavCollapsed(window.innerWidth < 1280);
         };
 
         syncViewport();
@@ -26,60 +23,21 @@ export default function AuthenticatedLayout({ children }: Props) {
         return () => window.removeEventListener('resize', syncViewport);
     }, []);
 
-    const sidebarWidth = sidebarCollapsed ? 72 : 205;
-
     return (
         <div style={{
-            display: 'flex', minHeight: '100vh',
+            display: 'flex', flexDirection: 'column', minHeight: '100vh',
             background: '#f8fafc',
             fontFamily: "'Inter', sans-serif",
         }}>
-            {isMobile && mobileSidebarOpen && (
-                <button
-                    type="button"
-                    aria-label="Close sidebar"
-                    onClick={() => setMobileSidebarOpen(false)}
-                    style={{
-                        position: 'fixed',
-                        inset: 0,
-                        zIndex: 90,
-                        border: 'none',
-                        background: 'rgba(15,23,42,0.42)',
-                        cursor: 'pointer',
-                    }}
-                />
-            )}
+            <Topbar isMobile={isMobile} navCollapsed={navCollapsed} />
 
-            <Sidebar
-                collapsed={!isMobile && sidebarCollapsed}
-                mobileOpen={mobileSidebarOpen}
-                isMobile={isMobile}
-                onNavigate={() => isMobile && setMobileSidebarOpen(false)}
-            />
-
-            <div className="print-full-width" style={{
-                marginLeft: isMobile ? 0 : `${sidebarWidth}px`,
+            <main className="print-full-width" style={{
                 flex: 1,
-                display: 'flex',
-                flexDirection: 'column',
                 minWidth: 0,
-                transition: 'margin-left 0.18s ease',
+                padding: isMobile ? '18px 14px' : '24px 28px',
             }}>
-                <Topbar
-                    isMobile={isMobile}
-                    sidebarCollapsed={sidebarCollapsed}
-                    onToggleSidebar={() => {
-                        if (isMobile) {
-                            setMobileSidebarOpen(true);
-                        } else {
-                            setSidebarCollapsed(prev => !prev);
-                        }
-                    }}
-                />
-                <main style={{ flex: 1, padding: isMobile ? '18px 14px' : '24px 28px', overflowY: 'auto' }}>
-                    {children}
-                </main>
-            </div>
+                {children}
+            </main>
         </div>
     );
 }

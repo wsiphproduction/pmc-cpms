@@ -17,6 +17,8 @@ class ProjectWeeklyReport extends Model
         'completion_pct',
         'identified_issues',
         'progress_updates',
+        'checklist',
+        'issues',
         'file_path',
         'filename',
         'submitted_date',
@@ -26,6 +28,8 @@ class ProjectWeeklyReport extends Model
     protected $casts = [
         'submitted_date' => 'date',
         'completion_pct' => 'integer',
+        'checklist'      => 'array',
+        'issues'         => 'array',
     ];
 
     public function project(): BelongsTo

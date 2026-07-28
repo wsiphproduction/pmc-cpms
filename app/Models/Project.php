@@ -14,6 +14,22 @@ class Project extends Model
 {
     use HasFactory, SoftDeletes;
 
+    /** Human-readable label for each status_key. */
+    public const STATUS_LABELS = [
+        'PLANNING' => 'For Planning',
+        'RFQ_SUBMITTED' => 'RFQ/RFP Submitted',
+        'PROPOSAL_REVIEW' => 'Proposal Under Review',
+        'DESIGN_REVIEW' => 'Detailed Design Under Review',
+        'EXEC_ENDORSED' => 'Endorsed for Executive Approval',
+        'NTP_PROCESSING' => 'NTP & Contract Processing',
+        'SCHEDULING' => 'For Scheduling',
+        'ONGOING' => 'Ongoing',
+        'ON_HOLD' => 'On Hold',
+        'COMPLETED' => 'Completed',
+        'CLOSED' => 'Closed',
+        'CANCELED' => 'Canceled',
+    ];
+
     protected $fillable = [
         'project_no',
         'parent_id',
