@@ -25,6 +25,8 @@ interface MasterOption {
     id: number;
     name: string;
     description?: string | null;
+    /** Fuller dropdown line (e.g. cost code — department — description). */
+    label?: string | null;
 }
 
 interface Props {
@@ -71,10 +73,12 @@ function SearchableSelect({
     listId: string;
 }) {
     const [open, setOpen] = useState(false);
+    const optionText = (option: MasterOption) =>
+        option.label ?? (option.description ? `${option.name} — ${option.description}` : option.name);
     const filtered = useMemo(() => {
         const needle = value.trim().toLowerCase();
         return needle
-            ? options.filter(option => option.name.toLowerCase().includes(needle)).slice(0, 8)
+            ? options.filter(option => optionText(option).toLowerCase().includes(needle)).slice(0, 8)
             : options.slice(0, 8);
     }, [options, value]);
 
@@ -106,7 +110,7 @@ function SearchableSelect({
                             onClick={() => { onChange(option.name); setOpen(false); }}
                             style={{ width: '100%', border: 'none', background: option.name === value ? '#eff6ff' : '#fff', padding: '9px 12px', textAlign: 'left', fontSize: '13px', color: '#334155', cursor: 'pointer' }}
                         >
-                            {option.description ? `${option.name} — ${option.description}` : option.name}
+                            {optionText(option)}
                         </button>
                     )) : (
                         <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No results found</div>

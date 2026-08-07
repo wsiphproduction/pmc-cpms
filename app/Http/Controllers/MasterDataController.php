@@ -38,7 +38,15 @@ class MasterDataController extends Controller
             'serviceTypes' => ServiceType::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'workForces'   => WorkForce::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'structures'   => Structure::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
-            'suppliers'    => Supplier::latest()->get(['id', 'company', 'accredited', 'email', 'telephone_no', 'mobile_no', 'is_active', 'created_at']),
+            // Only PMD's own supplier list is managed here; CSV-imported rows
+            // stay out of the way (they still feed the RFQ supplier dropdown).
+            'suppliers'    => Supplier::pmd()->with('creator:id,name')->latest()
+                ->get(['id', 'company', 'accredited', 'email', 'telephone_no', 'mobile_no', 'is_active', 'created_by', 'created_at'])
+                ->map(fn (Supplier $s) => [
+                    ...$s->only(['id', 'company', 'accredited', 'email', 'telephone_no', 'mobile_no', 'is_active', 'created_at']),
+                    'added_by' => $s->creator?->name,
+                ]),
+            'importedSupplierCount' => Supplier::where('source', Supplier::SOURCE_IMPORT)->count(),
         ]);
     }
 
@@ -201,6 +209,8 @@ class MasterDataController extends Controller
             'mobile_no'    => 'nullable|string|max:100',
         ]);
         $data['accredited'] = $request->boolean('accredited');
+        $data['source']     = Supplier::SOURCE_PMD;
+        $data['created_by'] = auth()->id();
 
         Supplier::create($data);
 
@@ -237,6 +247,9 @@ class MasterDataController extends Controller
      * telephone_no, mobile_no. Existing suppliers (matched by company) are
      * updated; new ones are created. Chunked upsert stays under SQL Server's
      * 2100 bind-parameter limit and is fast on MySQL.
+     *
+     * Newly created rows are tagged as imported, so they feed the RFQ supplier
+     * pool without cluttering PMD's own Master Data list.
      */
     public function importSuppliers(Request $request)
     {
@@ -309,6 +322,10 @@ class MasterDataController extends Controller
 
             $batch[] = [
                 'company'      => $company,
+                // Marks the row as bulk data rather than part of PMD's own list.
+                // Existing rows keep whatever source they already have — the
+                // upsert below only touches the contact columns.
+                'source'       => Supplier::SOURCE_IMPORT,
                 'email'        => $email !== null ? mb_substr($email, 0, 191) : null,
                 'telephone_no' => $cell($row, $telIdx) !== null ? mb_substr($cell($row, $telIdx), 0, 100) : null,
                 'mobile_no'    => $cell($row, $mobileIdx) !== null ? mb_substr($cell($row, $mobileIdx), 0, 100) : null,

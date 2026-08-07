@@ -525,8 +525,12 @@ class ProjectController extends Controller
             ],
 
             'ioc', 'acr' => [
-                'cost_codes' => CostCode::where('is_active', true)->orderBy('name')->get(['name'])
-                    ->map(fn ($row) => ['value' => (string) $row->name, 'label' => (string) $row->name])
+                'cost_codes' => CostCode::where('is_active', true)->orderBy('name')->get()
+                    ->map(fn (CostCode $row) => [
+                        'value' => (string) $row->name,
+                        'label' => $row->optionLabel(),
+                        'displayLabel' => (string) $row->name,
+                    ])
                     ->values(),
                 'iocs' => $this->collectHubRows($project, fn ($p) => $p->iocItems()->get(), fn ($m, $sub) => $this->iocRow($m, $sub)),
             ],
@@ -900,7 +904,13 @@ class ProjectController extends Controller
                 'label' => $row->name,
             ])->values(),
             'workForces' => WorkForce::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
-            'costCodes' => CostCode::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
+            // Label carries the department and description; the field itself
+            // still stores (and displays) just the code.
+            'costCodes' => CostCode::where('is_active', true)->orderBy('name')->get()->map(fn (CostCode $row) => [
+                'value' => (string) $row->name,
+                'label' => $row->optionLabel(),
+                'displayLabel' => (string) $row->name,
+            ]),
             'categories' => Category::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
             'serviceTypes' => ServiceType::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
             'structures' => Structure::where('is_active', true)->orderBy('name')->get(['name'])->map($option),

@@ -221,6 +221,16 @@ class Project extends Model
         return $reported->isEmpty() ? 0 : (int) round($reported->avg());
     }
 
+    /**
+     * Re-derive the project's own completion from its latest weekly report.
+     * Called whenever a report is added or removed, from either the operations
+     * hub or the Weekly Status module.
+     */
+    public function refreshCompletionFromReports(): void
+    {
+        $this->update(['completion_percent' => $this->weeklyReports()->first()?->completion_pct ?? 0]);
+    }
+
     // ── Health / KPI ──────────────────────────────────────────────────────
 
     public function daysElapsed(): int

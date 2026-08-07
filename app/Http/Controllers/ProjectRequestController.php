@@ -61,7 +61,7 @@ class ProjectRequestController extends Controller
         return Inertia::render('requests/create', [
             'jobTypes'     => JobType::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'jobLocations' => JobLocation::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'costCodes'    => CostCode::where('is_active', true)->orderBy('name')->get(['id', 'name', 'description']),
+            'costCodes'    => $this->costCodeOptions(),
         ]);
     }
 
@@ -141,7 +141,7 @@ class ProjectRequestController extends Controller
             'projectRequest' => $projectRequest->load('attachments'),
             'jobTypes'       => JobType::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'jobLocations'   => JobLocation::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'costCodes'      => CostCode::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'costCodes'      => $this->costCodeOptions(),
         ]);
     }
 
@@ -359,6 +359,20 @@ class ProjectRequestController extends Controller
             'decide' => $user->can('decide', $projectRequest),
             'canCreateProject' => $user->can('create', Project::class),
         ];
+    }
+
+    /**
+     * Cost-code dropdown options. `label` is the full "code — department —
+     * description" line; the stored value stays the bare code.
+     */
+    private function costCodeOptions()
+    {
+        return CostCode::where('is_active', true)->orderBy('name')->get()
+            ->map(fn (CostCode $code) => [
+                'id'    => $code->id,
+                'name'  => $code->name,
+                'label' => $code->optionLabel(),
+            ]);
     }
 
     private function nextRequestNo(): string

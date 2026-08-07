@@ -28,6 +28,11 @@ class ProjectWeeklyReport extends Model
     protected $casts = [
         'submitted_date' => 'date',
         'completion_pct' => 'integer',
+        // SQL Server hands integer columns back as strings; the front end
+        // compares these against project / NTP ids numerically.
+        'project_id'     => 'integer',
+        'project_ntp_id' => 'integer',
+        'created_by'     => 'integer',
         'checklist'      => 'array',
         'issues'         => 'array',
     ];

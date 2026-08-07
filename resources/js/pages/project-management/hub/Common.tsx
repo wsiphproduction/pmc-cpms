@@ -25,6 +25,24 @@ export function money(value: number) {
     return `PhP ${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/**
+ * Build a .csv client-side and hand it to the browser as a download — used for
+ * the "basic" import templates, which are plain enough not to need a round trip
+ * to the server. The leading BOM keeps Excel from mangling the √ / ✕ / Ø
+ * checklist symbols.
+ */
+export function downloadCsv(filename: string, rows: string[][]) {
+    const csv = '﻿' + rows
+        .map(r => r.map(v => /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v).join(','))
+        .join('\n') + '\n';
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
 export function HubShell({ children }: { children: React.ReactNode }) {
     return <div style={{ padding: '24px', background: '#fff', minHeight: '550px', boxSizing: 'border-box' }}>{children}</div>;
 }

@@ -13,6 +13,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\TechnicalFeedbackController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WeeklyStatusController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
@@ -122,6 +123,17 @@ Route::middleware(['auth'])->group(function () {
         ->name('hub.rfp.update-status');
 
     Route::resource('projects', ProjectController::class);
+
+    // ── Weekly Status (engineers file across all the projects they handle) ──
+    Route::middleware(['role:approver|assistant_manager|admin'])->group(function () {
+        Route::get('weekly-status',                    [WeeklyStatusController::class, 'index'])->name('weekly-status.index');
+        Route::get('weekly-status/template',           [WeeklyStatusController::class, 'template'])->name('weekly-status.template');
+        Route::post('weekly-status/import',            [WeeklyStatusController::class, 'import'])->name('weekly-status.import');
+        Route::post('weekly-status',                   [WeeklyStatusController::class, 'store'])->name('weekly-status.store');
+        // Reached via a POST carrying _method=put, so the revision can attach a PDF.
+        Route::put('weekly-status/{report}',           [WeeklyStatusController::class, 'update'])->name('weekly-status.update');
+        Route::delete('weekly-status/{report}',        [WeeklyStatusController::class, 'destroy'])->name('weekly-status.destroy');
+    });
 
     Route::middleware(['role:approver|assistant_manager|admin'])->group(function () {
         // ── Users (admin only) ────────────────────────────────────────────────
