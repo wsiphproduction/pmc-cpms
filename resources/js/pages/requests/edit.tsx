@@ -42,6 +42,8 @@ interface Props {
 interface MasterOption {
     id: number;
     name: string;
+    /** Fuller dropdown line (e.g. cost code — department — description). */
+    label?: string | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -307,7 +309,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                         <select value={costcode} onChange={e => { setCostcode(e.target.value); setCostcodeError(''); }} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer', borderColor: costcodeError ? '#dc2626' : undefined }}>
                             <option value="">Select Cost Code…</option>
                             {!hasOption(costCodes, costcode) && <option value={costcode}>{costcode}</option>}
-                            {costCodes.map(code => <option key={code.id} value={code.name}>{code.name}</option>)}
+                            {costCodes.map(code => <option key={code.id} value={code.name}>{code.label ?? code.name}</option>)}
                         </select>
                         {costcodeError && (
                             <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '5px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>

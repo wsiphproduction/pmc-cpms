@@ -3,7 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActionBtns, DataTable, Field, HubProject, HubShell, Modal, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface CostCodeOption { value: string; label: string }
+// `label` is the full "code — department — description" line shown in the
+// dropdown; `displayLabel` is the bare code that stays in the field once picked.
+interface CostCodeOption { value: string; label: string; displayLabel?: string }
 interface IocRow { id: number; description: string; cost_code: string | null; amount: number; filename: string | null; url: string | null; created: string; sub_project_id: number | null; sub_project_no: string | null }
 
 function CostCodeSelect({ value, onChange, options, id }: {
@@ -14,11 +16,11 @@ function CostCodeSelect({ value, onChange, options, id }: {
 }) {
     const [open, setOpen] = useState(false);
     const selectedOption = options.find(option => option.value === value);
-    const [inputValue, setInputValue] = useState(selectedOption?.label ?? value);
+    const [inputValue, setInputValue] = useState(selectedOption?.displayLabel ?? selectedOption?.label ?? value);
 
     useEffect(() => {
         const selected = options.find(option => option.value === value);
-        setInputValue(selected?.label ?? value);
+        setInputValue(selected?.displayLabel ?? selected?.label ?? value);
     }, [options, value]);
 
     const filtered = useMemo(() => {
@@ -52,7 +54,7 @@ function CostCodeSelect({ value, onChange, options, id }: {
                             key={option.value}
                             type="button"
                             onMouseDown={e => e.preventDefault()}
-                            onClick={() => { onChange(option.value); setInputValue(option.label); setOpen(false); }}
+                            onClick={() => { onChange(option.value); setInputValue(option.displayLabel ?? option.label); setOpen(false); }}
                             style={{ width: '100%', border: 'none', background: option.value === value ? '#eff6ff' : '#fff', padding: '9px 12px', textAlign: 'left', fontSize: '13px', color: '#334155', cursor: 'pointer' }}
                         >
                             {option.label}

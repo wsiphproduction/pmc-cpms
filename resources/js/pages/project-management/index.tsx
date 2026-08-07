@@ -9,8 +9,9 @@ interface Project {
     title: string;
     type: 'Major' | 'Minor';
     progress: number;
+    project_manager: string;
     dept_owner: string;
-    status: 'Ongoing' | 'For Planning' | 'On Hold' | 'Proposal Under Review';
+    status: string;
     budget_total: number;
     budget_paid: number;
     deadline: string | null;
@@ -93,8 +94,8 @@ interface Props extends MasterData {
 }
 
 // ── Status Badge ───────────────────────────────────────────────────────────
-function StatusBadge({ status }: { status: Project['status'] }) {
-    const map: Record<Project['status'], { bg: string; color: string; border: string }> = {
+function StatusBadge({ status }: { status: string }) {
+    const map: Record<string, { bg: string; color: string; border: string }> = {
         'Ongoing':                 { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
         'For Planning':            { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
         'Proposal Under Review':   { bg: '#fefce8', color: '#854d0e', border: '#fef08a' },
@@ -454,7 +455,17 @@ export default function ProjectsIndex({
     const [search,         setSearch]         = useState(filters.search ?? '');
     const [showAdvFilter,  setShowAdvFilter]   = useState(false);
 
-    const doSearch     = () => router.get(route('projects.index'), { search }, { preserveState: true });
+    // Keep whatever is already applied when one control changes, so the quick
+    // status filter composes with the search box and the advanced filters.
+    const applyFilters = (patch: Partial<Filters>) => {
+        const params: Record<string, string | boolean> = {};
+        Object.entries({ ...filters, search, ...patch }).forEach(([k, v]) => {
+            if (v !== '' && v !== false && v != null) params[k] = v as string | boolean;
+        });
+        router.get(route('projects.index'), params, { preserveState: true });
+    };
+
+    const doSearch     = () => applyFilters({});
     const clearFilters = () => router.get(route('projects.index'));
     const hasFilters   = Object.values(filters).some(v => v && (Array.isArray(v) ? v.length : true));
 
@@ -486,7 +497,7 @@ export default function ProjectsIndex({
 
                 {/* Toolbar */}
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '340px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '620px', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '7px 12px', flex: 1 }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                             <input
@@ -518,6 +529,25 @@ export default function ProjectsIndex({
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
                             Advanced Filter
                         </button>
+                        {/* Status is the filter people reach for most, so it gets
+                            a control of its own rather than living only in the
+                            advanced modal. */}
+                        <select
+                            value={filters.status ?? ''}
+                            onChange={e => applyFilters({ status: e.target.value })}
+                            title="Filter by status"
+                            style={{
+                                padding: '7px 10px', borderRadius: '7px',
+                                border: `1px solid ${filters.status ? '#2563eb' : '#e5e7eb'}`,
+                                background: filters.status ? '#eff6ff' : '#fff',
+                                color: filters.status ? '#2563eb' : '#374151',
+                                fontSize: '12.5px', fontFamily: 'inherit',
+                                cursor: 'pointer', outline: 'none', whiteSpace: 'nowrap',
+                            }}
+                        >
+                            <option value="">All Statuses</option>
+                            {statuses.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                        </select>
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -544,7 +574,7 @@ export default function ProjectsIndex({
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['Project #', 'Project Title', 'Completion (%)', 'Payment Status', 'Dept Owner', 'Target Completion', 'Status', 'Actions'].map((h, i, arr) => (
+                                {['Project #', 'Project Title', 'Engr', 'Completion (%)', 'Payment Status', 'Dept Owner', 'Target Completion', 'Status', 'Actions'].map((h, i, arr) => (
                                     <th key={h} style={{
                                         padding: '10px 16px',
                                         textAlign: i === arr.length - 1 ? 'center' : 'left',
@@ -562,7 +592,7 @@ export default function ProjectsIndex({
                         <tbody>
                             {projects.data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} style={{ padding: '48px', textAlign: 'center' }}>
+                                    <td colSpan={9} style={{ padding: '48px', textAlign: 'center' }}>
                                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 10px' }}>
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                                             <polyline points="14 2 14 8 20 8"/>
@@ -577,12 +607,22 @@ export default function ProjectsIndex({
                                     onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                                 >
-                                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#64748b', fontSize: '11.5px' }}>
-                                        {proj.project_no}
+                                    <td style={{ padding: '12px 16px', fontSize: '11.5px' }}>
+                                        <Link
+                                            href={route('projects.show', proj.id)}
+                                            style={{ fontWeight: 700, color: '#2563eb', textDecoration: 'none', whiteSpace: 'nowrap' }}
+                                            onMouseEnter={e => (e.currentTarget.style.textDecoration = 'underline')}
+                                            onMouseLeave={e => (e.currentTarget.style.textDecoration = 'none')}
+                                        >
+                                            {proj.project_no}
+                                        </Link>
                                     </td>
                                     <td style={{ padding: '12px 16px', maxWidth: '220px' }}>
                                         <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '12.5px' }}>{proj.title}</div>
                                         <TypeLabel type={proj.type} />
+                                    </td>
+                                    <td style={{ padding: '12px 16px', color: '#374151', fontSize: '12.5px' }}>
+                                        {proj.project_manager}
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
                                         <MiniProgress progress={proj.progress} />

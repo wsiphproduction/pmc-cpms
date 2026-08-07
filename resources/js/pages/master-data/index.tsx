@@ -28,6 +28,8 @@ interface Supplier {
     mobile_no?: string | null;
     is_active?: boolean;
     created_at?: string;
+    /** PMD user who added the supplier; null for legacy rows. */
+    added_by?: string | null;
 }
 
 interface Props {
@@ -44,6 +46,8 @@ interface Props {
     workForces?:   MasterItem[];
     structures?:   MasterItem[];
     suppliers?:    Supplier[];
+    /** Bulk-imported suppliers, which this list deliberately leaves out. */
+    importedSupplierCount?: number;
 }
 
 type TabKey =
@@ -708,8 +712,9 @@ function SupplierModal({ supplier, suppliers, onClose }: { supplier: Supplier | 
 }
 
 // ── Supplier Table ───────────────────────────────────────────────────────────
-function SupplierTable({ suppliers, onAdd, onEdit, onToggle }: {
+function SupplierTable({ suppliers, importedCount = 0, onAdd, onEdit, onToggle }: {
     suppliers: Supplier[];
+    importedCount?: number;
     onAdd: () => void;
     onEdit: (s: Supplier) => void;
     onToggle: (s: Supplier) => void;
@@ -733,13 +738,20 @@ function SupplierTable({ suppliers, onAdd, onEdit, onToggle }: {
         });
     };
 
-    const headers = ['#', 'Company', 'Accredited', 'Email', 'Telephone', 'Mobile', 'Created At', 'Actions'];
+    const headers = ['#', 'Company', 'Accredited', 'Email', 'Telephone', 'Mobile', 'Added By', 'Created At', 'Actions'];
 
     return (
         <div>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: '13px', color: '#64748b' }}>
                     <strong style={{ color: '#0f172a' }}>{suppliers.length}</strong> {suppliers.length === 1 ? 'entry' : 'entries'}
+                    {/* Imported rows still feed the RFQ supplier dropdown; they
+                        just aren't part of the list PMD maintains by hand. */}
+                    {importedCount > 0 && (
+                        <span style={{ marginLeft: '8px', fontSize: '12px', color: '#94a3b8' }}>
+                            · {importedCount} imported supplier{importedCount === 1 ? '' : 's'} not shown
+                        </span>
+                    )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleImport} style={{ display: 'none' }} />
@@ -770,7 +782,7 @@ function SupplierTable({ suppliers, onAdd, onEdit, onToggle }: {
                         {suppliers.length === 0 ? (
                             <tr>
                                 <td colSpan={headers.length} style={{ padding: '48px', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>
-                                    No suppliers yet. Add one or upload a CSV to get started.
+                                    No suppliers added by PMD yet. Add one to get started.
                                 </td>
                             </tr>
                         ) : paginated.map((s, idx) => (
@@ -787,6 +799,7 @@ function SupplierTable({ suppliers, onAdd, onEdit, onToggle }: {
                                 <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px' }}>{s.email || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.telephone_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.mobile_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
+                                <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px', whiteSpace: 'nowrap' }}>{s.added_by || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{formatDateTime(s.created_at)}</td>
                                 <td style={{ padding: '12px 20px' }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
@@ -921,6 +934,7 @@ export default function MasterData({
     workForces    = [],
     structures    = [],
     suppliers     = [],
+    importedSupplierCount = 0,
 }: Props) {
     const [activeTab,    setActiveTab]    = useState<TabKey>('job_types');
     const [modalTab,     setModalTab]     = useState<TabKey>('job_types');
@@ -1064,6 +1078,7 @@ export default function MasterData({
                 {activeTab === 'suppliers' ? (
                     <SupplierTable
                         suppliers={suppliers}
+                        importedCount={importedSupplierCount}
                         onAdd={() => { setEditSupplier(null); setShowSupplierModal(true); }}
                         onEdit={s => { setEditSupplier(s); setShowSupplierModal(true); }}
                         onToggle={s => toggleActive('suppliers', s.id)}

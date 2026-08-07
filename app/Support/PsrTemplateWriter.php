@@ -15,20 +15,32 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
  *
  * Column layout is derived from config('psr') and mirrored by the importer,
  * which discovers the repeating groups from the header row.
+ *
+ * Passing a project list switches the workbook into cross-project mode (the
+ * Weekly Status module): a leading `project_no` column says which project each
+ * row belongs to, so one file can cover a whole week's worth of projects,
+ * sub-projects and NTPs.
  */
 class PsrTemplateWriter
 {
     /** Columns that always lead the sheet. */
     private const BASE = ['week_code', 'ntp_no', 'completion_pct', 'submitted_date', 'progress_updates'];
 
-    /** @return string Raw .xlsx bytes. */
-    public function build(): string
+    private const PROJECTS_SHEET = 'My Projects';
+
+    /**
+     * @param  array<int, array{project_no: string, title: string, ntps?: string}>  $projects
+     *         When given, a `project_no` column leads the sheet and is backed by
+     *         a dropdown of these project numbers.
+     * @return string Raw .xlsx bytes.
+     */
+    public function build(array $projects = []): string
     {
         $items    = collect(config('psr.checklist'))->reject(fn ($c) => $c['section'] ?? false)->values();
         $rows     = (int) config('psr.issue_rows');
         $statuses = (array) config('psr.statuses');
 
-        $header = self::BASE;
+        $header = $projects ? ['project_no', ...self::BASE] : self::BASE;
         foreach ($items as $item) {
             $key = str_replace('.', '_', $item['seq']);
             $header[] = "chk_{$key}_status";
@@ -45,7 +57,7 @@ class PsrTemplateWriter
         $sheet->setTitle('Weekly Reports');
 
         $sheet->fromArray($header, null, 'A1');
-        $sheet->fromArray($this->sampleRow($items, $rows, $statuses), null, 'A2');
+        $sheet->fromArray($this->sampleRow($items, $rows, $statuses, $projects), null, 'A2');
 
         $lastCol = $sheet->getHighestColumn();
 
@@ -66,13 +78,22 @@ class PsrTemplateWriter
                 str_ends_with($name, '_remarks'), str_starts_with($name, 'issue_'),
                 str_starts_with($name, 'action_'), $name === 'progress_updates' => 34,
                 str_ends_with($name, '_status')                                  => 13,
+                $name === 'project_no'                                           => 20,
                 default                                                          => 17,
             });
 
             if (str_ends_with($name, '_status')) {
-                $this->addStatusDropdown($sheet, $col, $lastRow, $statuses);
+                $this->addDropdown($sheet, $col, $lastRow, '"' . implode(',', $statuses) . '"',
+                    'Invalid status', 'Pick a value from the list, or leave the cell blank.');
                 $sheet->getStyle("{$col}2:{$col}{$lastRow}")
                     ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            }
+
+            if ($name === 'project_no' && $projects) {
+                // Cross-sheet range, so the list grows with the engineer's projects.
+                $range = "'" . self::PROJECTS_SHEET . "'!\$A\$2:\$A\$" . (count($projects) + 1);
+                $this->addDropdown($sheet, $col, $lastRow, $range,
+                    'Unknown project', 'Pick a project number from the list on the "' . self::PROJECTS_SHEET . '" sheet.');
             }
 
             if ($name === 'submitted_date' || str_starts_with($name, 'commitment_date_')) {
@@ -80,6 +101,10 @@ class PsrTemplateWriter
                 $sheet->getStyle("{$col}2:{$col}{$lastRow}")
                     ->getNumberFormat()->setFormatCode('yyyy-mm-dd');
             }
+        }
+
+        if ($projects) {
+            $this->addProjectsSheet($spreadsheet, $projects);
         }
 
         // Reference sheet: which checklist item each chk_* column belongs to.
@@ -114,7 +139,34 @@ class PsrTemplateWriter
         return $bytes;
     }
 
-    private function addStatusDropdown($sheet, string $col, int $lastRow, array $statuses): void
+    /**
+     * Reference sheet backing the project_no dropdown: the projects the engineer
+     * can report on, with each one's NTP numbers spelled out so the ntp_no column
+     * can be filled in without leaving the workbook.
+     *
+     * @param  array<int, array{project_no: string, title: string, ntps?: string}>  $projects
+     */
+    private function addProjectsSheet(Spreadsheet $spreadsheet, array $projects): void
+    {
+        $sheet = $spreadsheet->createSheet();
+        $sheet->setTitle(self::PROJECTS_SHEET);
+        $sheet->fromArray(['Project #', 'Project Title', 'NTP numbers (for ntp_no)'], null, 'A1');
+        $sheet->getStyle('A1:C1')->getFont()->setBold(true);
+
+        foreach (array_values($projects) as $n => $project) {
+            $sheet->fromArray([
+                $project['project_no'],
+                $project['title'],
+                $project['ntps'] ?? '',
+            ], null, 'A' . ($n + 2));
+        }
+
+        $sheet->getColumnDimension('A')->setWidth(22);
+        $sheet->getColumnDimension('B')->setWidth(52);
+        $sheet->getColumnDimension('C')->setWidth(46);
+    }
+
+    private function addDropdown($sheet, string $col, int $lastRow, string $formula, string $errorTitle, string $error): void
     {
         for ($row = 2; $row <= $lastRow; $row++) {
             $validation = $sheet->getCell("{$col}{$row}")->getDataValidation();
@@ -123,18 +175,21 @@ class PsrTemplateWriter
             $validation->setAllowBlank(true);
             $validation->setShowDropDown(true);
             $validation->setShowErrorMessage(true);
-            $validation->setErrorTitle('Invalid status');
-            $validation->setError('Pick a value from the list, or leave the cell blank.');
-            $validation->setFormula1('"' . implode(',', $statuses) . '"');
+            $validation->setErrorTitle($errorTitle);
+            $validation->setError($error);
+            $validation->setFormula1($formula);
         }
     }
 
     /** A worked example row so the expected shape is obvious. */
-    private function sampleRow($items, int $issueRows, array $statuses): array
+    private function sampleRow($items, int $issueRows, array $statuses, array $projects = []): array
     {
         [$done, $notDone] = [$statuses[0] ?? '√', $statuses[1] ?? '✕'];
 
         $row = ['W1-OCT', '', 25, '2026-10-07', "Foundation works started; formworks scheduled next week."];
+        if ($projects) {
+            array_unshift($row, $projects[0]['project_no'] ?? '');
+        }
         foreach ($items as $n => $item) {
             $row[] = $n === 0 ? $notDone : $done;
             $row[] = $n === 0 ? 'Perimeter fence pending' : '';

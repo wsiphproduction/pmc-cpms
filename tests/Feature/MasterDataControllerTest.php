@@ -497,3 +497,99 @@ describe('remaining master data tabs', function () {
     ]);
 
 });
+
+// -------------------------------------------------
+// SUPPLIERS — PMD's own list vs. bulk-imported rows
+// -------------------------------------------------
+
+describe('suppliers', function () {
+
+    it('lists only the suppliers PMD added, and says how many imports are hidden', function () {
+        \App\Models\Supplier::create(['company' => 'PMD Added Co', 'source' => \App\Models\Supplier::SOURCE_PMD]);
+        \App\Models\Supplier::create(['company' => 'Bulk Imported Co', 'source' => \App\Models\Supplier::SOURCE_IMPORT]);
+
+        $this->actingAs(makeMasterDataUser())
+            ->get(route('master.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('suppliers', 1)
+                ->where('suppliers.0.company', 'PMD Added Co')
+                ->where('importedSupplierCount', 1));
+    });
+
+    it('records who added a supplier and keeps it in PMD\'s list', function () {
+        $user = makeMasterDataUser();
+
+        $this->actingAs($user)->post(route('master.suppliers.store'), [
+            'company'    => 'New Supplier Inc',
+            'accredited' => true,
+        ])->assertRedirect();
+
+        $supplier = \App\Models\Supplier::first();
+
+        expect($supplier->source)->toBe(\App\Models\Supplier::SOURCE_PMD);
+        expect((int) $supplier->created_by)->toBe($user->id);
+
+        $this->actingAs($user)->get(route('master.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('suppliers', 1)
+                ->where('suppliers.0.added_by', $user->name));
+    });
+
+    it('tags CSV-imported suppliers as imports, leaving them out of the list', function () {
+        $user = makeMasterDataUser();
+
+        $path = tempnam(sys_get_temp_dir(), 'sup') . '.csv';
+        file_put_contents($path, "company,email\nImported One,a@example.com\nImported Two,b@example.com\n");
+
+        $this->actingAs($user)->post(route('master.suppliers.import'), [
+            'file' => new \Illuminate\Http\UploadedFile($path, 'suppliers.csv', 'text/csv', null, true),
+        ])->assertRedirect()->assertSessionHas('success');
+
+        expect(\App\Models\Supplier::count())->toBe(2);
+        expect(\App\Models\Supplier::pmd()->count())->toBe(0);
+
+        $this->actingAs($user)->get(route('master.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('suppliers', 0)
+                ->where('importedSupplierCount', 2));
+    });
+});
+
+// -------------------------------------------------
+// COST CODE dropdown labels
+// -------------------------------------------------
+
+describe('cost code option labels', function () {
+
+    it('puts the department between the code and the description', function () {
+        $code = CostCode::create([
+            'name'        => '1.01.00.000.000',
+            'description' => 'CURRENT ASSETS',
+            'division'    => 'Administration Division',
+            'cost_center' => 'Accounting Department',
+        ]);
+
+        expect($code->optionLabel())->toBe('1.01.00.000.000 — Accounting Department — CURRENT ASSETS');
+    });
+
+    it('leaves out the parts a cost code does not have', function () {
+        expect(CostCode::create(['name' => 'CC-BARE'])->optionLabel())->toBe('CC-BARE');
+
+        expect(CostCode::create(['name' => 'CC-NO-DEPT', 'description' => 'Repairs'])->optionLabel())
+            ->toBe('CC-NO-DEPT — Repairs');
+    });
+
+    it('feeds the labelled options to the project request form', function () {
+        CostCode::create([
+            'name'        => 'CC-100',
+            'description' => 'Building Repairs',
+            'cost_center' => 'Maintenance Department',
+        ]);
+
+        $this->actingAs(makeMasterDataUser())
+            ->get(route('requests.create'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('costCodes.0.name', 'CC-100')
+                ->where('costCodes.0.label', 'CC-100 — Maintenance Department — Building Repairs'));
+    });
+});

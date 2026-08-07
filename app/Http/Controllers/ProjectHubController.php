@@ -20,6 +20,7 @@ use App\Models\ProjectWeeklyReport;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Support\PsrTemplateWriter;
+use App\Support\WeeklyReportSheet;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -729,8 +730,7 @@ class ProjectHubController extends Controller
      */
     private function recalculateCompletionPercent(Project $project): void
     {
-        $latest = $project->weeklyReports()->first();
-        $project->update(['completion_percent' => $latest?->completion_pct ?? 0]);
+        $project->refreshCompletionFromReports();
     }
 
     // ── IOC ───────────────────────────────────────────────────────────────────
@@ -892,17 +892,11 @@ class ProjectHubController extends Controller
     }
 
     /**
-     * Bulk-import weekly reports from a .csv or .xlsx file. Expected columns
-     * (header row, case-insensitive): week_code, completion_pct,
-     * identified_issues, progress_updates, submitted_date, ntp_no. Only week_code
-     * is required per row; ntp_no is matched against this project's NTP numbers.
+     * Bulk-import weekly reports from a .csv or .xlsx file into this project.
      *
-     * The detailed template additionally carries the checklist and the weekly
-     * issues/action plan from the submission form, as repeating column groups:
-     *   chk_<seq>_status / chk_<seq>_remarks  (seq underscored, e.g. chk_1_1_status)
-     *   issue_<n> / action_<n> / commitment_date_<n>
-     * Both groups are discovered from the header, so adding checklist items or
-     * issue rows to the form needs no change here.
+     * Column discovery and row normalisation live in WeeklyReportSheet, shared
+     * with the cross-project Weekly Status import; ntp_no is matched against
+     * this project's NTP numbers.
      */
     public function importPsr(Request $request, Project $project): RedirectResponse
     {
@@ -911,126 +905,33 @@ class ProjectHubController extends Controller
         ]);
 
         try {
-            $rows = $this->readSpreadsheetRows($request->file('file'));
+            $sheet = new WeeklyReportSheet($request->file('file'));
         } catch (\Throwable $e) {
             report($e);
 
             return back()->with('error', 'Could not read the uploaded file.');
         }
 
-        $header = array_shift($rows);
-        if ($header === null) {
-            return back()->with('error', 'The uploaded file is empty.');
-        }
-
-        $header[0] = preg_replace('/^\xEF\xBB\xBF/', '', (string) ($header[0] ?? ''));
-        $columns   = array_map(fn ($h) => strtolower(trim((string) $h)), $header);
-
-        $weekIdx    = $this->findCsvColumn($columns, ['week_code', 'week', 'week code']);
-        $pctIdx     = $this->findCsvColumn($columns, ['completion_pct', 'completion', 'percent', '% completion', 'progress']);
-        $issuesIdx  = $this->findCsvColumn($columns, ['identified_issues', 'issues', 'identified issues']);
-        $updatesIdx = $this->findCsvColumn($columns, ['progress_updates', 'updates', 'progress updates']);
-        $dateIdx    = $this->findCsvColumn($columns, ['submitted_date', 'date', 'submitted date']);
-        $ntpIdx     = $this->findCsvColumn($columns, ['ntp_no', 'ntp', 'ntp no', 'ntp number']);
-
-        // Detailed-template column groups, keyed by checklist seq / issue number.
-        $checklistIdx = [];
-        $issueIdx     = [];
-        foreach ($columns as $i => $name) {
-            if (preg_match('/^chk_(.+)_(status|remarks)$/', $name, $m)) {
-                $checklistIdx[str_replace('_', '.', $m[1])][$m[2]] = $i;
-            } elseif (preg_match('/^(issue|action|corrective_action|commitment_date|commit_date)_(\d+)$/', $name, $m)) {
-                $key = match ($m[1]) {
-                    'issue'                          => 'issue',
-                    'action', 'corrective_action'    => 'action',
-                    default                          => 'commitment_date',
-                };
-                $issueIdx[(int) $m[2]][$key] = $i;
-            }
-        }
-        ksort($issueIdx);
-        uksort($checklistIdx, fn ($a, $b) => strnatcmp($a, $b));
-
-        if ($weekIdx === null) {
+        if (! $sheet->hasWeekCode()) {
             return back()->with('error', 'The file must contain a "week_code" column.');
         }
 
-        // NTP number → id lookup for this project (case-insensitive).
+        // NTP number -> id lookup for this project (case-insensitive).
         $ntpByNo = $project->ntps()->pluck('id', 'ntp_no')
             ->mapWithKeys(fn ($id, $no) => [strtolower(trim((string) $no)) => $id]);
 
-        $cell = function ($row, $idx) {
-            if ($idx === null) {
-                return null;
-            }
-            $v = trim((string) ($row[$idx] ?? ''));
-            return $v === '' ? null : $v;
-        };
-
-        $parseDate = function (?string $raw): ?string {
-            if ($raw === null) {
-                return null;
-            }
-            try {
-                return \Carbon\Carbon::parse($raw)->toDateString();
-            } catch (\Throwable $e) {
-                return null;
-            }
-        };
-
         $imported = 0;
 
-        foreach ($rows as $row) {
-            $week = $cell($row, $weekIdx);
-            if ($week === null) {
-                continue;
-            }
-
-            // Checklist: keep only items the row actually answered.
-            $checklist = [];
-            foreach ($checklistIdx as $seq => $idx) {
-                $status  = $this->normalizeChecklistStatus($cell($row, $idx['status'] ?? null));
-                $remarks = $cell($row, $idx['remarks'] ?? null);
-                if ($status === null && $remarks === null) {
-                    continue;
-                }
-                $checklist[] = ['seq' => $seq, 'status' => $status, 'remarks' => $remarks];
-            }
-
-            // Issues / action plan: skip rows left entirely blank.
-            $issues = [];
-            foreach ($issueIdx as $idx) {
-                $issue  = $cell($row, $idx['issue'] ?? null);
-                $action = $cell($row, $idx['action'] ?? null);
-                $due    = $parseDate($cell($row, $idx['commitment_date'] ?? null));
-                if ($issue === null && $action === null && $due === null) {
-                    continue;
-                }
-                $issues[] = ['issue' => $issue, 'action' => $action, 'commitment_date' => $due];
-            }
-
-            $pct = (int) round((float) ($cell($row, $pctIdx) ?? 0));
-            $pct = max(0, min(100, $pct));
-
-            $ntpNo = $cell($row, $ntpIdx);
-            $ntpId = $ntpNo !== null ? ($ntpByNo[strtolower($ntpNo)] ?? null) : null;
-
-            // Keep the default of today when the date is missing or unparseable.
-            $submitted = $parseDate($cell($row, $dateIdx)) ?? now()->toDateString();
-
-            // The form treats the first issue row as the report's headline issue,
-            // so fall back to it when the detailed template omits that column.
-            $identifiedIssues = $cell($row, $issuesIdx) ?? ($issues[0]['issue'] ?? null);
-
+        foreach ($sheet->reports() as $report) {
             $project->weeklyReports()->create([
-                'project_ntp_id'    => $ntpId,
-                'week_code'         => mb_substr($week, 0, 20),
-                'completion_pct'    => $pct,
-                'identified_issues' => $identifiedIssues,
-                'progress_updates'  => $cell($row, $updatesIdx),
-                'checklist'         => $checklist ?: null,
-                'issues'            => $issues ?: null,
-                'submitted_date'    => $submitted,
+                'project_ntp_id'    => $report['ntp_no'] !== null ? ($ntpByNo[strtolower($report['ntp_no'])] ?? null) : null,
+                'week_code'         => $report['week_code'],
+                'completion_pct'    => $report['completion_pct'],
+                'identified_issues' => $report['identified_issues'],
+                'progress_updates'  => $report['progress_updates'],
+                'checklist'         => $report['checklist'] ?: null,
+                'issues'            => $report['issues'] ?: null,
+                'submitted_date'    => $report['submitted_date'],
                 'created_by'        => auth()->id(),
             ]);
 
@@ -1047,86 +948,6 @@ class ProjectHubController extends Controller
         AuditTrail::log("Imported {$imported} weekly report(s) from spreadsheet", $project, ['module' => 'PSR', 'type' => 'upload']);
 
         return back()->with('success', "Imported {$imported} weekly report(s).");
-    }
-
-    /**
-     * Read an uploaded .csv or .xlsx into plain rows (first row is the header).
-     * Dates in a workbook come back as formatted text so the same parsing applies
-     * to both formats.
-     *
-     * @return array<int, array<int, string|null>>
-     */
-    private function readSpreadsheetRows(\Illuminate\Http\UploadedFile $file): array
-    {
-        $path = $file->getRealPath();
-
-        $isXlsx = strtolower((string) $file->getClientOriginalExtension()) === 'xlsx'
-            || $file->getMimeType() === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-
-        if ($isXlsx) {
-            $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
-            $reader->setReadDataOnly(false);   // number formats are needed to render dates
-            $spreadsheet = $reader->load($path);
-            $rows = $spreadsheet->getActiveSheet()->toArray(null, true, true, false);
-            $spreadsheet->disconnectWorksheets();
-
-            // Drop trailing rows the template pre-formatted but nobody filled in.
-            return array_values(array_filter(
-                $rows,
-                fn ($row) => collect($row)->contains(fn ($v) => trim((string) $v) !== '')
-            ));
-        }
-
-        $handle = fopen($path, 'r');
-        if ($handle === false) {
-            throw new \RuntimeException("Could not open {$path}.");
-        }
-
-        $rows = [];
-        while (($row = fgetcsv($handle)) !== false) {
-            $rows[] = $row;
-        }
-        fclose($handle);
-
-        return $rows;
-    }
-
-    /**
-     * Map a checklist cell onto the symbols the form uses. Spreadsheets mangle
-     * √/✕/Ø often enough that plain-word aliases are accepted too.
-     */
-    private function normalizeChecklistStatus(?string $raw): ?string
-    {
-        if ($raw === null) {
-            return null;
-        }
-
-        $value = trim($raw);
-
-        // Match the symbols before any case folding: lowercasing has to be
-        // multibyte-aware to map Ø onto ø, and the symbols need no folding at all.
-        if (in_array($value, (array) config('psr.statuses'), true)) {
-            return $value;
-        }
-
-        return match (mb_strtolower($value)) {
-            'v', 'y', 'yes', 'ok', 'done', 'complete', 'completed', 'pass'    => '√',
-            'x', 'n', 'no', 'not done', 'incomplete', 'not completed', 'fail' => '✕',
-            'ø', 'o', 'n/a', 'na', 'not applicable'                           => 'Ø',
-            default                                                           => null,
-        };
-    }
-
-    private function findCsvColumn(array $columns, array $candidates): ?int
-    {
-        foreach ($candidates as $candidate) {
-            $index = array_search($candidate, $columns, true);
-            if ($index !== false) {
-                return $index;
-            }
-        }
-
-        return null;
     }
 
     public function destroyPsr(Project $project, ProjectWeeklyReport $psr): RedirectResponse
