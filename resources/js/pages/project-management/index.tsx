@@ -637,8 +637,10 @@ export default function ProjectsIndex({
                                         <div>{proj.deadline ?? '—'}</div>
                                         {proj.days_remaining !== null && (
                                             <div style={{ fontSize: '10.5px', marginTop: '3px', fontWeight: 600, color: proj.days_remaining < 0 ? '#dc2626' : proj.days_remaining === 0 ? '#d97706' : '#94a3b8' }}>
+                                                {/* Past the target completion is "Delayed"; only a target
+                                                    falling on today itself is "Due today". */}
                                                 {proj.days_remaining < 0
-                                                    ? `${Math.abs(proj.days_remaining)} day${Math.abs(proj.days_remaining) === 1 ? '' : 's'} overdue`
+                                                    ? 'Delayed'
                                                     : proj.days_remaining === 0
                                                         ? 'Due today'
                                                         : `${proj.days_remaining} day${proj.days_remaining === 1 ? '' : 's'} left`}
