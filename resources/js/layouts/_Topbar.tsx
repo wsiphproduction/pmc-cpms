@@ -1,5 +1,5 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 
 interface NotificationRow {
     id: number;
@@ -248,9 +248,20 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
 
                 {/* Desktop nav */}
                 {!navCollapsed && (
-                    <nav ref={navRef} style={{ display: 'flex', alignItems: 'center', gap: '2px', flex: 1, minWidth: 0 }}>
-                        {navItems.map(item => (
-                            <div key={item.label} style={{ position: 'relative' }}>
+                    <nav ref={navRef} style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        flex: 1, minWidth: 0,
+                        // Sits centred in the space left between the brand and the account controls.
+                        justifyContent: 'center',
+                    }}>
+                        {navItems.map((item, i) => (
+                            <Fragment key={item.label}>
+                            {i > 0 && (
+                                <span aria-hidden="true" style={{
+                                    width: '1px', height: '18px', background: '#e5e7eb', flexShrink: 0,
+                                }} />
+                            )}
+                            <div style={{ position: 'relative' }}>
                                 {item.children ? (
                                     <>
                                         <button
@@ -333,6 +344,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                                     </Link>
                                 )}
                             </div>
+                            </Fragment>
                         ))}
                     </nav>
                 )}
@@ -497,8 +509,8 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     maxHeight: 'calc(100vh - 56px)',
                     overflowY: 'auto',
                 }}>
-                    {navItems.map(item => (
-                        <div key={item.label}>
+                    {navItems.map((item, i) => (
+                        <div key={item.label} style={i > 0 ? { borderTop: '1px solid #f3f4f6', paddingTop: '4px', marginTop: '4px' } : undefined}>
                             {item.children ? (
                                 <>
                                     <div style={{

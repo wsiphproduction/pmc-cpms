@@ -1003,7 +1003,7 @@ class ProjectController extends Controller
             'budget_total' => (float) $project->budget_total,
             'budget_paid' => (float) $project->budget_paid,
             'deadline' => optional($project->deadline)->format('M d, Y') ?? '—',
-            'days_remaining' => $project->deadline ? $project->daysRemaining() : null,
+            'days_remaining' => $project->deadline ? $project->daysUntilDeadline() : null,
             'can' => [
                 'update' => auth()->user()->can('update', $project),
                 'delete' => auth()->user()->can('delete', $project),

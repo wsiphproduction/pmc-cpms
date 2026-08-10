@@ -240,9 +240,18 @@ class Project extends Model
 
     public function daysRemaining(): int
     {
+        return max(0, $this->daysUntilDeadline());
+    }
+
+    /**
+     * Signed counterpart to daysRemaining(): negative once the deadline has
+     * passed, so callers can tell "due today" apart from "already delayed".
+     */
+    public function daysUntilDeadline(): int
+    {
         $deadline = $this->deadline ? Carbon::parse($this->deadline) : now();
 
-        return max(0, now()->startOfDay()->diffInDays($deadline->startOfDay(), false));
+        return now()->startOfDay()->diffInDays($deadline->startOfDay(), false);
     }
 
     /**
