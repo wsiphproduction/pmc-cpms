@@ -1,5 +1,5 @@
 import { Head, router, usePage } from '@inertiajs/react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -30,6 +30,17 @@ interface Supplier {
     created_at?: string;
     /** PMD user who added the supplier; null for legacy rows. */
     added_by?: string | null;
+}
+
+/** A supplier-search hit: any row on file, listed or dormant. */
+interface SupplierMatch {
+    id: number;
+    company: string;
+    /** Already on PMD's list, so it cannot be added again. */
+    listed: boolean;
+    email?: string | null;
+    telephone_no?: string | null;
+    mobile_no?: string | null;
 }
 
 interface Props {
@@ -592,32 +603,54 @@ function TabTable({
 }
 
 // ── Supplier Modal (add / edit) ─────────────────────────────────────────────
-function SupplierModal({ supplier, suppliers, onClose }: { supplier: Supplier | null; suppliers: Supplier[]; onClose: () => void }) {
+function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClose: () => void }) {
     const isEdit = !!supplier;
     const [company,  setCompany]  = useState(supplier?.company ?? '');
-    const [accredited, setAccredited] = useState(supplier?.accredited ?? true);
     const [email,    setEmail]    = useState(supplier?.email ?? '');
     const [tel,      setTel]      = useState(supplier?.telephone_no ?? '');
     const [mobile,   setMobile]   = useState(supplier?.mobile_no ?? '');
     const [submitting, setSubmitting] = useState(false);
     const [showSuggest, setShowSuggest] = useState(false);
+    const [matches, setMatches] = useState<SupplierMatch[]>([]);
+    const [searching, setSearching] = useState(false);
 
     const field: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#0f172a' };
     const lbl: React.CSSProperties = { fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' };
 
-    // Suggestions: accredited suppliers whose company matches what's being typed
-    // (excluding the record currently being edited). Prevents duplicates and lets
-    // the user pick an existing accredited supplier.
-    const needle = company.trim().toLowerCase();
-    const suggestions = needle
-        ? suppliers
-            .filter(s => s.accredited !== false && s.id !== supplier?.id && s.company.toLowerCase().includes(needle) && s.company.toLowerCase() !== needle)
-            .slice(0, 6)
-        : [];
+    // Type-ahead across every supplier on file, not just the ones on the list,
+    // so the dormant pool left behind by CSV imports can be found by name and
+    // added back. Fires from the first character typed; debounced, and the
+    // record being edited is filtered out.
+    const needle = company.trim();
 
-    const pickSuggestion = (s: Supplier) => {
+    useEffect(() => {
+        if (needle.length < 1) {
+            setMatches([]);
+            return;
+        }
+
+        let cancelled = false;
+        setSearching(true);
+        const timer = setTimeout(() => {
+            fetch(`${route('master.suppliers.search')}?q=${encodeURIComponent(needle)}`, {
+                headers: { Accept: 'application/json' },
+                credentials: 'same-origin',
+            })
+                .then(res => (res.ok ? res.json() : []))
+                .then((rows: SupplierMatch[]) => { if (!cancelled) setMatches(rows); })
+                .catch(() => { if (!cancelled) setMatches([]); })
+                .finally(() => { if (!cancelled) setSearching(false); });
+        }, 250);
+
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [needle]);
+
+    const suggestions = matches.filter(
+        m => m.id !== supplier?.id && m.company.toLowerCase() !== needle.toLowerCase(),
+    );
+
+    const pickSuggestion = (s: SupplierMatch) => {
         setCompany(s.company);
-        setAccredited(s.accredited ?? true);
         setEmail(s.email ?? '');
         setTel(s.telephone_no ?? '');
         setMobile(s.mobile_no ?? '');
@@ -627,7 +660,7 @@ function SupplierModal({ supplier, suppliers, onClose }: { supplier: Supplier | 
     const handleSubmit = () => {
         if (!company.trim()) return;
         setSubmitting(true);
-        const data = { company: company.trim(), accredited, email: email.trim() || null, telephone_no: tel.trim() || null, mobile_no: mobile.trim() || null };
+        const data = { company: company.trim(), email: email.trim() || null, telephone_no: tel.trim() || null, mobile_no: mobile.trim() || null };
         if (isEdit) {
             router.put(route('master.suppliers.update', supplier!.id), data, { onFinish: () => { setSubmitting(false); onClose(); } });
         } else {
@@ -663,27 +696,32 @@ function SupplierModal({ supplier, suppliers, onClose }: { supplier: Supplier | 
                             style={field}
                         />
                         {showSuggest && suggestions.length > 0 && (
-                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.10)', zIndex: 10, overflow: 'hidden' }}>
+                            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 10px 30px rgba(0,0,0,0.10)', zIndex: 10, overflow: 'hidden', maxHeight: '260px', overflowY: 'auto' }}>
                                 {suggestions.map(s => (
                                     <button
                                         key={s.id}
                                         type="button"
-                                        onMouseDown={e => { e.preventDefault(); pickSuggestion(s); }}
-                                        style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', background: '#fff', cursor: 'pointer', fontSize: '13px', color: '#0f172a' }}
-                                        onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
+                                        disabled={s.listed}
+                                        title={s.listed ? 'Already on the supplier list' : 'On file — pick to add it to the list'}
+                                        onMouseDown={e => { e.preventDefault(); if (!s.listed) pickSuggestion(s); }}
+                                        style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', textAlign: 'left', padding: '9px 12px', border: 'none', background: '#fff', cursor: s.listed ? 'not-allowed' : 'pointer', fontSize: '13px', color: s.listed ? '#94a3b8' : '#0f172a' }}
+                                        onMouseEnter={e => { if (!s.listed) e.currentTarget.style.background = '#f8fafc'; }}
                                         onMouseLeave={e => (e.currentTarget.style.background = '#fff')}>
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                        {s.listed
+                                            ? <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                            : <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>}
                                         <span style={{ fontWeight: 600 }}>{s.company}</span>
-                                        <span style={{ marginLeft: 'auto', fontSize: '10.5px', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Accredited</span>
+                                        <span style={{ marginLeft: 'auto', fontSize: '10.5px', fontWeight: 700, color: s.listed ? '#94a3b8' : '#2563eb', textTransform: 'uppercase', letterSpacing: '0.4px', whiteSpace: 'nowrap' }}>
+                                            {s.listed ? 'On list' : 'On file'}
+                                        </span>
                                     </button>
                                 ))}
                             </div>
                         )}
+                        {searching && needle.length >= 1 && suggestions.length === 0 && (
+                            <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '5px' }}>Searching suppliers on file…</div>
+                        )}
                     </div>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '9px', cursor: 'pointer', userSelect: 'none' }}>
-                        <ToggleSwitch active={accredited} onClick={() => setAccredited(v => !v)} />
-                        <span style={{ fontSize: '12.5px', fontWeight: 600, color: '#374151' }}>Accredited supplier</span>
-                    </label>
                     <div>
                         <label style={lbl}>Email</label>
                         <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" style={field} />
@@ -738,18 +776,19 @@ function SupplierTable({ suppliers, importedCount = 0, onAdd, onEdit, onToggle }
         });
     };
 
-    const headers = ['#', 'Company', 'Accredited', 'Email', 'Telephone', 'Mobile', 'Added By', 'Created At', 'Actions'];
+    const headers = ['#', 'Company', 'Email', 'Telephone', 'Mobile', 'Added By', 'Created At', 'Actions'];
 
     return (
         <div>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: '13px', color: '#64748b' }}>
                     <strong style={{ color: '#0f172a' }}>{suppliers.length}</strong> {suppliers.length === 1 ? 'entry' : 'entries'}
-                    {/* Imported rows still feed the RFQ supplier dropdown; they
-                        just aren't part of the list PMD maintains by hand. */}
+                    {/* Everything outside this list is dormant: hidden here and
+                        absent from the RFQ dropdown until someone adds it by
+                        name, which promotes the existing row. */}
                     {importedCount > 0 && (
                         <span style={{ marginLeft: '8px', fontSize: '12px', color: '#94a3b8' }}>
-                            · {importedCount} imported supplier{importedCount === 1 ? '' : 's'} not shown
+                            · {importedCount} supplier{importedCount === 1 ? '' : 's'} on file but not in use — add one by name to list it
                         </span>
                     )}
                 </div>
@@ -791,11 +830,6 @@ function SupplierTable({ suppliers, importedCount = 0, onAdd, onEdit, onToggle }
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                                 <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{(safePage - 1) * PER_PAGE + idx + 1}</td>
                                 <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a' }}>{s.company}</td>
-                                <td style={{ padding: '12px 20px' }}>
-                                    {s.accredited !== false
-                                        ? <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: '999px', background: '#dcfce7', color: '#166534', fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>Accredited</span>
-                                        : <span style={{ display: 'inline-block', padding: '2px 9px', borderRadius: '999px', background: '#f1f5f9', color: '#94a3b8', fontSize: '10.5px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.4px' }}>—</span>}
-                                </td>
                                 <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px' }}>{s.email || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.telephone_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
                                 <td style={{ padding: '12px 20px', color: '#64748b', fontSize: '12.5px' }}>{s.mobile_no || <span style={{ color: '#e2e8f0' }}>—</span>}</td>
@@ -1024,7 +1058,7 @@ export default function MasterData({
             )}
 
             {showSupplierModal && (
-                <SupplierModal supplier={editSupplier} suppliers={suppliers} onClose={() => setShowSupplierModal(false)} />
+                <SupplierModal supplier={editSupplier} onClose={() => setShowSupplierModal(false)} />
             )}
 
             {showCostCodeModal && (

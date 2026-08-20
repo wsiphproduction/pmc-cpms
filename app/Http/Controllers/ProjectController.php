@@ -37,7 +37,7 @@ class ProjectController extends Controller
         // Sub-projects live under their parent's operations hub and are never
         // listed here — the management list only shows top-level projects.
         // Children are eager-loaded for the completion roll-up.
-        $query = Project::with(['manager', 'creator', 'children:id,parent_id,completion_percent'])
+        $query = Project::with(['manager', 'creator', 'children:id,parent_id,project_no,title,completion_percent,status_key'])
             ->whereNull('parent_id')->latest();
 
         $user = $request->user();
@@ -223,8 +223,8 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
-        // Department users (requesters) get a read-only summary with the RFQ list
-        // only — the full operations hub is hidden from them.
+        // Department users (requesters) get a read-only summary with the RFQ and
+        // NTP lists only — the rest of the operations hub is hidden from them.
         $deptView = auth()->user()->hasRole('requestor');
 
         return Inertia::render('project-management/show', [
@@ -232,7 +232,7 @@ class ProjectController extends Controller
             'hub_counts'     => $this->hubCounts($project),
             'is_dept_view'   => $deptView,
             'active_section' => $deptView ? 'rfq' : null,
-            'hub_data'       => $deptView ? $this->hubSectionData($project, 'rfq') : [],
+            'hub_data'       => $deptView ? $this->deptHubData($project) : [],
         ]);
     }
 
@@ -415,17 +415,31 @@ class ProjectController extends Controller
 
         $project->load(['manager', 'creator', 'statusLogs.user', 'completion', 'parent', 'children']);
 
-        // Department users only ever see the read-only RFQ list, never the rest
-        // of the hub — force the section regardless of which URL they hit.
+        // Department users only ever see the read-only RFQ and NTP lists, never
+        // the rest of the hub — force that regardless of which URL they hit.
         $deptView = auth()->user()->hasRole('requestor');
 
         return Inertia::render('project-management/show', [
             'project'        => $this->projectDetailData($project),
             'active_section' => $deptView ? 'rfq' : $section,
-            'hub_data'       => $this->hubSectionData($project, $deptView ? 'rfq' : $section),
+            'hub_data'       => $deptView ? $this->deptHubData($project) : $this->hubSectionData($project, $section),
             'hub_counts'     => $this->hubCounts($project),
             'is_dept_view'   => $deptView,
         ]);
+    }
+
+    /**
+     * The read-only slice of the hub a department user sees on a project: the
+     * RFQ list plus the NTPs raised on it. NTP rows already carry the
+     * sub-project each issued NTP spawned, which is how the requester follows a
+     * notice through to the project it created.
+     */
+    private function deptHubData(Project $project): array
+    {
+        return [
+            ...$this->hubSectionData($project, 'rfq'),
+            ...$this->hubSectionData($project, 'ntp'),
+        ];
     }
 
     private function hubCounts(Project $project): array
@@ -481,8 +495,10 @@ class ProjectController extends Controller
                     fn ($p) => $p->rfqs()->with('items')->get(),
                     fn ($rfq, $sub) => $this->rfqRow($rfq, $sub ?? $project, $sub, $sub ? collect() : ($rfqAudits[$rfq->id] ?? collect())),
                 ),
-                // Only accredited (and active) suppliers are selectable when dispatching RFQs.
-                'suppliers' => Supplier::where('is_active', true)->where('accredited', true)->orderBy('company')->get(['company', 'email'])
+                // Only suppliers PMD put on its Master Data list are selectable
+                // when dispatching RFQs, and of those only the accredited and
+                // active ones. Bulk-imported rows stay out until PMD adds them.
+                'suppliers' => Supplier::pmd()->where('is_active', true)->where('accredited', true)->orderBy('company')->get(['company', 'email'])
                     ->map(fn ($s) => ['name' => $s->company, 'email' => $s->email ?? ''])
                     ->values(),
             ],
@@ -1004,6 +1020,14 @@ class ProjectController extends Controller
             'budget_paid' => (float) $project->budget_paid,
             'deadline' => optional($project->deadline)->format('M d, Y') ?? '—',
             'days_remaining' => $project->deadline ? $project->daysUntilDeadline() : null,
+            // Sub-projects are never rows of their own in this list; they are
+            // listed under their parent's number, and only when asked for.
+            'sub_projects' => $project->children->map(fn (Project $child) => [
+                'id'         => $child->id,
+                'project_no' => $child->project_no,
+                'title'      => $child->title,
+                'status'     => self::STATUS_LABELS[$child->status_key] ?? $child->status_key,
+            ])->values(),
             'can' => [
                 'update' => auth()->user()->can('update', $project),
                 'delete' => auth()->user()->can('delete', $project),

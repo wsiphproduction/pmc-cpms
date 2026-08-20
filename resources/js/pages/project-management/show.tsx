@@ -451,9 +451,22 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
     const fmt = (n: number) =>
         n >= 1_000_000 ? `PhP ${(n / 1_000_000).toFixed(1)}M` : `PhP ${(n / 1_000).toFixed(0)}K`;
 
+    // Project Cost is a figure people reconcile against, so it reads in full
+    // rather than the abbreviated form the utilization donut uses.
+    const pesoFull = (n: number) =>
+        `PhP ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
     const sectionLabel = (text: string) => (
         <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '6px' }}>{text}</div>
     );
+
+    // A sub-project looks identical to a top-level one at a glance, and mixing
+    // the two up matters (they share a parent's budget and NTP). The indigo
+    // accent below runs through the breadcrumb, the record card border and the
+    // header badge so the distinction is unmissable, matching the parent-link
+    // banner that already uses that palette.
+    const isSub = project.parent !== null;
+    const SUB_ACCENT = '#4338ca';
 
     return (
         <AuthenticatedLayout>
@@ -471,7 +484,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
             {/* Breadcrumb / Top Bar */}
             <div className="print-hide" style={{ background: '#fff', padding: '10px 0', borderBottom: '1px solid #e5e7eb', marginBottom: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
-                    Projects / View / <span style={{ color: '#1e293b', fontWeight: 700 }}>{project.project_no}</span>
+                    Projects / View / {isSub && <span style={{ color: SUB_ACCENT, fontWeight: 700 }}>Sub-Project / </span>}<span style={{ color: '#1e293b', fontWeight: 700 }}>{project.project_no}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '8px' }}>
                     <button
@@ -510,8 +523,21 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 </div>
             )}
 
-            {/* Record Card */}
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', marginBottom: '32px' }}>
+            {/* Record Card — accented all round when this is a sub-project */}
+            <div style={{
+                background: '#fff',
+                border: isSub ? `2px solid ${SUB_ACCENT}` : '1px solid #e5e7eb',
+                borderRadius: '12px',
+                overflow: 'hidden',
+                boxShadow: isSub ? '0 4px 14px -2px rgba(67,56,202,0.28)' : '0 4px 6px -1px rgba(0,0,0,0.05)',
+                marginBottom: '32px',
+            }}>
+                {isSub && (
+                    <div style={{ background: SUB_ACCENT, color: '#fff', padding: '6px 30px', fontSize: '10.5px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '7px' }}>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ flexShrink: 0 }}><path d="M4 4v10a4 4 0 0 0 4 4h12"/><polyline points="16 14 20 18 16 22"/></svg>
+                        Sub-Project
+                    </div>
+                )}
 
                 {/* Header */}
                 <div style={{ padding: '24px 30px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -534,6 +560,17 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                             }}>
                                 {project.project_type}
                             </span>
+                            {isSub && (
+                                <span style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '5px', minHeight: '24px',
+                                    padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 900,
+                                    letterSpacing: '0.4px', textTransform: 'uppercase',
+                                    background: '#eef2ff', color: SUB_ACCENT, border: '1px solid #c7d2fe',
+                                }}>
+                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 4v10a4 4 0 0 0 4 4h12"/><polyline points="16 14 20 18 16 22"/></svg>
+                                    Sub of {project.parent!.project_no}
+                                </span>
+                            )}
                         </div>
                         <div style={{ fontSize: '13px', color: '#64748b' }}>
                             <span style={{ marginRight: '16px' }}>📍 Site: <strong style={{ color: '#374151' }}>{project.site}</strong></span>
@@ -667,6 +704,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '16px 0' }} />
                         <InfoField label="Asset ID">{project.asset_id}</InfoField>
                         <InfoField label="Cost Code">{project.cost_code}</InfoField>
+                        <InfoField label="Project Cost">{pesoFull(project.budget_total)}</InfoField>
                         <hr style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '16px 0' }} />
                         <InfoField label="WR No. & Date">
                             {project.project_request_id ? (
@@ -791,8 +829,12 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 </div>
             )}
 
-            {/* Department users get a read-only RFQ panel; the full operations hub is hidden. */}
-            {is_dept_view ? (
+            {/* Department users get read-only RFQ and NTP panels; the full
+                operations hub is hidden. Both live on the parent — a sub-project
+                has no procurement of its own — so on a sub-project the panels are
+                dropped rather than rendered empty, which would read as "no NTP
+                exists". The banner at the top links back to the parent. */}
+            {is_dept_view ? (isSub ? null : (
                 <div className="print-hide" style={{ marginBottom: '32px' }}>
                     <h5 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
@@ -801,8 +843,18 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', padding: '4px' }}>
                         <RfqHub project={hubProject} rfqs={hub_data.rfqs ?? []} canEdit={false} />
                     </div>
+
+                    {/* NTPs raised on this project. Read-only, but each issued
+                        NTP still links through to the sub-project it created. */}
+                    <h5 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', margin: '28px 0 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4338ca" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        Notices to Proceed
+                    </h5>
+                    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', padding: '4px' }}>
+                        <NtpHub project={hubProject} ntps={hub_data.ntps ?? []} canEdit={false} />
+                    </div>
                 </div>
-            ) : (
+            )) : (
             <div className="print-hide" style={{ marginBottom: '32px' }}>
                 <h5 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>

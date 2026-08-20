@@ -18,7 +18,13 @@ class ProjectPolicy
             return true;
         }
 
-        return $project->projectRequest?->requester_id === $user->id;
+        // A sub-project carries no request of its own — it is spawned from an NTP
+        // on its parent — so ownership resolves against the parent. The requester
+        // who asked for the parent owns everything under it. Nesting is one level
+        // deep by design: sub-projects have no RFQ/NTP sections to spawn from.
+        $owningRequest = $project->projectRequest ?? $project->parent?->projectRequest;
+
+        return $owningRequest?->requester_id === $user->id;
     }
 
     public function create(User $user): bool
