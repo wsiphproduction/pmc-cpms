@@ -249,8 +249,10 @@ export default function ProjectCreate({
     // id is present there, they're an engineer and we pre-select them.
     const { auth } = usePage<SharedData>().props;
     const currentUserIsEngineer = managers.some(m => m.value === String(auth.user.id));
-    const defaultManager = project?.project_manager
-        ?? (currentUserIsEngineer ? String(auth.user.id) : '');
+    // `||` not `??`: a project seeded from a project request arrives with an
+    // empty project_manager, which must still fall through to the default.
+    const defaultManager = (project?.project_manager || '')
+        || (currentUserIsEngineer ? String(auth.user.id) : '');
 
     const { data, setData, processing, errors, setError, clearErrors } = useForm<ProjectFormData>({
         project_request_id: project?.project_request_id ?? '',

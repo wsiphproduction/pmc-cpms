@@ -173,3 +173,68 @@ it('lets an admin edit any project regardless of creator', function () {
         ->get(route('projects.edit', $project))
         ->assertOk();
 });
+
+it('lists sub-projects under their parent rather than as rows of their own', function () {
+    $user = makeApproverUser();
+
+    $parent = Project::create([
+        'project_no'   => 'PRJ-2026-0001',
+        'title'        => 'Warehouse Rehab',
+        'site'         => 'Main Plant',
+        'asset_id'     => 'Asset A',
+        'class_name'   => 'Major',
+        'priority'     => 'P1 - Urgent',
+        'status_key'   => 'PLANNING',
+        'work_force'   => 'In-house Team',
+        'wr_no'        => 'WR-1',
+        'wr_date'      => '2026-05-04',
+        'dept_owner'   => 'Engineering',
+        'cost_code'    => 'CC-001',
+        'category'     => 'Renovation',
+        'service_type' => 'Design-Build',
+        'deadline'     => '2026-06-04',
+        'created_by'   => $user->id,
+    ]);
+
+    $child = Project::create([
+        'parent_id'    => $parent->id,
+        'project_no'   => 'PRJ-2026-0001-A',
+        'title'        => 'Warehouse Rehab — Roofing',
+        'site'         => 'Main Plant',
+        'asset_id'     => 'Asset A',
+        'class_name'   => 'Major',
+        'priority'     => 'P1 - Urgent',
+        'status_key'   => 'ONGOING',
+        'work_force'   => 'In-house Team',
+        'wr_no'        => 'WR-1',
+        'wr_date'      => '2026-05-04',
+        'dept_owner'   => 'Engineering',
+        'cost_code'    => 'CC-001',
+        'category'     => 'Renovation',
+        'service_type' => 'Design-Build',
+        'deadline'     => '2026-06-04',
+        'created_by'   => $user->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('projects.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            // One row — the parent — carrying its child for the toggle to reveal.
+            ->has('projects.data', 1)
+            ->where('projects.data.0.project_no', 'PRJ-2026-0001')
+            ->has('projects.data.0.sub_projects', 1)
+            ->where('projects.data.0.sub_projects.0.id', $child->id)
+            ->where('projects.data.0.sub_projects.0.project_no', 'PRJ-2026-0001-A'));
+});
+
+it('reports no sub-projects for a project without children', function () {
+    $user = makeApproverUser();
+    seedProjectMasterData();
+
+    $this->actingAs($user)->post(route('projects.store'), projectPayload($user))->assertRedirect();
+
+    $this->actingAs($user)
+        ->get(route('projects.index'))
+        ->assertInertia(fn (Assert $page) => $page->has('projects.data.0.sub_projects', 0));
+});

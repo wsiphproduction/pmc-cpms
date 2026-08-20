@@ -553,6 +553,126 @@ describe('suppliers', function () {
                 ->has('suppliers', 0)
                 ->where('importedSupplierCount', 2));
     });
+
+    it('promotes a hidden supplier onto the list instead of rejecting the name', function () {
+        $user = makeMasterDataUser();
+
+        $hidden = \App\Models\Supplier::create([
+            'company'      => 'Dormant Trading Co',
+            'source'       => \App\Models\Supplier::SOURCE_IMPORT,
+            'email'        => 'sales@dormant.test',
+            'telephone_no' => '02-1234',
+        ]);
+
+        $this->actingAs($user)->post(route('master.suppliers.store'), [
+            'company'    => 'Dormant Trading Co',
+            'accredited' => true,
+            'mobile_no'  => '0917-000-1111',
+        ])->assertRedirect()->assertSessionHas('success');
+
+        // Promoted, not duplicated, and the contact details already on file
+        // survive the blank email field on the add form.
+        expect(\App\Models\Supplier::count())->toBe(1);
+
+        $hidden->refresh();
+        expect($hidden->source)->toBe(\App\Models\Supplier::SOURCE_PMD);
+        expect((int) $hidden->created_by)->toBe($user->id);
+        expect($hidden->email)->toBe('sales@dormant.test');
+        expect($hidden->telephone_no)->toBe('02-1234');
+        expect($hidden->mobile_no)->toBe('0917-000-1111');
+
+        $this->actingAs($user)->get(route('master.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('suppliers', 1)
+                ->where('suppliers.0.company', 'Dormant Trading Co')
+                ->where('importedSupplierCount', 0));
+    });
+
+    it('rejects a supplier already on the list', function () {
+        \App\Models\Supplier::create(['company' => 'Listed Co', 'source' => \App\Models\Supplier::SOURCE_PMD]);
+
+        $this->actingAs(makeMasterDataUser())->post(route('master.suppliers.store'), [
+            'company' => 'Listed Co',
+        ])->assertSessionHasErrors('company');
+
+        expect(\App\Models\Supplier::count())->toBe(1);
+    });
+
+    it('finds dormant and listed suppliers by name for the add-form type-ahead', function () {
+        \App\Models\Supplier::create(['company' => 'Acme Dormant Supply', 'source' => \App\Models\Supplier::SOURCE_IMPORT, 'email' => 'hi@acme.test']);
+        \App\Models\Supplier::create(['company' => 'Acme Listed Supply', 'source' => \App\Models\Supplier::SOURCE_PMD]);
+        \App\Models\Supplier::create(['company' => 'Unrelated Traders', 'source' => \App\Models\Supplier::SOURCE_IMPORT]);
+
+        $response = $this->actingAs(makeMasterDataUser())
+            ->getJson(route('master.suppliers.search', ['q' => 'acme']))
+            ->assertOk();
+
+        $rows = collect($response->json())->keyBy('company');
+
+        expect($rows)->toHaveCount(2);
+        expect($rows['Acme Dormant Supply']['listed'])->toBeFalse();
+        expect($rows['Acme Dormant Supply']['email'])->toBe('hi@acme.test');
+        expect($rows['Acme Listed Supply']['listed'])->toBeTrue();
+    });
+
+    it('suggests from the first character typed', function () {
+        \App\Models\Supplier::create(['company' => 'A One Supply', 'source' => \App\Models\Supplier::SOURCE_IMPORT]);
+        \App\Models\Supplier::create(['company' => 'Zenith Foundry', 'source' => \App\Models\Supplier::SOURCE_IMPORT]);
+
+        $response = $this->actingAs(makeMasterDataUser())
+            ->getJson(route('master.suppliers.search', ['q' => 'a']))
+            ->assertOk();
+
+        expect(collect($response->json())->pluck('company')->all())->toBe(['A One Supply']);
+    });
+
+    it('returns nothing for an empty type-ahead query', function () {
+        \App\Models\Supplier::create(['company' => 'A One Supply', 'source' => \App\Models\Supplier::SOURCE_IMPORT]);
+
+        $this->actingAs(makeMasterDataUser())
+            ->getJson(route('master.suppliers.search', ['q' => '  ']))
+            ->assertOk()
+            ->assertExactJson([]);
+    });
+
+    it('keeps a supplier accredited when the add form no longer asks', function () {
+        $this->actingAs(makeMasterDataUser())->post(route('master.suppliers.store'), [
+            'company' => 'No Toggle Co',
+        ])->assertRedirect();
+
+        expect(\App\Models\Supplier::first()->accredited)->toBeTrue();
+    });
+
+    it('offers only listed suppliers in the RFQ dropdown', function () {
+        \App\Models\Supplier::create(['company' => 'Listed Accredited Co', 'source' => \App\Models\Supplier::SOURCE_PMD, 'accredited' => true]);
+        \App\Models\Supplier::create(['company' => 'Hidden Accredited Co', 'source' => \App\Models\Supplier::SOURCE_IMPORT, 'accredited' => true]);
+
+        $user = makeMasterDataUser();
+        $project = \App\Models\Project::create([
+            'project_no'  => 'PRJ-SUP-' . uniqid(),
+            'title'       => 'Supplier Dropdown Project',
+            'site'        => 'Main Plant',
+            'asset_id'    => 'A1',
+            'class_name'  => 'Minor',
+            'priority'    => '1',
+            'status_key'  => 'PLANNING',
+            'work_force'  => 'In-House',
+            'wr_no'       => 'WR-1',
+            'wr_date'     => now(),
+            'dept_owner'  => 'Engineering',
+            'cost_code'   => 'CC-001',
+            'category'    => 'General',
+            'service_type' => 'Repair',
+            'deadline'    => now()->addDays(30),
+            'created_by'  => $user->id,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('projects.hub.rfq', ['project' => $project->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('hub_data.suppliers', 1)
+                ->where('hub_data.suppliers.0.name', 'Listed Accredited Co'));
+    });
 });
 
 // -------------------------------------------------

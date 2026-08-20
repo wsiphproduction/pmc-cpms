@@ -16,6 +16,7 @@ use App\Models\Structure;
 use App\Models\Supplier;
 use App\Models\WorkForce;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class MasterDataController extends Controller
@@ -38,8 +39,9 @@ class MasterDataController extends Controller
             'serviceTypes' => ServiceType::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'workForces'   => WorkForce::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'structures'   => Structure::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
-            // Only PMD's own supplier list is managed here; CSV-imported rows
-            // stay out of the way (they still feed the RFQ supplier dropdown).
+            // Only PMD's own supplier list is managed here. Every other row on
+            // file — bulk CSV imports and the pre-loaded set — stays hidden and
+            // out of the RFQ dropdown until someone adds it to this list.
             'suppliers'    => Supplier::pmd()->with('creator:id,name')->latest()
                 ->get(['id', 'company', 'accredited', 'email', 'telephone_no', 'mobile_no', 'is_active', 'created_by', 'created_at'])
                 ->map(fn (Supplier $s) => [
@@ -199,16 +201,86 @@ class MasterDataController extends Controller
     }
 
     // ── Suppliers ─────────────────────────────────────────────────────────
+
+    /**
+     * Type-ahead for the Add Supplier form.
+     *
+     * Searches every supplier on file, not just PMD's list, so the dormant pool
+     * (bulk CSV rows and the pre-loaded set) can be found by name and added
+     * back. `listed` tells the caller which matches are already on the list and
+     * therefore not addable again. Matching starts from the first character, so
+     * the capped result set is what keeps a broad query cheap. Queried live
+     * rather than shipped with the page because a CSV import can leave
+     * thousands of rows dormant.
+     */
+    public function searchSuppliers(Request $request)
+    {
+        $term = trim((string) $request->query('q', ''));
+
+        if ($term === '') {
+            return response()->json([]);
+        }
+
+        return response()->json(
+            Supplier::where('company', 'like', '%' . $term . '%')
+                ->orderBy('company')
+                ->limit(8)
+                ->get(['id', 'company', 'source', 'email', 'telephone_no', 'mobile_no'])
+                ->map(fn (Supplier $s) => [
+                    'id'           => $s->id,
+                    'company'      => $s->company,
+                    'listed'       => $s->source === Supplier::SOURCE_PMD,
+                    'email'        => $s->email,
+                    'telephone_no' => $s->telephone_no,
+                    'mobile_no'    => $s->mobile_no,
+                ])
+        );
+    }
+
     public function storeSupplier(Request $request)
     {
+        // No `unique` rule here: most suppliers on file sit outside PMD's list
+        // (bulk CSV rows and the pre-loaded set), and rejecting a name the user
+        // cannot even see would be a dead end. The lookup below decides whether
+        // this is a brand-new supplier or one to promote into the list.
         $data = $request->validate([
-            'company'      => 'required|string|max:191|unique:suppliers,company',
+            'company'      => 'required|string|max:191',
             'accredited'   => 'nullable|boolean',
             'email'        => 'nullable|email|max:191',
             'telephone_no' => 'nullable|string|max:100',
             'mobile_no'    => 'nullable|string|max:100',
         ]);
-        $data['accredited'] = $request->boolean('accredited');
+        // The Add form no longer asks about accreditation — being on PMD's list
+        // is what makes a supplier usable — so an absent value means true.
+        $data['accredited'] = $request->boolean('accredited', true);
+
+        $existing = Supplier::where('company', $data['company'])->first();
+
+        if ($existing) {
+            if ($existing->source === Supplier::SOURCE_PMD) {
+                throw ValidationException::withMessages([
+                    'company' => 'This supplier is already on the list.',
+                ]);
+            }
+
+            // Promote the hidden row rather than duplicating it. Blank contact
+            // fields mean "nothing typed", not "erase" — the add form starts
+            // empty, so whatever the row already holds is kept.
+            $existing->update([
+                'accredited' => $data['accredited'],
+                ...array_filter([
+                    'email'        => $data['email'] ?? null,
+                    'telephone_no' => $data['telephone_no'] ?? null,
+                    'mobile_no'    => $data['mobile_no'] ?? null,
+                ], fn ($value) => filled($value)),
+                'source'     => Supplier::SOURCE_PMD,
+                'is_active'  => true,
+                'created_by' => auth()->id(),
+            ]);
+
+            return redirect()->back()->with('success', 'Supplier added from the existing supplier pool.');
+        }
+
         $data['source']     = Supplier::SOURCE_PMD;
         $data['created_by'] = auth()->id();
 
@@ -226,7 +298,7 @@ class MasterDataController extends Controller
             'telephone_no' => 'nullable|string|max:100',
             'mobile_no'    => 'nullable|string|max:100',
         ]);
-        $data['accredited'] = $request->boolean('accredited');
+        $data['accredited'] = $request->boolean('accredited', true);
 
         $supplier->update($data);
 

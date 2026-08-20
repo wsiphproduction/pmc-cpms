@@ -215,6 +215,7 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('master/structures/{structure}', [MasterDataController::class, 'destroyStructure'])->name('master.structures.destroy');
 
         // Suppliers
+        Route::get('master/suppliers/search',        [MasterDataController::class, 'searchSuppliers'])->name('master.suppliers.search');
         Route::post('master/suppliers/import',       [MasterDataController::class, 'importSuppliers'])->name('master.suppliers.import');
         Route::post('master/suppliers',              [MasterDataController::class, 'storeSupplier'])->name('master.suppliers.store');
         Route::put('master/suppliers/{supplier}',    [MasterDataController::class, 'updateSupplier'])->name('master.suppliers.update');

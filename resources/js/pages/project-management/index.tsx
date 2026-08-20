@@ -16,6 +16,8 @@ interface Project {
     budget_paid: number;
     deadline: string | null;
     days_remaining: number | null;
+    /** Children of this project; listed under its number, never as own rows. */
+    sub_projects: { id: number; project_no: string; title: string; status: string }[];
     can: {
         update: boolean;
         delete: boolean;
@@ -454,6 +456,11 @@ export default function ProjectsIndex({
 }: Props) {
     const [search,         setSearch]         = useState(filters.search ?? '');
     const [showAdvFilter,  setShowAdvFilter]   = useState(false);
+    // Display-only: sub-projects ship with their parent row, so revealing them
+    // costs nothing and needs no round trip.
+    const [showSubs,       setShowSubs]        = useState(false);
+
+    const subCount = projects.data.reduce((n, p) => n + p.sub_projects.length, 0);
 
     // Keep whatever is already applied when one control changes, so the quick
     // status filter composes with the search box and the advanced filters.
@@ -551,6 +558,18 @@ export default function ProjectsIndex({
                     </div>
 
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <label
+                            title={subCount > 0 ? 'List sub-project numbers under their parent' : 'None of the projects on this page have sub-projects'}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 12px', borderRadius: '7px', border: `1px solid ${showSubs ? '#2563eb' : '#e5e7eb'}`, background: showSubs ? '#eff6ff' : '#fff', fontSize: '12px', fontWeight: 500, color: showSubs ? '#2563eb' : '#374151', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                            <input
+                                type="checkbox"
+                                checked={showSubs}
+                                onChange={e => setShowSubs(e.target.checked)}
+                                style={{ margin: 0, accentColor: '#2563eb', cursor: 'pointer' }}
+                            />
+                            Show sub-projects
+                            <span style={{ padding: '1px 6px', borderRadius: '999px', background: showSubs ? 'rgba(37,99,235,0.12)' : '#f1f5f9', color: showSubs ? '#2563eb' : '#94a3b8', fontSize: '11px', fontWeight: 700 }}>{subCount}</span>
+                        </label>
                         {hasFilters && (
                             <button onClick={clearFilters} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 12px', borderRadius: '7px', border: '1px solid #fca5a5', background: '#fff7f7', fontSize: '12px', fontWeight: 500, color: '#dc2626', cursor: 'pointer' }}>
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -616,6 +635,22 @@ export default function ProjectsIndex({
                                         >
                                             {proj.project_no}
                                         </Link>
+                                        {showSubs && proj.sub_projects.length > 0 && (
+                                            <div style={{ marginTop: '6px', paddingLeft: '9px', borderLeft: '2px solid #e5e7eb', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                {proj.sub_projects.map(sub => (
+                                                    <Link
+                                                        key={sub.id}
+                                                        href={route('projects.show', sub.id)}
+                                                        title={`${sub.title} · ${sub.status}`}
+                                                        style={{ color: '#64748b', textDecoration: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}
+                                                        onMouseEnter={e => { e.currentTarget.style.textDecoration = 'underline'; e.currentTarget.style.color = '#2563eb'; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; e.currentTarget.style.color = '#64748b'; }}
+                                                    >
+                                                        ↳ {sub.project_no}
+                                                    </Link>
+                                                ))}
+                                            </div>
+                                        )}
                                     </td>
                                     <td style={{ padding: '12px 16px', maxWidth: '220px' }}>
                                         <div style={{ fontWeight: 700, color: '#0f172a', fontSize: '12.5px' }}>{proj.title}</div>
