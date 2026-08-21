@@ -194,7 +194,7 @@ function RetentionFields({ checked, onChange, pct, amount, disabled = false }: {
             {checked && (
                 <div style={{ display: 'flex', gap: '10px', marginTop: '9px', flexWrap: 'wrap' }}>
                     {box('Retention Held', retention, '#b45309')}
-                    {box('Actual Payment', net, '#15803d')}
+                    {box('Billed Amount (Actual Payment)', net, '#15803d')}
                 </div>
             )}
             {checked && (
@@ -375,7 +375,7 @@ function NewBillingModal({ project, ntps, defaultNtpId = null, ntpLocked = false
 
                     {/* Billed Amount ↔ Progress % two-way */}
                     <tr style={rowStyle}>
-                        <td style={labelCell}>Billed Amount</td>
+                        <td style={labelCell}>{applyRetention ? 'Gross Amount' : 'Billed Amount'}</td>
                         <td style={valCell}>
                             <div style={{ display: 'flex', gap: '0', marginBottom: '6px' }}>
                                 <span style={{ padding: '6px 10px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px 0 0 6px', fontSize: '12.5px', color: '#475569' }}>PhP</span>
@@ -569,22 +569,6 @@ function EditBillingModal({ project, billing, retentionPct = 0, onClose }: { pro
             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', borderTop: 'none', marginBottom: '20px', fontSize: '12.5px' }}>
                 <tbody>
 
-                    {billing.retention_pct != null && (
-                        <tr style={rowStyle}>
-                            <td style={labelCell}>Retention ({billing.retention_pct}%)</td>
-                            <td style={valCell}>
-                                <div style={{ fontSize: '13px' }}>
-                                    Held: <strong style={{ color: '#b45309' }}>{money(billing.retention_amount)}</strong>
-                                    <span style={{ margin: '0 8px', color: '#cbd5e1' }}>|</span>
-                                    Actual payment: <strong style={{ color: '#15803d' }}>{money(billing.net_amount)}</strong>
-                                </div>
-                                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
-                                    Retention is released as a final statement once the project is completed.
-                                </div>
-                            </td>
-                        </tr>
-                    )}
-
                     {/* NTP — read-only */}
                     <tr style={rowStyle}>
                         <td style={labelCell}>Notice to Proceed</td>
@@ -648,7 +632,7 @@ function EditBillingModal({ project, billing, retentionPct = 0, onClose }: { pro
 
                     {/* Billed Amount ↔ Progress % two-way */}
                     <tr style={rowStyle}>
-                        <td style={labelCell}>Billed Amount</td>
+                        <td style={labelCell}>{applyRetention ? 'Gross Amount' : 'Billed Amount'}</td>
                         <td style={valCell}>
                             <div style={{ display: 'flex', gap: '0', marginBottom: '6px' }}>
                                 <span style={{ padding: '6px 10px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px 0 0 6px', fontSize: '12.5px', color: '#475569' }}>PhP</span>
@@ -828,7 +812,11 @@ function ViewBillingModal({ billing, onClose, onEdit, canEdit = true }: { billin
                         ['Billing Statement No.', billing.stmt_no],
                         ['Period From',           billing.period_from],
                         ['Period To',             billing.period_to],
-                        ['Billed Amount',         `PhP ${billing.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+                        ...(billing.retention_pct != null ? [
+                            ['Gross Amount', `PhP ${billing.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+                            [`Less Retention (${billing.retention_pct}%)`, `PhP ${billing.retention_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
+                        ] : []),
+                        ['Billed Amount',         `PhP ${(billing.retention_pct != null ? billing.net_amount : billing.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}`],
                         ['Percent of Project Cost',  billing.progress_pct != null ? `${billing.progress_pct}%` : '—'],
                         ['Summary of Work Done',  billing.summary ?? '—'],
                         ['Remarks',               billing.remarks ?? '—'],
@@ -1204,7 +1192,16 @@ export default function RfpHub({ project, billings, ntps, defaultNtpId = null, n
                         ? <span style={{ fontSize: '12px', fontWeight: 600, color: '#1e40af' }}>{b.ntp_contractor}</span>
                         : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
                     b.billing_type,
-                    <strong>PhP {b.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
+                    b.retention_pct != null ? (
+                        <div>
+                            <strong>PhP {b.net_amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+                            <div style={{ fontSize: '10.5px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                                gross {b.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })} · less {b.retention_pct}% retention
+                            </div>
+                        </div>
+                    ) : (
+                        <strong>PhP {b.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+                    ),
                     b.progress_pct != null ? `${b.progress_pct}%` : '—',
                     canManageStatus && !b.sub_project_id ? (
                         <button type="button" title="Click to change status" onClick={() => setStatusTarget(b)}
