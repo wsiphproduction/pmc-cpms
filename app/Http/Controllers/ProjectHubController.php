@@ -17,11 +17,13 @@ use App\Models\ProjectRfq;
 use App\Models\ProjectVariationOrder;
 use App\Models\ProjectTask;
 use App\Models\ProjectWeeklyReport;
+use App\Models\Setting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Support\PsrTemplateWriter;
 use App\Support\WeeklyReportSheet;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -394,6 +396,10 @@ class ProjectHubController extends Controller
             'created_by'        => auth()->id(),
         ]);
 
+        // A variation only moves the project cost once approved, but recompute
+        // anyway so the figure is never stale relative to the list.
+        $project->refreshBudgetTotal();
+
         AuditTrail::log("Variation Order {$voNo} submitted: {$data['title']}", $project, ['module' => 'VOF', 'type' => 'create']);
 
         return back()->with('success', "Variation Order {$voNo} submitted.");
@@ -453,6 +459,8 @@ class ProjectHubController extends Controller
             $vof->update(['attachment' => $path]);
         }
 
+        $project->refreshBudgetTotal();
+
         AuditTrail::log("Variation Order {$vof->vo_no} updated", $project, ['module' => 'VOF', 'type' => 'update']);
 
         return back()->with('success', 'Variation order updated.');
@@ -471,6 +479,8 @@ class ProjectHubController extends Controller
             'approved_date' => $data['status'] === 'pending' ? null : ($vof->approved_date ?? now()->toDateString()),
         ]);
 
+        $project->refreshBudgetTotal();
+
         AuditTrail::log("Variation Order {$vof->vo_no} status changed to {$data['status']}", $project, ['module' => 'VOF', 'type' => 'update']);
 
         return back()->with('success', 'Variation order status updated.');
@@ -482,6 +492,8 @@ class ProjectHubController extends Controller
 
         AuditTrail::log("Variation Order {$vof->vo_no} deleted: {$vof->title}", $project, ['module' => 'VOF', 'type' => 'delete']);
         $vof->delete();
+
+        $project->refreshBudgetTotal();
 
         return back()->with('success', 'Variation order deleted.');
     }
@@ -577,10 +589,16 @@ class ProjectHubController extends Controller
             'attachments'    => ['nullable', 'array'],
             'attachments.*'  => ['string'],
             'recommendation' => ['nullable', 'string', 'max:255'],
+            'apply_retention' => ['nullable', 'boolean'],
             'file'           => ['nullable', 'file', 'max:20480'],
         ]);
 
         $stmtNo = $this->nextStmtNo();
+
+        // Snapshot the rate onto the billing: changing the setting later must
+        // not restate what has already been billed.
+        $retentionPct = $request->boolean('apply_retention') ? $this->retentionPct() : null;
+        $retention    = ProjectBilling::splitRetention((float) $data['amount'], $retentionPct);
 
         $filePath = null;
         $filename = null;
@@ -596,6 +614,8 @@ class ProjectHubController extends Controller
             'period_from'    => ($data['period_from']  ?? '') ?: null,
             'period_to'      => ($data['period_to']    ?? '') ?: null,
             'amount'         => $data['amount'],
+            'retention_pct'    => $retentionPct,
+            'retention_amount' => $retention,
             'progress_pct'   => ($data['progress_pct'] ?? '') !== '' ? $data['progress_pct'] : null,
             'summary'        => ($data['summary']      ?? '') ?: null,
             'remarks'        => ($data['remarks']      ?? '') ?: null,
@@ -630,8 +650,15 @@ class ProjectHubController extends Controller
             'attachments'  => ['nullable', 'array'],
             'attachments.*'=> ['string'],
             'recommendation' => ['nullable', 'string', 'max:255'],
+            'apply_retention' => ['nullable', 'boolean'],
             'file'         => ['nullable', 'file', 'max:20480', 'mimes:pdf,jpg,jpeg,png,doc,docx,xls,xlsx'],
         ]);
+
+        // Keep the rate this billing was created with when retention stays on;
+        // only a billing that had none picks up the current setting.
+        $retentionPct = $request->boolean('apply_retention')
+            ? ($billing->retention_pct !== null ? (float) $billing->retention_pct : $this->retentionPct())
+            : null;
 
         // Status is changed only through the dedicated PM-gated status flow,
         // never here — Edit handles billing details and may run at any status.
@@ -640,6 +667,8 @@ class ProjectHubController extends Controller
             'period_from'  => ($data['period_from']  ?? '') ?: null,
             'period_to'    => ($data['period_to']    ?? '') ?: null,
             'amount'       => $data['amount'],
+            'retention_pct'    => $retentionPct,
+            'retention_amount' => ProjectBilling::splitRetention((float) $data['amount'], $retentionPct),
             'progress_pct' => ($data['progress_pct'] ?? '') !== '' ? $data['progress_pct'] : null,
             'summary'      => ($data['summary']      ?? '') ?: null,
             'remarks'      => ($data['remarks']      ?? '') ?: null,
@@ -713,13 +742,42 @@ class ProjectHubController extends Controller
         return back()->with('success', 'Billing record deleted.');
     }
 
+    /** The retention rate currently configured in system settings. */
+    private function retentionPct(): float
+    {
+        return (float) Setting::get('retention_pct', SettingController::DEFAULT_RETENTION_PCT);
+    }
+
     private function recalculateBudgetPaid(Project $project): void
     {
-        // "Approved" billings are treated as paid — an approved statement is
-        // cleared for payment and counts toward the project's paid total.
-        $project->update([
-            'budget_paid' => $project->billings()->where('status', 'approved')->sum('amount'),
-        ]);
+        $project->update(['budget_paid' => $this->approvedBillingTotal($project)]);
+
+        // Billing a sub-project also moves its parent's total: the parent's
+        // budget_total is the sum of its issued NTPs, which includes the ones
+        // that spawned the sub-projects, so their billings belong in the
+        // numerator too. Without this the parent's payment figure lists rows
+        // it does not count.
+        if ($project->parent) {
+            $project->parent->update([
+                'budget_paid' => $this->approvedBillingTotal($project->parent),
+            ]);
+        }
+    }
+
+    /**
+     * Approved billings for a project, rolled up with its sub-projects'.
+     * "Approved" is treated as paid — an approved statement is cleared for
+     * payment. A sub-project has no children, so this is just its own total.
+     */
+    private function approvedBillingTotal(Project $project): float
+    {
+        $ids = $project->children()->pluck('id')->push($project->id);
+
+        // Retention is withheld until the project completes, so an approved
+        // billing only counts for what it actually releases.
+        return (float) ProjectBilling::whereIn('project_id', $ids)
+            ->where('status', 'approved')
+            ->sum(DB::raw('amount - retention_amount'));
     }
 
     /**

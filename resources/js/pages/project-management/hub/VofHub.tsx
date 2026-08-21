@@ -37,6 +37,34 @@ const STATUS_TONE: Record<string, 'green' | 'slate' | 'red'> = {
     Approved: 'green', Pending: 'slate', Rejected: 'red',
 };
 
+const money = (n: number) => `PhP ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/**
+ * Contracted cost + approved variations = project cost. Only approved
+ * variations count, so a pending or rejected one leaves the total alone.
+ */
+function CostBreakdown({ project }: { project: HubProject }) {
+    const base      = project.budget_base ?? project.budget_total;
+    const variation = project.budget_total - base;
+
+    const cell = (label: string, value: string, strong = false) => (
+        <div>
+            <div style={{ fontSize: '10px', fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>{label}</div>
+            <div style={{ fontSize: strong ? '15px' : '13.5px', fontWeight: strong ? 900 : 700, color: '#78350f' }}>{value}</div>
+        </div>
+    );
+
+    return (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto 1fr auto 1fr', gap: '14px', alignItems: 'center', padding: '14px 18px', marginBottom: '18px', borderRadius: '10px', background: '#fffbeb', border: `1px solid ${ACCENT}33` }}>
+            {cell('Contracted Cost', money(base))}
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#b45309' }}>+</div>
+            {cell('Approved Variations', money(variation))}
+            <div style={{ fontSize: '18px', fontWeight: 800, color: '#b45309' }}>=</div>
+            {cell('Project Cost', money(project.budget_total), true)}
+        </div>
+    );
+}
+
 // ── Shared detail table ────────────────────────────────────────────────────
 function DetailTable({
     scope, setScope, schedule, setSchedule, cost, setCost,
@@ -471,6 +499,12 @@ export default function VofHub({ project, vofs, canEdit = true }: { project: Hub
             {editVof    && <EditModal      project={project} vof={editVof} onClose={() => setEditVof(null)} />}
 
             <InfoStrip project={project} accent={ACCENT} />
+
+            {/* How the project cost is composed. Derived from the project's own
+                figures rather than from the rows above, which on a parent also
+                list its sub-projects' variations — those move the sub-project's
+                cost, not this one's. */}
+            <CostBreakdown project={project} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <div style={{ borderLeft: `4px solid ${ACCENT}`, background: '#f8fafc', padding: '9px 14px', fontSize: '12px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>

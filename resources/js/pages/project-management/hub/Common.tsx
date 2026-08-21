@@ -13,10 +13,14 @@ export interface HubProject {
     site: string;
     project_manager: string;
     budget_total: number;
+    /** Contracted cost before approved variation orders are added on. */
+    budget_base?: number;
     budget_paid?: number;
     completion_percent: number;
     deadline?: string;
     cost_code?: string;
+    /** Owning department — printed as "Project Owner" on the PMD forms. */
+    dept_owner?: string;
     owner_email?: string;
     signatories?: HubSignatories;
 }

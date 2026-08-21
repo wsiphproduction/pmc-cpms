@@ -28,6 +28,9 @@ interface BillingRow {
     status_raw: string;
     filename: string | null;
     url: string | null;
+    retention_pct: number | null;
+    retention_amount: number;
+    net_amount: number;
     ntp_id: number | null;
     ntp_no: string | null;
     ntp_date: string | null;
@@ -157,13 +160,61 @@ function FileAttachmentField({
     );
 }
 
+/**
+ * The billed amount is treated as retention-inclusive: the retention is carved
+ * out of it, so what is released plus what is held equals the amount billed.
+ * A PhP 25,000 billing at 5% releases 23,809.52 and holds 1,190.48.
+ */
+function splitRetention(amount: number, pct: number | null) {
+    if (!pct || pct <= 0 || !amount) return { retention: 0, net: amount || 0 };
+    const retention = Math.round((amount - amount / (1 + pct / 100)) * 100) / 100;
+    return { retention, net: Math.round((amount - retention) * 100) / 100 };
+}
+
+/** Retention toggle plus the resulting split, shown beside the billed amount. */
+function RetentionFields({ checked, onChange, pct, amount, disabled = false }: {
+    checked: boolean; onChange: (v: boolean) => void; pct: number; amount: number; disabled?: boolean;
+}) {
+    const { retention, net } = splitRetention(amount, checked ? pct : null);
+    const box = (label: string, value: number, tone: string) => (
+        <div style={{ flex: '1 1 140px' }}>
+            <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '3px' }}>{label}</div>
+            <div style={{ padding: '6px 10px', borderRadius: '6px', background: '#f8fafc', border: '1px solid #e2e8f0', fontSize: '13px', fontWeight: 700, color: tone }}>
+                {money(value)}
+            </div>
+        </div>
+    );
+
+    return (
+        <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', cursor: disabled ? 'not-allowed' : 'pointer', fontSize: '12.5px', fontWeight: 600, color: '#334155' }}>
+                <input type="checkbox" checked={checked} disabled={disabled} onChange={e => onChange(e.target.checked)} style={{ margin: 0, accentColor: '#2563eb' }} />
+                Subject to retention ({pct}%)
+            </label>
+            {checked && (
+                <div style={{ display: 'flex', gap: '10px', marginTop: '9px', flexWrap: 'wrap' }}>
+                    {box('Retention Held', retention, '#b45309')}
+                    {box('Actual Payment', net, '#15803d')}
+                </div>
+            )}
+            {checked && (
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '7px' }}>
+                    Held back until the project is completed, then billed as a final statement.
+                </div>
+            )}
+        </div>
+    );
+}
+
 const rowStyle: React.CSSProperties = { borderBottom: '1px solid #000' };
 const labelCell: React.CSSProperties = { background: '#f8fafc', fontWeight: 700, fontSize: '12.5px', padding: '8px 10px', width: '28%', borderRight: '1px solid #000', verticalAlign: 'top' };
 const valCell: React.CSSProperties   = { padding: '8px 10px', verticalAlign: 'top', fontSize: '13px' };
 
 // ── New Billing Modal ──────────────────────────────────────────────────────
-function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps: NtpOption[]; onClose: () => void }) {
-    const [ntpId,        setNtpId]        = useState('');
+function NewBillingModal({ project, ntps, defaultNtpId = null, ntpLocked = false, retentionPct = 0, onClose }: { project: HubProject; ntps: NtpOption[]; defaultNtpId?: number | null; ntpLocked?: boolean; retentionPct?: number; onClose: () => void }) {
+    // On a sub-project the NTP is fixed — it is the notice the sub-project was
+    // created from — so it starts selected and is shown rather than chosen.
+    const [ntpId,        setNtpId]        = useState(defaultNtpId != null ? String(defaultNtpId) : '');
     const [billingType,  setBillingType]  = useState('Milestone (Progress)');
     const [amount,       setAmount]       = useState('');
     const [progress,     setProgress]     = useState('');
@@ -177,6 +228,7 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
     const [recommendation, setRecommendation] = useState('For Payment');
     const [otherRec,     setOtherRec]     = useState(false);
     const [otherRecText, setOtherRecText] = useState('');
+    const [applyRetention, setApplyRetention] = useState(false);
     const [saving,       setSaving]       = useState(false);
     const [error,        setError]        = useState('');
 
@@ -212,6 +264,7 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
         setSaving(true);
         router.post(route('hub.rfp.store', project.id), {
             project_ntp_id: ntpId || null,
+            apply_retention: applyRetention,
             billing_type:   billingType,
             amount,
             progress_pct:   progress   || null,
@@ -247,18 +300,24 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
                                 <span style={{ color: '#94a3b8', fontSize: '12px' }}>No NTP issued for this project yet.</span>
                             ) : (
                                 <>
-                                    <select
-                                        style={{ ...inputStyle, padding: '5px 8px', marginBottom: selectedNtp ? '10px' : '0' }}
-                                        value={ntpId}
-                                        onChange={e => { setNtpId(e.target.value); setAmount(''); setProgress(''); }}
-                                    >
-                                        <option value="">— Select NTP / Awardee (optional) —</option>
-                                        {ntps.map(n => (
-                                            <option key={n.id} value={String(n.id)}>
-                                                {n.ntp_no} — {n.contractor}
-                                            </option>
-                                        ))}
-                                    </select>
+                                    {ntpLocked ? (
+                                        <div style={{ fontSize: '11.5px', color: '#64748b', marginBottom: '8px' }}>
+                                            Billed against the NTP this sub-project was created from.
+                                        </div>
+                                    ) : (
+                                        <select
+                                            style={{ ...inputStyle, padding: '5px 8px', marginBottom: selectedNtp ? '10px' : '0' }}
+                                            value={ntpId}
+                                            onChange={e => { setNtpId(e.target.value); setAmount(''); setProgress(''); }}
+                                        >
+                                            <option value="">— Select NTP / Awardee (optional) —</option>
+                                            {ntps.map(n => (
+                                                <option key={n.id} value={String(n.id)}>
+                                                    {n.ntp_no} — {n.contractor}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
                                     {selectedNtp && (
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', padding: '10px 12px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '7px' }}>
                                             <div>
@@ -338,6 +397,12 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
                                     No base amount set — select an NTP or set a project budget to enable auto-calculation.
                                 </div>
                             )}
+                            <RetentionFields
+                                checked={applyRetention}
+                                onChange={setApplyRetention}
+                                pct={retentionPct}
+                                amount={Number(amount) || 0}
+                            />
                         </td>
                     </tr>
                     <tr style={rowStyle}>
@@ -420,7 +485,7 @@ function NewBillingModal({ project, ntps, onClose }: { project: HubProject; ntps
 }
 
 // ── Edit Billing Modal ─────────────────────────────────────────────────────
-function EditBillingModal({ project, billing, onClose }: { project: HubProject; billing: BillingRow; onClose: () => void }) {
+function EditBillingModal({ project, billing, retentionPct = 0, onClose }: { project: HubProject; billing: BillingRow; retentionPct?: number; onClose: () => void }) {
     const [billingType,   setBillingType]   = useState(billing.billing_type);
     const [amount,        setAmount]        = useState(String(billing.amount));
     const [progress,      setProgress]      = useState(billing.progress_pct != null ? String(billing.progress_pct) : '');
@@ -437,6 +502,10 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
     );
     const [otherRec,      setOtherRec]      = useState(!!billing.recommendation && !KNOWN_RECS.includes(billing.recommendation));
     const [otherRecText,  setOtherRecText]  = useState(!!billing.recommendation && !KNOWN_RECS.includes(billing.recommendation) ? billing.recommendation : '');
+    // Keep the rate the billing was created with, so editing an old statement
+    // does not silently reprice it at the current setting.
+    const [applyRetention, setApplyRetention] = useState(billing.retention_pct != null);
+    const effectivePct = billing.retention_pct ?? retentionPct;
     const [saving,        setSaving]        = useState(false);
     const [error,         setError]         = useState('');
 
@@ -474,6 +543,7 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
             _method: 'patch',
             billing_type:  billingType,
             amount,
+            apply_retention: applyRetention,
             period_from:   periodFrom  || null,
             period_to:     periodTo    || null,
             progress_pct:  progress    || null,
@@ -498,6 +568,22 @@ function EditBillingModal({ project, billing, onClose }: { project: HubProject; 
             <div style={{ background: '#ffff00', textAlign: 'center', fontWeight: 900, padding: '6px', border: '1px solid #000', marginBottom: 0, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Billing Details</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', borderTop: 'none', marginBottom: '20px', fontSize: '12.5px' }}>
                 <tbody>
+
+                    {billing.retention_pct != null && (
+                        <tr style={rowStyle}>
+                            <td style={labelCell}>Retention ({billing.retention_pct}%)</td>
+                            <td style={valCell}>
+                                <div style={{ fontSize: '13px' }}>
+                                    Held: <strong style={{ color: '#b45309' }}>{money(billing.retention_amount)}</strong>
+                                    <span style={{ margin: '0 8px', color: '#cbd5e1' }}>|</span>
+                                    Actual payment: <strong style={{ color: '#15803d' }}>{money(billing.net_amount)}</strong>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                                    Retention is released as a final statement once the project is completed.
+                                </div>
+                            </td>
+                        </tr>
+                    )}
 
                     {/* NTP — read-only */}
                     <tr style={rowStyle}>
@@ -951,7 +1037,7 @@ function StatusChangeModal({ project, billing, onClose }: { project: HubProject;
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function RfpHub({ project, billings, ntps, canEdit = true, canManageStatus = false }: { project: HubProject; billings: BillingRow[]; ntps: NtpOption[]; canEdit?: boolean; canManageStatus?: boolean }) {
+export default function RfpHub({ project, billings, ntps, defaultNtpId = null, ntpLocked = false, retentionPct = 0, retentionHeld = 0, canEdit = true, canManageStatus = false }: { project: HubProject; billings: BillingRow[]; ntps: NtpOption[]; defaultNtpId?: number | null; ntpLocked?: boolean; retentionPct?: number; retentionHeld?: number; canEdit?: boolean; canManageStatus?: boolean }) {
     const [showNew, setShowNew] = useState(false);
     const [viewing, setViewing] = useState<BillingRow | null>(null);
     const [editing, setEditing] = useState<BillingRow | null>(null);
@@ -1025,7 +1111,7 @@ export default function RfpHub({ project, billings, ntps, canEdit = true, canMan
     return (
         <HubShell>
             {confirmDialog}
-            {showNew && <NewBillingModal project={project} ntps={ntps} onClose={() => setShowNew(false)} />}
+            {showNew && <NewBillingModal project={project} ntps={ntps} defaultNtpId={defaultNtpId} ntpLocked={ntpLocked} retentionPct={retentionPct} onClose={() => setShowNew(false)} />}
             {viewing && !editing && (
                 <ViewBillingModal
                     billing={viewing}
@@ -1035,7 +1121,7 @@ export default function RfpHub({ project, billings, ntps, canEdit = true, canMan
                 />
             )}
             {editing && (
-                <EditBillingModal project={project} billing={editing} onClose={() => setEditing(null)} />
+                <EditBillingModal project={project} billing={editing} retentionPct={retentionPct} onClose={() => setEditing(null)} />
             )}
             {statusTarget && (
                 <StatusChangeModal project={project} billing={statusTarget} onClose={() => setStatusTarget(null)} />
@@ -1050,6 +1136,12 @@ export default function RfpHub({ project, billings, ntps, canEdit = true, canMan
                         <div style={{ width: `${paidPct}%`, height: '100%', borderRadius: '999px', background: '#2563eb' }} />
                     </div>
                     <div style={{ marginTop: '6px', fontSize: '12px', color: '#64748b' }}>Paid: <strong>{money(budgetPaid)}</strong></div>
+                    {retentionHeld > 0 && (
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: '#b45309' }}>
+                            Retention held: <strong>{money(retentionHeld)}</strong>
+                            <span style={{ color: '#94a3b8' }}> — billed on completion</span>
+                        </div>
+                    )}
                 </div>
                 <div style={{ textAlign: 'center' }}>
                     <div style={{ width: '150px', height: '150px', borderRadius: '50%', margin: '0 auto', background: `conic-gradient(#2563eb ${paidPct}%, #e2e8f0 0)`, display: 'grid', placeItems: 'center' }}>

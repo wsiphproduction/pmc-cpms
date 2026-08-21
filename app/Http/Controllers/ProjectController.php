@@ -37,7 +37,12 @@ class ProjectController extends Controller
         // Sub-projects live under their parent's operations hub and are never
         // listed here — the management list only shows top-level projects.
         // Children are eager-loaded for the completion roll-up.
-        $query = Project::with(['manager', 'creator', 'children:id,parent_id,project_no,title,completion_percent,status_key'])
+        $query = Project::with([
+            'manager',
+            'creator',
+            'children:id,parent_id,project_no,title,completion_percent,status_key,source_ntp_id',
+            'children.sourceNtp:id,ntp_no',
+        ])
             ->whereNull('parent_id')->latest();
 
         $user = $request->user();
@@ -183,7 +188,7 @@ class ProjectController extends Controller
             'category' => $data['category'],
             'service_type' => $data['service_type'],
             'deadline' => $data['deadline'],
-            'budget_total' => $data['project_cost'] ?? 0,
+            'budget_base' => $data['project_cost'] ?? 0,
             'owner_email' => $data['owner_email'] ?? null,
             'structure_type' => $data['structure_type'] ?? null,
             'jip' => $request->boolean('jip'),
@@ -194,6 +199,8 @@ class ProjectController extends Controller
             'project_type' => $data['project_type'],
             'created_by' => auth()->id(),
         ]);
+
+        $project->refreshBudgetTotal();
 
         if ($request->hasFile('proposal_document')) {
             $path = $request->file('proposal_document')->store('proposals', 'public');
@@ -275,7 +282,7 @@ class ProjectController extends Controller
             'category' => $data['category'],
             'service_type' => $data['service_type'],
             'deadline' => $data['deadline'],
-            'budget_total' => $data['project_cost'] ?? 0,
+            'budget_base' => $data['project_cost'] ?? 0,
             'owner_email' => $data['owner_email'] ?? null,
             'structure_type' => $data['structure_type'] ?? null,
             'jip' => $request->boolean('jip'),
@@ -285,6 +292,10 @@ class ProjectController extends Controller
             'notes' => $data['notes'] ?? null,
             'project_type' => $data['project_type'],
         ]);
+
+        // Re-derive the total: the form moves the base, approved variations
+        // still sit on top of it.
+        $project->refreshBudgetTotal();
 
         if ($request->hasFile('proposal_document')) {
             if ($project->proposal_document) {
@@ -529,12 +540,28 @@ class ProjectController extends Controller
 
             'rfp' => [
                 'can_manage_status' => auth()->user()->can('manageBillingStatus', $project),
-                'ntps'     => $project->ntps()->get()->map(fn ($n) => [
-                    'id'            => $n->id,
-                    'ntp_no'        => $n->ntp_no,
-                    'contractor'    => $n->contractor_name,
-                    'approved_cost' => (float) $n->approved_cost,
-                ])->values(),
+                // A sub-project raises no NTPs of its own — the notice that
+                // spawned it sits on the parent, and it is the only one its
+                // billings can cite, so it is offered pre-selected and fixed.
+                'ntps'     => ($project->source_ntp_id
+                        ? collect([$project->sourceNtp])->filter()
+                        : $project->ntps()->get()
+                    )->map(fn ($n) => [
+                        'id'            => $n->id,
+                        'ntp_no'        => $n->ntp_no,
+                        'contractor'    => $n->contractor_name,
+                        'approved_cost' => (float) $n->approved_cost,
+                    ])->values(),
+                'default_ntp_id' => $project->source_ntp_id,
+                'ntp_locked'     => $project->source_ntp_id !== null,
+                // The rate a new billing would pick up, and what is currently
+                // held back across this project and its sub-projects — that
+                // balance is billed once the project is completed.
+                'retention_pct'  => (float) Setting::get('retention_pct', SettingController::DEFAULT_RETENTION_PCT),
+                'retention_held' => (float) \App\Models\ProjectBilling::whereIn(
+                        'project_id',
+                        $project->children()->pluck('id')->push($project->id)
+                    )->where('status', 'approved')->sum('retention_amount'),
                 // Own billings plus, for a parent, its sub-projects' billings
                 // (read-only in the UI, tagged with their sub-project).
                 'billings' => $this->collectHubRows($project, fn ($p) => $p->billings()->with(['ntp', 'statusLogs.user'])->get(), fn ($b, $sub) => $this->billingRow($b, $sub)),
@@ -630,6 +657,11 @@ class ProjectController extends Controller
             'period_from_raw' => optional($b->period_from)->format('Y-m-d'),
             'period_to_raw'   => optional($b->period_to)->format('Y-m-d'),
             'amount'          => (float) $b->amount,
+            // Retention: the rate this billing was created with (null = none),
+            // what it holds back, and what it actually releases.
+            'retention_pct'    => $b->retention_pct !== null ? (float) $b->retention_pct : null,
+            'retention_amount' => (float) $b->retention_amount,
+            'net_amount'       => $b->net_amount,
             'progress_pct'    => $b->progress_pct !== null ? (float) $b->progress_pct : null,
             'summary'         => $b->summary,
             'remarks'         => $b->remarks,
@@ -735,6 +767,9 @@ class ProjectController extends Controller
             'approved_cost'  => (float) $ntp->approved_cost,
             'status'         => $ntp->status,
             'issued_date'    => optional($ntp->issued_date)->format('M d, Y') ?? '-',
+            // Printed on the NTP form as "Baseline Project Duration"; it is
+            // agreed on the source RFQ, not re-entered on the NTP.
+            'duration_days'  => $ntp->rfq?->duration_days,
             'reviewed_by'    => $ntp->reviewer->name ?? null,
             'review_remarks' => $ntp->review_remarks,
             // The sub-project spawned FROM this issued NTP (parent rows only).
@@ -1017,6 +1052,7 @@ class ProjectController extends Controller
             'status' => self::STATUS_LABELS[$project->status_key] ?? $project->status_key,
             'created_at' => $project->created_at?->format('M d, Y h:i A'),
             'budget_total' => (float) $project->budget_total,
+            'budget_base' => (float) $project->budget_base,
             'budget_paid' => (float) $project->budget_paid,
             'deadline' => optional($project->deadline)->format('M d, Y') ?? '—',
             'days_remaining' => $project->deadline ? $project->daysUntilDeadline() : null,
@@ -1025,6 +1061,9 @@ class ProjectController extends Controller
             'sub_projects' => $project->children->map(fn (Project $child) => [
                 'id'         => $child->id,
                 'project_no' => $child->project_no,
+                // Sub-projects are listed by the NTP they came from; the
+                // project number is the fallback for ones created by hand.
+                'ntp_no'     => $child->sourceNtp?->ntp_no,
                 'title'      => $child->title,
                 'status'     => self::STATUS_LABELS[$child->status_key] ?? $child->status_key,
             ])->values(),
@@ -1054,6 +1093,7 @@ class ProjectController extends Controller
             'days_elapsed' => $daysElapsed,
             'days_remaining' => $daysRemaining,
             'budget_total' => (float) $project->budget_total,
+            'budget_base' => (float) $project->budget_base,
             'budget_paid' => (float) $project->budget_paid,
             'completion_percent' => $project->effectiveCompletionPercent(),
             'project_health' => $project->health(),
@@ -1192,7 +1232,7 @@ class ProjectController extends Controller
             'category' => $project->category,
             'service_type' => $project->service_type,
             'deadline' => optional($project->deadline)->format('Y-m-d'),
-            'project_cost' => (float) $project->budget_total,
+            'project_cost' => (float) $project->budget_base,
             'owner_email' => $project->owner_email ?? '',
             'structure_type' => $project->structure_type ?? '',
             'jip' => $project->jip,

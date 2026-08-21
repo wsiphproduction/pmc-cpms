@@ -19,6 +19,8 @@ class ProjectBilling extends Model
         'period_from',
         'period_to',
         'amount',
+        'retention_pct',
+        'retention_amount',
         'progress_pct',
         'summary',
         'remarks',
@@ -34,9 +36,34 @@ class ProjectBilling extends Model
         'period_from'  => 'date',
         'period_to'    => 'date',
         'amount'       => 'decimal:2',
+        'retention_pct'    => 'decimal:2',
+        'retention_amount' => 'decimal:2',
         'progress_pct' => 'decimal:2',
         'attachments'  => 'array',
     ];
+
+    /**
+     * What actually gets released to the contractor: the billed amount is
+     * treated as retention-inclusive, so the retention is carved out of it
+     * rather than added on top.
+     */
+    public function getNetAmountAttribute(): float
+    {
+        return (float) $this->amount - (float) $this->retention_amount;
+    }
+
+    /**
+     * Split a billed amount into what is released now and what is held back.
+     * A null or zero rate holds nothing.
+     */
+    public static function splitRetention(float $amount, ?float $pct): float
+    {
+        if ($pct === null || $pct <= 0) {
+            return 0.0;
+        }
+
+        return round($amount - ($amount / (1 + ($pct / 100))), 2);
+    }
 
     public function project(): BelongsTo
     {

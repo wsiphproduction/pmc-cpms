@@ -1,6 +1,7 @@
 import { router } from '@inertiajs/react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { DataTable, HubProject, HubShell, InfoStrip, SectionTitle, SubTag } from './Common';
+import { escapeHtml, formHeader, openPrintWindow, orBlank, padRows, sigCell } from './printForm';
 import { useConfirm } from '@/components/useConfirm';
 
 interface ScopeItem {
@@ -31,6 +32,7 @@ interface NtpData {
     // The sub-project this NTP itself belongs to (roll-up tag; null = own).
     sub_project_id: number | null;
     sub_project_no: string | null;
+    duration_days: number | null;
     scope_items: ScopeItem[];
 }
 
@@ -49,7 +51,6 @@ function NtpStatusBadge({ status }: { status: string }) {
 
 export default function NtpHub({ project, ntps, canEdit = true }: { project: HubProject; ntps: NtpData[]; canEdit?: boolean }) {
     const [selected, setSelected] = useState<NtpData | null>(null);
-    const printRef = useRef<HTMLDivElement>(null);
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
     const hasSubRows = ntps.some(n => !!n.sub_project_id);
 
@@ -60,25 +61,86 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
         }, { title: 'Delete NTP', confirmLabel: 'Delete', variant: 'danger' });
     };
 
+    /**
+     * Notice to Proceed — PMD-PRJ-FRM-04. Built from the record rather than
+     * scraped from the screen, so the print matches the controlled form
+     * instead of the hub layout.
+     */
     const handlePrint = () => {
-        const content = printRef.current;
-        if (!content || !selected) return;
-        const win = window.open('', '_blank', 'width=900,height=700');
-        if (!win) return;
-        win.document.write(`<!DOCTYPE html><html><head>
-            <title>Notice to Proceed — ${selected.ntp_no}</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; color: #0f172a; }
-                * { box-sizing: border-box; }
-                table { width: 100%; border-collapse: collapse; }
-                th, td { border: 1px solid #e2e8f0; padding: 8px 12px; font-size: 13px; text-align: left; }
-                th { background: #f8fafc; font-weight: 700; }
-                @media print { body { margin: 20px; } }
-            </style>
-        </head><body>${content.innerHTML}</body></html>`);
-        win.document.close();
-        win.focus();
-        setTimeout(() => { win.print(); win.close(); }, 250);
+        if (!selected) return;
+
+        const scopeRows = padRows(
+            selected.scope_items.map((item, idx) => `<tr>
+                <td class="num">${idx + 1}</td>
+                <td>${escapeHtml(item.description)}</td>
+                <td class="num">${orBlank(item.qty)}</td>
+                <td class="num">${orBlank(item.unit)}</td>
+            </tr>`),
+            10,
+            '<tr class="blank"><td class="num">%N%</td><td></td><td></td><td></td></tr>',
+        ).join('');
+
+        // A-E stay blank on the paper form for hand-written conditions.
+        const termRows = ['A', 'B', 'C', 'D', 'E']
+            .map(letter => `<tr class="blank"><td class="num">${letter}</td><td colspan="3"></td></tr>`)
+            .join('');
+
+        const detail = (k: string, v: string) =>
+            `<tr><td class="k">${escapeHtml(k)}</td><td class="c">:</td><td>${v}</td></tr>`;
+
+        const sigs = project.signatories;
+        const inner = formHeader({
+            docNo: 'PMD-PRJ-FRM-04', rev: '00', effective: 'October 05, 2025',
+            sheet: 'Page 1 of 1', title: 'NOTICE TO PROCEED',
+        }) + `
+            <div class="secrow">
+                <h3 class="sec" style="margin:0;">PROJECT DETAILS</h3>
+                <div class="refno">N.T.P. Number: <b>${escapeHtml(selected.ntp_no)}</b></div>
+            </div>
+            <table class="kv">
+                ${detail('Project Number', orBlank(project.project_no))}
+                ${detail('Project Title', orBlank(project.title))}
+                ${detail('Sub-Project Title', orBlank(selected.sub_project_no) || 'N/A')}
+                ${detail('Job Site / Location', orBlank(project.site))}
+                ${detail('Service Contractor', orBlank(selected.contractor))}
+                ${detail('Project Owner', orBlank(project.dept_owner))}
+                ${detail('Cost Code', orBlank(project.cost_code))}
+                ${detail('Baseline Project Duration', selected.duration_days != null ? `${escapeHtml(selected.duration_days)} WORKING DAYS` : '')}
+                ${detail('Baseline Start Date', orBlank(selected.baseline_start))}
+                ${detail('Baseline End Date', orBlank(selected.baseline_end))}
+                ${detail('Project Cost', `Php ${selected.approved_cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
+            </table>
+
+            <table class="box" style="margin-top:12px;">
+                <thead>
+                    <tr>
+                        <th class="hd" style="width:44px;">Item</th>
+                        <th class="hd">Scope of Work</th>
+                        <th class="hd" style="width:90px;">Quantity</th>
+                        <th class="hd" style="width:90px;">UOM</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${scopeRows}
+                    <tr><td colspan="4" class="band">Other Terms and Conditions</td></tr>
+                    ${termRows}
+                </tbody>
+            </table>
+
+            <div class="note">Note: Please attach a copy of the original quotation from the service contractor as a reference.</div>
+
+            <div class="sig tight">
+                ${sigCell('Prepared by:', sigs?.prepared_by ?? '', 'Project Management Engineer')}
+                ${sigCell('Reviewed by:', sigs?.pmd_assistant_manager ?? '', 'PMD Assistant Manager')}
+                ${sigCell('Noted by:', sigs?.pmd_manager ?? '', 'PMD Manager')}
+            </div>
+            <div class="sig tight">
+                ${sigCell('Noted by:', '', 'Mine Division Manager')}
+                ${sigCell('Checked by:', '', 'Project Owner Representative')}
+                ${sigCell('Received by:', '', 'Service Contractor Representative')}
+            </div>`;
+
+        openPrintWindow(`Notice to Proceed — ${selected.ntp_no}`, inner);
     };
 
     // ── List view ─────────────────────────────────────────────────────────────
@@ -223,7 +285,7 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                 </div>
             </div>
 
-            <div ref={printRef}>
+            <div>
                 {/* Summary strip */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '16px', marginBottom: '22px' }}>
                     {([

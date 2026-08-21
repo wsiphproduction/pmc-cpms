@@ -10,16 +10,20 @@ interface Signatory {
 
 interface Props {
     projectCompletionKpi: number;
+    retentionPct: number;
     signatories: Signatory[];
 }
 
-export default function SystemSettingsIndex({ projectCompletionKpi, signatories = [] }: Props) {
+export default function SystemSettingsIndex({ projectCompletionKpi, retentionPct, signatories = [] }: Props) {
     const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string> }>();
     const flash  = props.flash;
     const errors = props.errors ?? {};
 
     const [kpi, setKpi] = useState(String(projectCompletionKpi));
     const [submitting, setSubmitting] = useState(false);
+
+    const [retention, setRetention] = useState(String(retentionPct));
+    const [retSubmitting, setRetSubmitting] = useState(false);
 
     const [sigNames, setSigNames] = useState<Record<string, string>>(
         () => Object.fromEntries(signatories.map(s => [s.key, s.name])),
@@ -32,6 +36,15 @@ export default function SystemSettingsIndex({ projectCompletionKpi, signatories 
         router.patch(route('system-settings.update'), { project_completion_kpi: kpi }, {
             preserveScroll: true,
             onFinish: () => setSubmitting(false),
+        });
+    };
+
+    const handleRetentionSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setRetSubmitting(true);
+        router.patch(route('system-settings.update'), { retention_pct: retention }, {
+            preserveScroll: true,
+            onFinish: () => setRetSubmitting(false),
         });
     };
 
@@ -110,6 +123,53 @@ export default function SystemSettingsIndex({ projectCompletionKpi, signatories 
                             }}
                         >
                             {submitting ? 'Saving…' : 'Save Settings'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', flex: '1 1 380px', minWidth: '320px' }}>
+                <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '18px' }}>
+                    Billing Retention
+                </div>
+
+                <form onSubmit={handleRetentionSubmit}>
+                    <label style={{ fontSize: '12.5px', fontWeight: 600, color: '#374151', display: 'block', marginBottom: '6px' }}>
+                        Retention Rate (%)
+                    </label>
+                    <p style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 10px', lineHeight: 1.6, maxWidth: '480px' }}>
+                        Applied when a Request for Payment is marked as carrying retention. The billed amount is treated
+                        as retention-inclusive, so a {retentionPct}% rate on a PhP 25,000 billing releases{' '}
+                        <strong>PhP {(25000 / (1 + (Number(retention) || 0) / 100)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>{' '}
+                        and withholds the rest until the project is completed. Existing billings keep the rate they were created with.
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step="0.01"
+                            value={retention}
+                            onChange={e => setRetention(e.target.value)}
+                            style={{ ...inputStyle, borderColor: errors.retention_pct ? '#dc2626' : undefined }}
+                        />
+                        <span style={{ fontSize: '13px', color: '#6b7280' }}>%</span>
+                    </div>
+                    {errors.retention_pct && (
+                        <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '6px 0 0' }}>{errors.retention_pct}</p>
+                    )}
+
+                    <div style={{ marginTop: '20px', borderTop: '1px solid #f3f4f6', paddingTop: '18px' }}>
+                        <button
+                            type="submit"
+                            disabled={retSubmitting}
+                            style={{
+                                padding: '9px 22px', borderRadius: '8px', border: 'none',
+                                background: retSubmitting ? '#93c5fd' : '#2563eb', color: '#fff',
+                                fontSize: '13px', fontWeight: 700, cursor: retSubmitting ? 'not-allowed' : 'pointer',
+                            }}
+                        >
+                            {retSubmitting ? 'Saving…' : 'Save Settings'}
                         </button>
                     </div>
                 </form>

@@ -17,7 +17,7 @@ interface Project {
     deadline: string | null;
     days_remaining: number | null;
     /** Children of this project; listed under its number, never as own rows. */
-    sub_projects: { id: number; project_no: string; title: string; status: string }[];
+    sub_projects: { id: number; project_no: string; ntp_no: string | null; title: string; status: string }[];
     can: {
         update: boolean;
         delete: boolean;
@@ -559,7 +559,7 @@ export default function ProjectsIndex({
 
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <label
-                            title={subCount > 0 ? 'List sub-project numbers under their parent' : 'None of the projects on this page have sub-projects'}
+                            title={subCount > 0 ? 'List sub-project NTP numbers under their parent' : 'None of the projects on this page have sub-projects'}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 12px', borderRadius: '7px', border: `1px solid ${showSubs ? '#2563eb' : '#e5e7eb'}`, background: showSubs ? '#eff6ff' : '#fff', fontSize: '12px', fontWeight: 500, color: showSubs ? '#2563eb' : '#374151', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
                             <input
                                 type="checkbox"
@@ -641,12 +641,12 @@ export default function ProjectsIndex({
                                                     <Link
                                                         key={sub.id}
                                                         href={route('projects.show', sub.id)}
-                                                        title={`${sub.title} · ${sub.status}`}
+                                                        title={`${sub.project_no} · ${sub.title} · ${sub.status}`}
                                                         style={{ color: '#64748b', textDecoration: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}
                                                         onMouseEnter={e => { e.currentTarget.style.textDecoration = 'underline'; e.currentTarget.style.color = '#2563eb'; }}
                                                         onMouseLeave={e => { e.currentTarget.style.textDecoration = 'none'; e.currentTarget.style.color = '#64748b'; }}
                                                     >
-                                                        ↳ {sub.project_no}
+                                                        ↳ {sub.ntp_no ?? sub.project_no}
                                                     </Link>
                                                 ))}
                                             </div>

@@ -7,6 +7,7 @@ use App\Models\MasterClass;
 use App\Models\MasterStatus;
 use App\Models\Priority;
 use App\Models\Project;
+use App\Models\ProjectNtp;
 use App\Models\ServiceType;
 use App\Models\Site;
 use App\Models\Structure;
@@ -225,7 +226,74 @@ it('lists sub-projects under their parent rather than as rows of their own', fun
             ->where('projects.data.0.project_no', 'PRJ-2026-0001')
             ->has('projects.data.0.sub_projects', 1)
             ->where('projects.data.0.sub_projects.0.id', $child->id)
-            ->where('projects.data.0.sub_projects.0.project_no', 'PRJ-2026-0001-A'));
+            ->where('projects.data.0.sub_projects.0.project_no', 'PRJ-2026-0001-A')
+            // No source NTP, so the list falls back to the project number.
+            ->where('projects.data.0.sub_projects.0.ntp_no', null));
+});
+
+it('labels a sub-project by the NTP it was created from', function () {
+    $user = makeApproverUser();
+
+    $parent = Project::create([
+        'project_no'   => 'PRJ-2026-0002',
+        'title'        => 'Warehouse Rehab',
+        'site'         => 'Main Plant',
+        'asset_id'     => 'Asset A',
+        'class_name'   => 'Major',
+        'priority'     => 'P1 - Urgent',
+        'status_key'   => 'PLANNING',
+        'work_force'   => 'In-house Team',
+        'wr_no'        => 'WR-1',
+        'wr_date'      => '2026-05-04',
+        'dept_owner'   => 'Engineering',
+        'cost_code'    => 'CC-001',
+        'category'     => 'Renovation',
+        'service_type' => 'Design-Build',
+        'deadline'     => '2026-06-04',
+        'created_by'   => $user->id,
+    ]);
+
+    $ntp = ProjectNtp::create([
+        'project_id'      => $parent->id,
+        'ntp_no'          => 'NTP-2026-0007',
+        'contractor_name' => 'ABC Builders',
+        'baseline_start'  => '2026-01-01',
+        'baseline_end'    => '2026-06-01',
+        'approved_cost'   => 250000,
+        'status'          => 'issued',
+    ]);
+
+    $child = Project::create([
+        'parent_id'     => $parent->id,
+        'source_ntp_id' => $ntp->id,
+        'project_no'    => 'PRJ-2026-0002-01',
+        'title'         => 'Warehouse Rehab (NTP-2026-0007)',
+        'site'          => 'Main Plant',
+        'asset_id'      => 'Asset A',
+        'class_name'    => 'Major',
+        'priority'      => 'P1 - Urgent',
+        'status_key'    => 'ONGOING',
+        'work_force'    => 'In-house Team',
+        'wr_no'         => 'WR-1',
+        'wr_date'       => '2026-05-04',
+        'dept_owner'    => 'Engineering',
+        'cost_code'     => 'CC-001',
+        'category'      => 'Renovation',
+        'service_type'  => 'Design-Build',
+        'deadline'      => '2026-06-04',
+        'created_by'    => $user->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('projects.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('projects.data', 1)
+            ->where('projects.data.0.sub_projects.0.id', $child->id)
+            // The list shows the NTP number; the project number stays available
+            // for the row tooltip.
+            ->where('projects.data.0.sub_projects.0.ntp_no', 'NTP-2026-0007')
+            ->where('projects.data.0.sub_projects.0.project_no', 'PRJ-2026-0002-01'));
 });
 
 it('reports no sub-projects for a project without children', function () {

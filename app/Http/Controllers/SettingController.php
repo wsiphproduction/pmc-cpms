@@ -14,6 +14,9 @@ class SettingController extends Controller
      * Signatory setting keys mapped to their human-readable role labels.
      * These names are printed as the signatories on generated reports.
      */
+    /** Retention withheld from a billing until the project is completed. */
+    public const DEFAULT_RETENTION_PCT = 5;
+
     private const SIGNATORIES = [
         'signatory_pmd_assistant_manager' => 'PMD Assistant Manager',
         'signatory_pmd_manager'           => 'PMD Manager',
@@ -34,6 +37,7 @@ class SettingController extends Controller
 
         return Inertia::render('system-settings/index', [
             'projectCompletionKpi' => (int) Setting::get('project_completion_kpi', 80),
+            'retentionPct'         => (float) Setting::get('retention_pct', self::DEFAULT_RETENTION_PCT),
             'signatories'          => $signatories,
         ]);
     }
@@ -42,6 +46,7 @@ class SettingController extends Controller
     {
         $rules = [
             'project_completion_kpi' => ['sometimes', 'required', 'integer', 'min:1', 'max:100'],
+            'retention_pct'          => ['sometimes', 'required', 'numeric', 'min:0', 'max:100'],
         ];
         foreach (array_keys(self::SIGNATORIES) as $key) {
             $rules[$key] = ['sometimes', 'nullable', 'string', 'max:191'];
@@ -51,6 +56,10 @@ class SettingController extends Controller
 
         if (array_key_exists('project_completion_kpi', $data)) {
             Setting::set('project_completion_kpi', (string) $data['project_completion_kpi']);
+        }
+
+        if (array_key_exists('retention_pct', $data)) {
+            Setting::set('retention_pct', (string) $data['retention_pct']);
         }
 
         foreach (array_keys(self::SIGNATORIES) as $key) {

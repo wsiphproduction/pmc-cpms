@@ -111,3 +111,107 @@ it('rejects an invalid status on the quick-status endpoint', function () {
         ->patch(route('hub.vof.update-status', [$project, $vof]), ['status' => 'bogus'])
         ->assertSessionHasErrors('status');
 });
+
+it('adds an approved variation order to the project cost', function () {
+    $approver = makeApproverForVof();
+    $project  = makeProjectForVof($approver);
+    $project->update(['budget_base' => 500000, 'budget_total' => 500000]);
+
+    $this->actingAs($approver)->post(route('hub.vof.store', $project), [
+        'title' => 'Extra roofing', 'amount' => 120000,
+    ])->assertRedirect();
+
+    // Raised but not approved yet — the cost must not move.
+    expect((float) $project->fresh()->budget_total)->toBe(500000.0);
+
+    $vof = $project->variationOrders()->firstOrFail();
+    $this->actingAs($approver)
+        ->patch(route('hub.vof.update-status', [$project, $vof]), ['status' => 'approved'])
+        ->assertRedirect();
+
+    expect((float) $project->fresh()->budget_total)->toBe(620000.0)
+        ->and((float) $project->fresh()->budget_base)->toBe(500000.0);
+});
+
+it('keeps a rejected variation order out of the project cost', function () {
+    $approver = makeApproverForVof();
+    $project  = makeProjectForVof($approver);
+    $project->update(['budget_base' => 500000, 'budget_total' => 500000]);
+
+    $this->actingAs($approver)->post(route('hub.vof.store', $project), [
+        'title' => 'Declined scope', 'amount' => 90000,
+    ])->assertRedirect();
+
+    $vof = $project->variationOrders()->firstOrFail();
+    $this->actingAs($approver)
+        ->patch(route('hub.vof.update-status', [$project, $vof]), ['status' => 'rejected'])
+        ->assertRedirect();
+
+    expect((float) $project->fresh()->budget_total)->toBe(500000.0);
+});
+
+it('takes an approved variation back out when it is un-approved or deleted', function () {
+    $approver = makeApproverForVof();
+    $project  = makeProjectForVof($approver);
+    $project->update(['budget_base' => 500000, 'budget_total' => 500000]);
+
+    $this->actingAs($approver)->post(route('hub.vof.store', $project), [
+        'title' => 'Extra roofing', 'amount' => 120000,
+    ])->assertRedirect();
+
+    $vof = $project->variationOrders()->firstOrFail();
+    $approve = fn () => $this->actingAs($approver)
+        ->patch(route('hub.vof.update-status', [$project, $vof]), ['status' => 'approved']);
+
+    $approve()->assertRedirect();
+    expect((float) $project->fresh()->budget_total)->toBe(620000.0);
+
+    // Back to pending.
+    $this->actingAs($approver)
+        ->patch(route('hub.vof.update-status', [$project, $vof]), ['status' => 'pending'])
+        ->assertRedirect();
+    expect((float) $project->fresh()->budget_total)->toBe(500000.0);
+
+    // Re-approved, then deleted outright.
+    $approve()->assertRedirect();
+    $this->actingAs($approver)
+        ->delete(route('hub.vof.destroy', [$project, $vof]))
+        ->assertRedirect();
+
+    expect((float) $project->fresh()->budget_total)->toBe(500000.0);
+});
+
+it('does not fold approved variations into the base when the project form is re-saved', function () {
+    $approver = makeApproverForVof();
+    $project  = makeProjectForVof($approver);
+    $project->update(['budget_base' => 500000, 'budget_total' => 500000]);
+
+    $this->actingAs($approver)->post(route('hub.vof.store', $project), [
+        'title' => 'Extra roofing', 'amount' => 120000,
+    ]);
+    $vof = $project->variationOrders()->firstOrFail();
+    $this->actingAs($approver)
+        ->patch(route('hub.vof.update-status', [$project, $vof]), ['status' => 'approved']);
+
+    expect((float) $project->fresh()->budget_total)->toBe(620000.0);
+
+    // The edit form is prefilled with the base, so re-saving it unchanged must
+    // leave the total where it is rather than compounding the variation.
+    $form = $this->actingAs($approver)->get(route('projects.edit', $project));
+    $prefilled = $form->viewData('page')['props']['project']['project_cost'];
+    expect((float) $prefilled)->toBe(500000.0);
+
+    $this->actingAs($approver)->patch(route('projects.update', $project), [
+        'project_type' => 'minor',
+        'title' => 'VOF Test Project',
+        'project_manager' => (string) $approver->id,
+        'site' => 'Main Plant', 'asset_id' => 'A1', 'cls' => 'Minor',
+        'priority' => '1', 'status' => 'PLANNING', 'work_force' => 'In-House',
+        'wr_no' => 'WR-1', 'wr_date' => '2026-05-04', 'dept_owner' => 'Engineering',
+        'cost_code' => 'CC-001', 'category' => 'General', 'service_type' => 'Repair',
+        'deadline' => '2026-06-04', 'project_cost' => $prefilled,
+    ])->assertRedirect();
+
+    expect((float) $project->fresh()->budget_total)->toBe(620000.0)
+        ->and((float) $project->fresh()->budget_base)->toBe(500000.0);
+});

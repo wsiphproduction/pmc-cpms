@@ -59,6 +59,7 @@ class Project extends Model
         'need_mechanical',
         'notes',
         'budget_total',
+        'budget_base',
         'budget_paid',
         'completion_percent',
         'created_by',
@@ -74,6 +75,7 @@ class Project extends Model
         'need_electrical' => 'boolean',
         'need_mechanical' => 'boolean',
         'budget_total' => 'decimal:2',
+        'budget_base' => 'decimal:2',
         'budget_paid' => 'decimal:2',
         'completion_percent' => 'integer',
         'created_by' => 'integer',
@@ -229,6 +231,24 @@ class Project extends Model
     public function refreshCompletionFromReports(): void
     {
         $this->update(['completion_percent' => $this->weeklyReports()->first()?->completion_pct ?? 0]);
+    }
+
+    /**
+     * Re-derive the project cost: the contracted base plus every approved
+     * variation order. Pending and rejected variations are not authorised
+     * spend, so they leave the figure alone — the same rule billings use,
+     * where only an approved statement counts as paid.
+     *
+     * Called whenever a variation is raised, edited, re-statused or removed,
+     * and whenever the project form re-saves the base cost.
+     */
+    public function refreshBudgetTotal(): void
+    {
+        $approvedVariations = (float) $this->variationOrders()
+            ->where('status', 'approved')
+            ->sum('amount');
+
+        $this->update(['budget_total' => (float) $this->budget_base + $approvedVariations]);
     }
 
     // ── Health / KPI ──────────────────────────────────────────────────────

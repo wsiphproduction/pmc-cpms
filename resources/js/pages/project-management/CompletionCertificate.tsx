@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
+import { escapeHtml, formHeader, openPrintWindow, sigCell } from './hub/printForm';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface CompletionPhoto { path: string; url: string }
@@ -57,9 +58,6 @@ const todayYmd = () => {
     const p = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
-
-const escapeHtml = (s: unknown) =>
-    String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -285,76 +283,9 @@ function Inp({ v, on, type = 'text', ph }: { v: string; on: (v: string) => void;
 }
 
 // ── Printable HTML ──────────────────────────────────────────────────────────
-const printCss = `
-    * { box-sizing: border-box; }
-    body { font-family: 'Times New Roman', Georgia, serif; margin: 34px 40px; color: #000; font-size: 13px; }
-    .hdr { display: grid; grid-template-columns: 64px 1fr 210px; border: 1.5px solid #000; }
-    .hdr .logo { display: flex; align-items: center; justify-content: center; border-right: 1px solid #000; font-weight: 800; font-size: 11px; }
-    .hdr .mid { text-align: center; padding: 6px 8px; border-right: 1px solid #000; }
-    .hdr .mid .c1 { font-weight: 800; font-size: 14px; letter-spacing: .3px; }
-    .hdr .mid .c2 { font-weight: 700; font-size: 9.5px; }
-    .hdr .mid .c3 { font-size: 11px; margin-top: 2px; }
-    .hdr .doc { font-size: 10px; }
-    .hdr .doc div { padding: 4px 8px; border-bottom: 1px solid #000; }
-    .hdr .doc div:last-child { border-bottom: none; }
-    .titlebar { border: 1.5px solid #000; border-top: none; text-align: center; font-weight: 800; font-size: 14px; padding: 6px; letter-spacing: .5px; }
-    h3.sec { font-size: 12.5px; margin: 16px 0 6px; }
-    table.kv { border-collapse: collapse; width: 100%; }
-    table.kv td { padding: 3px 6px; vertical-align: top; }
-    table.kv td.k { width: 165px; }
-    table.box { border-collapse: collapse; width: 100%; }
-    table.box td, table.box th { border: 1px solid #000; padding: 5px 8px; font-size: 12px; }
-    table.box th.hd { background: #e5e7eb; text-align: center; font-weight: 800; }
-    p.para { text-align: justify; line-height: 1.5; margin: 10px 0; }
-    .sig { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; margin-top: 26px; }
-    .sig.two { grid-template-columns: 1fr 1fr; }
-    .sig .cell { border: 1px solid #000; padding: 8px 10px 10px; min-height: 78px; }
-    .sig .role { font-size: 11px; }
-    .sig .name { text-align: center; font-weight: 800; margin-top: 26px; text-transform: uppercase; font-size: 12px; }
-    .sig .line { border-top: 1px solid #000; margin-top: 2px; padding-top: 2px; text-align: center; font-size: 10.5px; }
-    .docimgs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .docimgs img { width: 100%; height: 150px; object-fit: cover; border: 1px solid #000; }
-    @media print { body { margin: 12mm; } .sig { page-break-inside: avoid; } }
-`;
-
-function headerBlock(docNo: string, rev: string, eff: string, title: string) {
-    return `
-    <div class="hdr">
-        <div class="logo">PMC</div>
-        <div class="mid">
-            <div class="c1">PHILSAGA MINING CORPORATION</div>
-            <div class="c2">MINDANAO MINERAL PROCESSING AND REFINING CORPORATION</div>
-            <div class="c3">PROJECT MANAGEMENT DEPARTMENT</div>
-        </div>
-        <div class="doc">
-            <div>Doc No.: ${escapeHtml(docNo)}</div>
-            <div>Rev No.: ${escapeHtml(rev)}</div>
-            <div>Effective: ${escapeHtml(eff)}</div>
-        </div>
-    </div>
-    <div class="titlebar">${escapeHtml(title)}</div>`;
-}
-
-function sigCell(role: string, name: string, title: string) {
-    return `<div class="cell">
-        <div class="role">${escapeHtml(role)}</div>
-        <div class="name">${escapeHtml(name || ' ')}</div>
-        <div class="line">${escapeHtml(title)}</div>
-    </div>`;
-}
-
-function openPrint(title: string, inner: string) {
-    const win = window.open('', '_blank', 'width=980,height=800');
-    if (!win) return;
-    win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title><style>${printCss}</style></head><body>${inner}</body></html>`);
-    win.document.close();
-    win.focus();
-    setTimeout(() => { win.print(); }, 350);
-}
-
 function acceptanceHtml(project: ProjectLite, c: CompletionData | null, s: Signatories) {
     const row = (k: string, v: string) => `<tr><td class="k">${escapeHtml(k)}</td><td>:</td><td>${escapeHtml(v || '')}</td></tr>`;
-    return headerBlock('PMD-PRJ-FRM-06', '00', 'October 05, 2025', 'PROJECT COMPLETION AND ACCEPTANCE CERTIFICATE') + `
+    return formHeader({ docNo: 'PMD-PRJ-FRM-06', rev: '00', effective: 'October 05, 2025', title: 'PROJECT COMPLETION AND ACCEPTANCE CERTIFICATE' }) + `
     <h3 class="sec">PROJECT DETAILS <span style="float:right;font-weight:400;">Reference No.: ${escapeHtml(c?.reference_no || '')}</span></h3>
     <table class="kv">
         ${row('Project Number', project.project_no)}
@@ -406,7 +337,7 @@ function summaryHtml(project: ProjectLite, c: CompletionData | null, s: Signator
         ? `<div class="docimgs">${photos.map(p => `<img src="${escapeHtml(p.url)}" />`).join('')}</div>`
         : `<div style="border:1px solid #000;padding:40px;text-align:center;color:#666;">No documentation photos attached.</div>`;
 
-    return headerBlock('PMD-PRJ-FRM-12', '00', 'November 01, 2025', 'PROJECT COMPLETION SUMMARY') + `
+    return formHeader({ docNo: 'PMD-PRJ-FRM-12', rev: '00', effective: 'November 01, 2025', title: 'PROJECT COMPLETION SUMMARY' }) + `
     <p style="margin:10px 0;"><strong>Date Prepared:</strong> ${escapeHtml(fmtLong(c?.date_prepared))}
         <span style="float:right;">Reference Number: ${escapeHtml(c?.reference_no || '')}</span></p>
 
@@ -461,10 +392,10 @@ function summaryHtml(project: ProjectLite, c: CompletionData | null, s: Signator
 }
 
 export function printAcceptanceCertificate(project: ProjectLite, c: CompletionData | null, s: Signatories) {
-    openPrint(`Acceptance Certificate — ${project.project_no}`, acceptanceHtml(project, c, s));
+    openPrintWindow(`Acceptance Certificate — ${project.project_no}`, acceptanceHtml(project, c, s));
 }
 export function printCompletionSummary(project: ProjectLite, c: CompletionData | null, s: Signatories) {
-    openPrint(`Completion Summary — ${project.project_no}`, summaryHtml(project, c, s));
+    openPrintWindow(`Completion Summary — ${project.project_no}`, summaryHtml(project, c, s));
 }
 
 // ── Panel shown on the project page when status is COMPLETED ─────────────────

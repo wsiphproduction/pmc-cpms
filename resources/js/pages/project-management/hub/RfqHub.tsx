@@ -1,6 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, SubTag, inputStyle } from './Common';
+import { escapeHtml, formHeader, openPrintWindow, orBlank, padRows, sigCell } from './printForm';
 import { useConfirm } from '@/components/useConfirm';
 
 type RfqStatus = 'Awarded' | 'Submitted' | 'Pending' | 'Expired';
@@ -36,13 +37,6 @@ interface RfqPageProps {
 const STATUS_TONE: Record<RfqStatus, 'yellow' | 'green' | 'slate' | 'red'> = {
     Awarded: 'yellow', Submitted: 'green', Pending: 'slate', Expired: 'red',
 };
-
-function escapeHtml(value: string | number | null | undefined): string {
-    if (value == null) return '';
-    return String(value)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
 
 const UNITS = ['—', 'pcs', 'lot', 'set', 'unit', 'lm', 'sqm', 'cbm', 'kg', 'ton', 'hr', 'day', 'wk', 'mo', 'L', 'bag', 'roll', 'sht', 'box'];
 
@@ -691,40 +685,117 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
         }, { title: 'Update Status', confirmLabel: 'Confirm', variant: 'warning' });
     };
 
+    /**
+     * Request for Quotation — PMD-PRJ-FRM-03. Reference No. and Revision No.
+     * are assigned on paper when the form is logged, so they print as blanks.
+     */
     const handlePrint = (row: RfqRow) => {
         const items = row.items ?? [];
         const grandTotal = items.reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
-        const win = window.open('', '_blank', 'width=900,height=700');
-        if (!win) return;
-        win.document.write(`<!DOCTYPE html><html><head>
-            <title>RFQ — ${escapeHtml(row.contractor)}</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; color: #0f172a; }
-                * { box-sizing: border-box; }
-                table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-                th, td { border: 1px solid #e2e8f0; padding: 8px 12px; font-size: 13px; text-align: left; }
-                th { background: #f8fafc; font-weight: 700; }
-                .meta { font-size: 13px; color: #475569; margin-bottom: 4px; }
-                @media print { body { margin: 20px; } }
-            </style>
-        </head><body>
-            <h2>Request for Quotation</h2>
-            <div class="meta"><strong>Contractor:</strong> ${escapeHtml(row.contractor)}</div>
-            <div class="meta"><strong>Sent Date:</strong> ${escapeHtml(row.sent) || '—'}</div>
-            <div class="meta"><strong>Due Date:</strong> ${escapeHtml(row.due) || '—'}</div>
-            <div class="meta"><strong>Status:</strong> ${escapeHtml(row.status)}</div>
-            ${row.scope_of_work ? `<div class="meta"><strong>Scope of Work:</strong> ${escapeHtml(row.scope_of_work)}</div>` : ''}
-            <table>
-                <thead><tr><th>Seq</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total Cost</th></tr></thead>
+        const num = (n: number | null | undefined) =>
+            n == null ? '' : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        // The paper form offers a fixed set of scope options; tick whichever the
+        // stored free-text scope names, and fall back to "Others" when it is set
+        // to something outside the list.
+        const SCOPES = ['Conceptual Design', 'Detailed Drawing', 'Detailed Estimate', 'Preliminary', 'Ballpark Estimate'];
+        const scope = (row.scope_of_work ?? '').trim();
+        const matched = SCOPES.find(o => o.toLowerCase() === scope.toLowerCase());
+        const tick = (on: boolean) => (on ? '&#9746;' : '&#9744;');
+        const scopeCell = `
+            <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
+                <tr>
+                    <td style="padding:1px 0;">${tick(matched === 'Conceptual Design')} Conceptual Design</td>
+                    <td style="padding:1px 0;">${tick(matched === 'Detailed Drawing')} Detailed Drawing</td>
+                    <td style="padding:1px 0;">${tick(matched === 'Detailed Estimate')} Detailed Estimate</td>
+                </tr>
+                <tr>
+                    <td style="padding:1px 0;">${tick(matched === 'Preliminary')} Preliminary</td>
+                    <td style="padding:1px 0;">${tick(matched === 'Ballpark Estimate')} Ballpark Estimate</td>
+                    <td style="padding:1px 0;">${tick(!!scope && !matched)} Others: <span class="fill" style="min-width:70px;">${!matched ? escapeHtml(scope) : ''}</span></td>
+                </tr>
+            </table>`;
+
+        const detail = (k: string, v: string) =>
+            `<tr><td class="k">${escapeHtml(k)}</td><td class="c">:</td><td>${v}</td></tr>`;
+
+        const itemRows = padRows(
+            items.map((i, idx) => `<tr>
+                <td class="num">${idx + 1}</td>
+                <td>${escapeHtml(i.description)}</td>
+                <td class="num">${orBlank(i.qty)}</td>
+                <td class="num">${orBlank(i.unit)}</td>
+                <td class="r">${num(i.unit_cost)}</td>
+                <td class="r">${num(i.total_cost)}</td>
+            </tr>`),
+            10,
+            '<tr class="blank"><td class="num">%N%</td><td></td><td></td><td></td><td></td><td></td></tr>',
+        ).join('');
+
+        const sigs = project.signatories;
+        const inner = formHeader({
+            docNo: 'PMD-PRJ-FRM-03', rev: '00', effective: 'October 05, 2025',
+            sheet: 'Page 1 of 1', title: 'REQUEST FOR QUOTATION',
+        }) + `
+            <div class="secrow">
+                <h3 class="sec" style="margin:0;">PROJECT DETAILS</h3>
+                <div class="refno">Reference No.: <span class="fill"></span></div>
+            </div>
+            <table class="kv">
+                ${detail('Service Contractor', orBlank(row.contractor))}
+                ${detail('Date', orBlank(row.sent))}
+                ${detail('Project Number', orBlank(project.project_no))}
+                ${detail('Revision No.', '<span class="fill"></span>')}
+                ${detail('Project Title', orBlank(project.title))}
+                ${detail('Sub Project', orBlank(row.sub_project_no) || 'N/A')}
+                ${detail('Job Site / Location', orBlank(project.site))}
+                ${detail('Project Owner', orBlank(project.dept_owner))}
+                ${detail('Scope of Work', scopeCell)}
+                ${detail('Date Needed', orBlank(row.due))}
+            </table>
+
+            <div class="sig">
+                ${sigCell('Requested by:', sigs?.prepared_by ?? '', 'Printed Name and Signature')}
+                ${sigCell('Reviewed by:', sigs?.pmd_assistant_manager ?? '', 'PMD Assistant Manager')}
+                ${sigCell('Noted by:', sigs?.pmd_manager ?? '', 'PMD Manager')}
+            </div>
+
+            <div class="instruct">Please submit/list down a conceptual estimate for the deliverables/activities, target duration, and conditions for the above-mentioned project.</div>
+
+            <table class="box">
+                <thead>
+                    <tr>
+                        <th class="hd" style="width:34px;">NO.</th>
+                        <th class="hd">DELIVERABLES, ACTIVITIES AND/OR RENTAL</th>
+                        <th class="hd" style="width:60px;">QTY</th>
+                        <th class="hd" style="width:60px;">UOM</th>
+                        <th class="hd" style="width:100px;">UNIT COST</th>
+                        <th class="hd" style="width:105px;">TOTAL COST</th>
+                    </tr>
+                </thead>
                 <tbody>
-                    ${items.map((i, idx) => `<tr><td>${idx + 1}</td><td>${escapeHtml(i.description)}</td><td>${escapeHtml(i.qty)}</td><td>${escapeHtml(i.unit)}</td><td>${i.unit_cost != null ? i.unit_cost.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}</td><td>${i.total_cost != null ? i.total_cost.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}</td></tr>`).join('')}
-                    <tr><td colspan="5" style="text-align:right;font-weight:700;">Grand Total:</td><td style="font-weight:700;">PhP ${grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td></tr>
+                    ${itemRows}
+                    ${grandTotal > 0 ? `<tr><td colspan="5" class="r" style="font-weight:800;">Grand Total</td><td class="r" style="font-weight:800;">${num(grandTotal)}</td></tr>` : ''}
+                    <tr><td colspan="6" class="band">Other Quotation Details</td></tr>
+                    <tr>
+                        <td class="num">A.</td>
+                        <td>Target Project Duration</td>
+                        <td colspan="4">${row.duration_days != null ? `${escapeHtml(row.duration_days)} Working Days` : ''}</td>
+                    </tr>
+                    <tr>
+                        <td class="num">B.</td>
+                        <td>Terms and Conditions;<br>Inclusions and exclusions</td>
+                        <td colspan="4" style="height:76px;">${[row.terms, row.inclusions, row.exclusions].filter(Boolean).map(t => escapeHtml(t)).join('<br>')}</td>
+                    </tr>
                 </tbody>
             </table>
-        </body></html>`);
-        win.document.close();
-        win.focus();
-        setTimeout(() => { win.print(); win.close(); }, 250);
+
+            <div class="sig two tight" style="margin-top:14px;">
+                ${sigCell('Prepared by:', sigs?.prepared_by ?? '', 'Printed Name and Signature')}
+                ${sigCell('Noted by: (END USER)', '', 'Printed Name and Signature')}
+            </div>`;
+
+        openPrintWindow(`RFQ — ${project.project_no} — ${row.contractor}`, inner);
     };
 
     // Quotation stays editable at any status until an NTP has been created for it.
