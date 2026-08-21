@@ -1,7 +1,7 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { DataTable, HubProject, HubShell, InfoStrip, SectionTitle, SubTag } from './Common';
-import { escapeHtml, formHeader, openPrintWindow, orBlank, padRows, sigCell } from './printForm';
+import { escapeHtml, formHeader, openPrintWindow, orBlank, padRows, sigCell, useLogoSrc } from './printForm';
 import { useConfirm } from '@/components/useConfirm';
 
 interface ScopeItem {
@@ -52,6 +52,7 @@ function NtpStatusBadge({ status }: { status: string }) {
 export default function NtpHub({ project, ntps, canEdit = true }: { project: HubProject; ntps: NtpData[]; canEdit?: boolean }) {
     const [selected, setSelected] = useState<NtpData | null>(null);
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+    const logo = useLogoSrc();
     const hasSubRows = ntps.some(n => !!n.sub_project_id);
 
     // Only rejected NTPs may be deleted — issued/pending ones are protected.
@@ -91,7 +92,7 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
         const sigs = project.signatories;
         const inner = formHeader({
             docNo: 'PMD-PRJ-FRM-04', rev: '00', effective: 'October 05, 2025',
-            sheet: 'Page 1 of 1', title: 'NOTICE TO PROCEED',
+            sheet: 'Page 1 of 1', title: 'NOTICE TO PROCEED', logo,
         }) + `
             <div class="secrow">
                 <h3 class="sec" style="margin:0;">PROJECT DETAILS</h3>

@@ -1,7 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, SubTag, inputStyle } from './Common';
-import { escapeHtml, formHeader, openPrintWindow, orBlank, padRows, sigCell } from './printForm';
+import { escapeHtml, formHeader, openPrintWindow, orBlank, padRows, sigCell, useLogoSrc } from './printForm';
 import { useConfirm } from '@/components/useConfirm';
 
 type RfqStatus = 'Awarded' | 'Submitted' | 'Pending' | 'Expired';
@@ -625,6 +625,7 @@ function RfqHistoryModal({ row, onClose }: { row: RfqRow; onClose: () => void })
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }: { project: HubProject; rfqs: RfqRow[]; suppliers?: { name: string; email: string }[]; canEdit?: boolean }) {
+    const logo = useLogoSrc();
     const [dispatchContractor, setDispatchContractor] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [showSuccess, setShowSuccess]   = useState(false);
@@ -735,7 +736,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
         const sigs = project.signatories;
         const inner = formHeader({
             docNo: 'PMD-PRJ-FRM-03', rev: '00', effective: 'October 05, 2025',
-            sheet: 'Page 1 of 1', title: 'REQUEST FOR QUOTATION',
+            sheet: 'Page 1 of 1', title: 'REQUEST FOR QUOTATION', logo,
         }) + `
             <div class="secrow">
                 <h3 class="sec" style="margin:0;">PROJECT DETAILS</h3>

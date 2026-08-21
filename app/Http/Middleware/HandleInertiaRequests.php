@@ -43,6 +43,10 @@ class HandleInertiaRequests extends Middleware
         return array_merge(parent::share($request), [
             ...parent::share($request),
             'name' => config('app.name'),
+            // Absolute URL for the PMC crest on the printed PMD forms. Resolved
+            // by the asset helper so it still points at the right place when the
+            // app is served from a sub-directory or a separate asset host.
+            'logo_url' => asset('logow.png'),
             'quote' => ['message' => trim($message), 'author' => trim($author)],
             'flash' => [
                 'success' => $request->session()->get('success'),

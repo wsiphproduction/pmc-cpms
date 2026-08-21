@@ -10,8 +10,19 @@
  * rather than omitted, so the form still has somewhere to write it.
  */
 
-/** Both header crests. The right-hand seal is the same mark on the paper form. */
-export const LOGO_SRC = '/logow.png';
+import { usePage } from '@inertiajs/react';
+
+/**
+ * Absolute URL of the PMC crest, shared from the server by Laravel's asset()
+ * helper. Hard-coding "/logow.png" assumed the app is served from the domain
+ * root, which breaks under a sub-directory or a separate asset host.
+ *
+ * Both header crests use this mark — it is the same seal twice on the paper
+ * form.
+ */
+export function useLogoSrc(): string {
+    return (usePage().props as { logo_url?: string }).logo_url ?? '/logow.png';
+}
 
 export function escapeHtml(value: unknown): string {
     if (value == null) return '';
@@ -96,16 +107,16 @@ export const PRINT_CSS = `
  * The controlled-document banner. `sheet` is omitted on the forms that do not
  * carry a sheet count.
  */
-export function formHeader(opts: { docNo: string; rev: string; effective: string; sheet?: string; title: string }) {
+export function formHeader(opts: { docNo: string; rev: string; effective: string; sheet?: string; title: string; logo: string }) {
     return `
     <div class="hdr">
-        <div class="logo"><img src="${LOGO_SRC}" alt="PMC"></div>
+        <div class="logo"><img src="${escapeHtml(opts.logo)}" alt="PMC"></div>
         <div class="mid">
             <div class="c1">PHILSAGA MINING CORPORATION</div>
             <div class="c2">MINDANAO MINERAL PROCESSING AND REFINING CORPORATION</div>
             <div class="c3">PROJECT MANAGEMENT DEPARTMENT</div>
         </div>
-        <div class="logo"><img src="${LOGO_SRC}" alt=""></div>
+        <div class="logo"><img src="${escapeHtml(opts.logo)}" alt=""></div>
         <div class="doc">
             <div>Doc No.: ${escapeHtml(opts.docNo)}</div>
             <div>Rev No.: ${escapeHtml(opts.rev)}</div>

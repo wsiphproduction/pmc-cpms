@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
-import { escapeHtml, formHeader, openPrintWindow, sigCell } from './hub/printForm';
+import { escapeHtml, formHeader, openPrintWindow, sigCell, useLogoSrc } from './hub/printForm';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface CompletionPhoto { path: string; url: string }
@@ -283,9 +283,9 @@ function Inp({ v, on, type = 'text', ph }: { v: string; on: (v: string) => void;
 }
 
 // ── Printable HTML ──────────────────────────────────────────────────────────
-function acceptanceHtml(project: ProjectLite, c: CompletionData | null, s: Signatories) {
+function acceptanceHtml(project: ProjectLite, c: CompletionData | null, s: Signatories, logo: string) {
     const row = (k: string, v: string) => `<tr><td class="k">${escapeHtml(k)}</td><td>:</td><td>${escapeHtml(v || '')}</td></tr>`;
-    return formHeader({ docNo: 'PMD-PRJ-FRM-06', rev: '00', effective: 'October 05, 2025', title: 'PROJECT COMPLETION AND ACCEPTANCE CERTIFICATE' }) + `
+    return formHeader({ docNo: 'PMD-PRJ-FRM-06', rev: '00', effective: 'October 05, 2025', title: 'PROJECT COMPLETION AND ACCEPTANCE CERTIFICATE', logo }) + `
     <h3 class="sec">PROJECT DETAILS <span style="float:right;font-weight:400;">Reference No.: ${escapeHtml(c?.reference_no || '')}</span></h3>
     <table class="kv">
         ${row('Project Number', project.project_no)}
@@ -317,7 +317,7 @@ function acceptanceHtml(project: ProjectLite, c: CompletionData | null, s: Signa
     </div>`;
 }
 
-function summaryHtml(project: ProjectLite, c: CompletionData | null, s: Signatories) {
+function summaryHtml(project: ProjectLite, c: CompletionData | null, s: Signatories, logo: string) {
     const planSlip = daysBetween(c?.plan_actual_end, c?.plan_baseline_end);
     const conSlip  = daysBetween(c?.con_actual_end, c?.con_baseline_end);
     const baseline = c?.baseline_amount ?? null;
@@ -337,7 +337,7 @@ function summaryHtml(project: ProjectLite, c: CompletionData | null, s: Signator
         ? `<div class="docimgs">${photos.map(p => `<img src="${escapeHtml(p.url)}" />`).join('')}</div>`
         : `<div style="border:1px solid #000;padding:40px;text-align:center;color:#666;">No documentation photos attached.</div>`;
 
-    return formHeader({ docNo: 'PMD-PRJ-FRM-12', rev: '00', effective: 'November 01, 2025', title: 'PROJECT COMPLETION SUMMARY' }) + `
+    return formHeader({ docNo: 'PMD-PRJ-FRM-12', rev: '00', effective: 'November 01, 2025', title: 'PROJECT COMPLETION SUMMARY', logo }) + `
     <p style="margin:10px 0;"><strong>Date Prepared:</strong> ${escapeHtml(fmtLong(c?.date_prepared))}
         <span style="float:right;">Reference Number: ${escapeHtml(c?.reference_no || '')}</span></p>
 
@@ -391,11 +391,11 @@ function summaryHtml(project: ProjectLite, c: CompletionData | null, s: Signator
     </div>`;
 }
 
-export function printAcceptanceCertificate(project: ProjectLite, c: CompletionData | null, s: Signatories) {
-    openPrintWindow(`Acceptance Certificate — ${project.project_no}`, acceptanceHtml(project, c, s));
+export function printAcceptanceCertificate(project: ProjectLite, c: CompletionData | null, s: Signatories, logo: string) {
+    openPrintWindow(`Acceptance Certificate — ${project.project_no}`, acceptanceHtml(project, c, s, logo));
 }
-export function printCompletionSummary(project: ProjectLite, c: CompletionData | null, s: Signatories) {
-    openPrintWindow(`Completion Summary — ${project.project_no}`, summaryHtml(project, c, s));
+export function printCompletionSummary(project: ProjectLite, c: CompletionData | null, s: Signatories, logo: string) {
+    openPrintWindow(`Completion Summary — ${project.project_no}`, summaryHtml(project, c, s, logo));
 }
 
 // ── Panel shown on the project page when status is COMPLETED ─────────────────
@@ -407,6 +407,7 @@ export function CompletionPanel({ project, completion, signatories, canEdit }: {
 }) {
     const [showModal, setShowModal] = useState(false);
     const filled = !!completion;
+    const logo = useLogoSrc();
 
     const btn = (bg: string, color: string, border: string): React.CSSProperties => ({
         padding: '8px 16px', borderRadius: '8px', border: `1px solid ${border}`, background: bg, color,
@@ -437,13 +438,13 @@ export function CompletionPanel({ project, completion, signatories, canEdit }: {
                             {filled ? 'Edit Details' : 'Fill Details'}
                         </button>
                     )}
-                    <button onClick={() => printAcceptanceCertificate(project, completion, signatories)} disabled={!filled}
+                    <button onClick={() => printAcceptanceCertificate(project, completion, signatories, logo)} disabled={!filled}
                         title={filled ? '' : 'Fill in the completion details first'}
                         style={{ ...btn(filled ? '#16a34a' : '#f1f5f9', filled ? '#fff' : '#94a3b8', filled ? '#16a34a' : '#e2e8f0'), cursor: filled ? 'pointer' : 'not-allowed' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Acceptance Certificate
                     </button>
-                    <button onClick={() => printCompletionSummary(project, completion, signatories)} disabled={!filled}
+                    <button onClick={() => printCompletionSummary(project, completion, signatories, logo)} disabled={!filled}
                         title={filled ? '' : 'Fill in the completion details first'}
                         style={{ ...btn(filled ? '#0f766e' : '#f1f5f9', filled ? '#fff' : '#94a3b8', filled ? '#0f766e' : '#e2e8f0'), cursor: filled ? 'pointer' : 'not-allowed' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>

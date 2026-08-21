@@ -288,3 +288,20 @@ it('keeps an existing billing on its original rate when the setting changes', fu
     $latest = App\Models\ProjectBilling::where('project_id', $project->id)->latest('id')->firstOrFail();
     expect((float) $latest->retention_pct)->toBe(10.0);
 });
+
+it('accepts a fractional percent of project cost', function () {
+    $approver = makeApproverForRfp();
+    $project  = makeProjectForRfp($approver);
+
+    // Billing a small amount against a large contract lands on a fractional
+    // percent. progress_pct was a tinyint, so this insert used to fail
+    // outright rather than round.
+    $this->actingAs($approver)->post(route('hub.rfp.store', $project), [
+        'billing_type' => 'Milestone (Progress)',
+        'amount'       => 5000,
+        'progress_pct' => 0.05,
+    ])->assertRedirect()->assertSessionHasNoErrors();
+
+    $billing = App\Models\ProjectBilling::where('project_id', $project->id)->firstOrFail();
+    expect((float) $billing->progress_pct)->toBe(0.05);
+});
