@@ -1,8 +1,8 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { DataTable, HubProject, HubShell, InfoStrip, SectionTitle, SubTag } from './Common';
-import { escapeHtml, formHeader, openPrintWindow, orBlank, padRows, sigCell, useLogoSrc } from './printForm';
 import { useConfirm } from '@/components/useConfirm';
+import { SendConfirmModal } from './SendConfirmModal';
 
 interface ScopeItem {
     seq: number;
@@ -11,6 +11,17 @@ interface ScopeItem {
     unit: string | null;
     unit_cost: number | null;
     total_cost: number | null;
+}
+
+interface ApprovalStep {
+    sequence: number;
+    role: string;
+    role_label: string;
+    status: 'pending' | 'approved' | 'rejected';
+    is_current: boolean;
+    actor: string | null;
+    acted_at: string | null;
+    remarks: string | null;
 }
 
 const peso = (n: number) => `Php ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -34,6 +45,12 @@ interface NtpData {
     sub_project_no: string | null;
     duration_days: number | null;
     scope_items: ScopeItem[];
+    prepared_by: string | null;
+    /** The sign-off chain, in signing order — stamped onto the printout. */
+    approvals: ApprovalStep[];
+    /** Contractor address carried over from the source RFQ. */
+    vendor_email: string | null;
+    vendor_notified_at: string | null;
 }
 
 const NTP_STATUS_META: Record<string, { label: string; bg: string; border: string; color: string }> = {
@@ -51,8 +68,8 @@ function NtpStatusBadge({ status }: { status: string }) {
 
 export default function NtpHub({ project, ntps, canEdit = true }: { project: HubProject; ntps: NtpData[]; canEdit?: boolean }) {
     const [selected, setSelected] = useState<NtpData | null>(null);
+    const [sendNtp, setSendNtp] = useState<NtpData | null>(null);
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
-    const logo = useLogoSrc();
     const hasSubRows = ntps.some(n => !!n.sub_project_id);
 
     // Only rejected NTPs may be deleted — issued/pending ones are protected.
@@ -62,87 +79,27 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
         }, { title: 'Delete NTP', confirmLabel: 'Delete', variant: 'danger' });
     };
 
+    const handleSendToVendor = (recipientEmail: string, additionalRecipients: string[], ccSelf: boolean) => {
+        const ntp = sendNtp;
+        setSendNtp(null);
+        if (!ntp) return;
+        router.post(route('hub.ntp.send', [project.id, ntp.id]), {
+            recipient_email: recipientEmail,
+            additional_recipients: additionalRecipients,
+            cc_self: ccSelf,
+        }, { preserveScroll: true });
+    };
+
     /**
-     * Notice to Proceed — PMD-PRJ-FRM-04. Built from the record rather than
-     * scraped from the screen, so the print matches the controlled form
-     * instead of the hub layout.
+     * Notice to Proceed — PMD-PRJ-FRM-04, rendered to PDF server-side and
+     * previewed in a new tab. The approval stamps on the form come from the
+     * chain itself, which is why the server builds it rather than the browser.
      */
     const handlePrint = () => {
         if (!selected) return;
-
-        const scopeRows = padRows(
-            selected.scope_items.map((item, idx) => `<tr>
-                <td class="num">${idx + 1}</td>
-                <td>${escapeHtml(item.description)}</td>
-                <td class="num">${orBlank(item.qty)}</td>
-                <td class="num">${orBlank(item.unit)}</td>
-            </tr>`),
-            10,
-            '<tr class="blank"><td class="num">%N%</td><td></td><td></td><td></td></tr>',
-        ).join('');
-
-        // A-E stay blank on the paper form for hand-written conditions.
-        const termRows = ['A', 'B', 'C', 'D', 'E']
-            .map(letter => `<tr class="blank"><td class="num">${letter}</td><td colspan="3"></td></tr>`)
-            .join('');
-
-        const detail = (k: string, v: string) =>
-            `<tr><td class="k">${escapeHtml(k)}</td><td class="c">:</td><td>${v}</td></tr>`;
-
-        const sigs = project.signatories;
-        const inner = formHeader({
-            docNo: 'PMD-PRJ-FRM-04', rev: '00', effective: 'October 05, 2025',
-            sheet: 'Page 1 of 1', title: 'NOTICE TO PROCEED', logo,
-        }) + `
-            <div class="secrow">
-                <h3 class="sec" style="margin:0;">PROJECT DETAILS</h3>
-                <div class="refno">N.T.P. Number: <b>${escapeHtml(selected.ntp_no)}</b></div>
-            </div>
-            <table class="kv">
-                ${detail('Project Number', orBlank(project.project_no))}
-                ${detail('Project Title', orBlank(project.title))}
-                ${detail('Sub-Project Title', orBlank(selected.sub_project_no) || 'N/A')}
-                ${detail('Job Site / Location', orBlank(project.site))}
-                ${detail('Service Contractor', orBlank(selected.contractor))}
-                ${detail('Project Owner', orBlank(project.dept_owner))}
-                ${detail('Cost Code', orBlank(project.cost_code))}
-                ${detail('Baseline Project Duration', selected.duration_days != null ? `${escapeHtml(selected.duration_days)} WORKING DAYS` : '')}
-                ${detail('Baseline Start Date', orBlank(selected.baseline_start))}
-                ${detail('Baseline End Date', orBlank(selected.baseline_end))}
-                ${detail('Project Cost', `Php ${selected.approved_cost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)}
-            </table>
-
-            <table class="box" style="margin-top:12px;">
-                <thead>
-                    <tr>
-                        <th class="hd" style="width:44px;">Item</th>
-                        <th class="hd">Scope of Work</th>
-                        <th class="hd" style="width:90px;">Quantity</th>
-                        <th class="hd" style="width:90px;">UOM</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${scopeRows}
-                    <tr><td colspan="4" class="band">Other Terms and Conditions</td></tr>
-                    ${termRows}
-                </tbody>
-            </table>
-
-            <div class="note">Note: Please attach a copy of the original quotation from the service contractor as a reference.</div>
-
-            <div class="sig tight">
-                ${sigCell('Prepared by:', sigs?.prepared_by ?? '', 'Project Management Engineer')}
-                ${sigCell('Reviewed by:', sigs?.pmd_assistant_manager ?? '', 'PMD Assistant Manager')}
-                ${sigCell('Noted by:', sigs?.pmd_manager ?? '', 'PMD Manager')}
-            </div>
-            <div class="sig tight">
-                ${sigCell('Noted by:', '', 'Mine Division Manager')}
-                ${sigCell('Checked by:', '', 'Project Owner Representative')}
-                ${sigCell('Received by:', '', 'Service Contractor Representative')}
-            </div>`;
-
-        openPrintWindow(`Notice to Proceed — ${selected.ntp_no}`, inner);
+        window.open(route('print.ntp', [selected.sub_project_id ?? project.id, selected.id]), '_blank');
     };
+
 
     // ── List view ─────────────────────────────────────────────────────────────
     if (!selected) {
@@ -210,8 +167,9 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                                                 </button>
                                             ) : (
                                                 <>
-                                                    {/* Sub-project: one per issued NTP. Create it, or jump to it if it exists. */}
-                                                    {ntp.status === 'issued' && ntp.spawned_sub_id && (
+                                                    {/* Sub-projects are raised in the Sub-Projects section now; this
+                                                        only links to one spawned from this NTP before that change. */}
+                                                    {ntp.spawned_sub_id && (
                                                         <button
                                                             type="button"
                                                             title={`Open sub-project ${ntp.spawned_sub_no ?? ''}`}
@@ -220,17 +178,6 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                                                         >
                                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M7 16l4-4 3 3 5-5"/></svg>
                                                             View Sub-Project
-                                                        </button>
-                                                    )}
-                                                    {canEdit && ntp.status === 'issued' && !ntp.spawned_sub_id && (
-                                                        <button
-                                                            type="button"
-                                                            title="Create a sub-project from this issued NTP"
-                                                            onClick={() => router.visit(route('projects.create', { parent: project.id, ntp: ntp.id }))}
-                                                            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #a7f3d0', background: '#ecfdf5', color: '#047857', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                                                        >
-                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                                                            Create Sub-Project
                                                         </button>
                                                     )}
                                                     {canEdit && ntp.status === 'rejected' && (
@@ -260,6 +207,20 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
     // ── Detail / print view ───────────────────────────────────────────────────
     return (
         <HubShell>
+            {confirmDialog}
+            {sendNtp && (
+                <SendConfirmModal
+                    contractor={sendNtp.contractor}
+                    dueDate={sendNtp.baseline_start}
+                    dueLabel="Baseline Start"
+                    email={sendNtp.vendor_email ?? ''}
+                    title={`Send NTP ${sendNtp.ntp_no} to Vendor`}
+                    sendLabel="Send NTP"
+                    note={`${sendNtp.contractor} will be told their Notice to Proceed is approved and issued, with the baseline dates and approved cost.`}
+                    onClose={() => setSendNtp(null)}
+                    onSend={handleSendToVendor}
+                />
+            )}
             <div style={{ borderBottom: '2px solid #059669', paddingBottom: '14px', marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <button
@@ -275,14 +236,32 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                 </div>
                 <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f172a' }}>NTP#: {selected.ntp_no}</div>
-                    <button
-                        type="button"
-                        onClick={handlePrint}
-                        style={{ marginTop: '6px', padding: '5px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                    >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                        Print Document
-                    </button>
+                    <div style={{ marginTop: '6px', display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        <button
+                            type="button"
+                            onClick={handlePrint}
+                            style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: '12px', display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                        >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                            Print Document
+                        </button>
+                        {canEdit && selected.status === 'issued' && !selected.sub_project_id && (
+                            <button
+                                type="button"
+                                onClick={() => setSendNtp(selected)}
+                                title={selected.vendor_notified_at ? `Already sent ${selected.vendor_notified_at} — sending again re-notifies the contractor` : 'Email this NTP to the contractor'}
+                                style={{ padding: '5px 12px', borderRadius: '6px', border: 'none', background: '#059669', color: '#fff', cursor: 'pointer', fontSize: '12px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
+                            >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                                {selected.vendor_notified_at ? 'Re-send to Vendor' : 'Send to Vendor'}
+                            </button>
+                        )}
+                    </div>
+                    {selected.vendor_notified_at && (
+                        <div style={{ marginTop: '5px', fontSize: '11px', color: '#15803d', fontWeight: 600 }}>
+                            ✓ Sent to contractor {selected.vendor_notified_at}
+                        </div>
+                    )}
                 </div>
             </div>
 
