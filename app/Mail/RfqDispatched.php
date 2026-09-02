@@ -30,6 +30,11 @@ class RfqDispatched extends Mailable
     {
         return new Content(
             view: 'mail.rfq-dispatched',
+            with: [
+                // Suppliers have no accounts: this link, and the unguessable
+                // token in it, is how they reach their quotation form.
+                'portalUrl' => $this->rfq->portalUrl(),
+            ],
         );
     }
 }

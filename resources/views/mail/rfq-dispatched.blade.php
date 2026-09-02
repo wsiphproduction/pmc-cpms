@@ -86,6 +86,32 @@
                     </td>
                 </tr>
 
+                {{-- Quotation template download --}}
+                <tr>
+                    <td style="padding:0 36px 24px;">
+                        <table width="100%" cellpadding="0" cellspacing="0" style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
+                            <tr>
+                                <td style="padding:20px 24px;" align="center">
+                                    <div style="font-size:10px;font-weight:800;color:#b45309;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">
+                                        Submit your quotation online
+                                    </div>
+                                    <p style="margin:0 0 16px;font-size:13px;color:#78350f;line-height:1.7;">
+                                        No account or download needed &mdash; open the secure link below, fill in your quotation and send it to us. You can save your progress and come back to the same link at any time.
+                                    </p>
+                                    <a href="{{ $portalUrl }}"
+                                       style="display:inline-block;background:#b45309;color:#ffffff;font-size:13.5px;font-weight:800;text-decoration:none;padding:12px 28px;border-radius:8px;">
+                                        Open Your Quotation Form
+                                    </a>
+                                    <p style="margin:14px 0 0;font-size:11px;color:#92400e;line-height:1.6;word-break:break-all;">
+                                        If the button does not work, copy this link into your browser:<br />
+                                        <span style="color:#b45309;">{{ $portalUrl }}</span>
+                                    </p>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+
                 {{-- Instructions --}}
                 <tr>
                     <td style="padding:0 36px 28px;">
@@ -96,7 +122,9 @@
                                         Submission Instructions
                                     </div>
                                     <ul style="margin:0;padding-left:18px;font-size:12.5px;color:#1e40af;line-height:2;">
+                                        <li>Open the quotation form above and complete every field.</li>
                                         <li>Prepare your itemized quotation based on the project scope.</li>
+                                        <li>Press <strong>Save</strong> to keep a draft, or <strong>Save &amp; Send</strong> to submit it to us.</li>
                                         <li>Submit your quotation on or before the due date indicated above.</li>
                                         <li>For clarifications, reply to this email or contact the project owner directly.</li>
                                         <li>All submitted quotes are treated with strict confidentiality.</li>
@@ -118,7 +146,7 @@
                 <tr>
                     <td style="padding:24px 36px;">
                         <p style="margin:0 0 4px;font-size:13px;color:#475569;line-height:1.6;">
-                            This RFQ was sent on behalf of <strong style="color:#1e293b;">{{ config('app.name') }}</strong>.
+                            Keep this email &mdash; the quotation link is unique to you. This RFQ was sent on behalf of <strong style="color:#1e293b;">{{ config('app.name') }}</strong>.
                             Please do not reply directly to this automated message.
                         </p>
                         <p style="margin:12px 0 0;font-size:11px;color:#94a3b8;">

@@ -34,6 +34,37 @@ class Supplier extends Model
         'created_by' => 'integer',
     ];
 
+    /**
+     * Split a stored contact string into individual addresses.
+     *
+     * A supplier commonly quotes through several mailboxes, so `email` holds a
+     * comma- (or semicolon-) separated list. Everything that sends to a supplier
+     * goes through here rather than parsing the column itself.
+     *
+     * @return array<int, string>
+     */
+    public static function parseEmails(?string $value): array
+    {
+        return collect(preg_split('/[,;]+/', (string) $value) ?: [])
+            ->map(fn ($email) => trim($email))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /** The stored list, normalized back to one canonical string. */
+    public static function normalizeEmails(?string $value): ?string
+    {
+        return implode(', ', self::parseEmails($value)) ?: null;
+    }
+
+    /** @return array<int, string> */
+    public function getEmailsAttribute(): array
+    {
+        return self::parseEmails($this->email);
+    }
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

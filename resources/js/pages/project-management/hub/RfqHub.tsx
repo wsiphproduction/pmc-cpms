@@ -1,12 +1,42 @@
 import { router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, SubTag, inputStyle } from './Common';
-import { escapeHtml, formHeader, openPrintWindow, orBlank, padRows, sigCell, useLogoSrc } from './printForm';
+import { SendConfirmModal } from './SendConfirmModal';
 import { useConfirm } from '@/components/useConfirm';
 
 type RfqStatus = 'Awarded' | 'Submitted' | 'Pending' | 'Expired';
 
 interface RfqItem { seq: number; description: string | null; qty: number | null; unit: string | null; unit_cost: number | null; total_cost: number | null }
+
+/** One offer against an RFQ. Exactly one per RFQ is `is_final`. */
+interface QuotationRow {
+    id: number;
+    seq: number;
+    label: string | null;
+    /** The label, or "Quotation #N" when it has none. */
+    name: string;
+    is_final: boolean;
+    /** Supplier lifecycle: a draft is not yet on the table. */
+    status: 'draft' | 'submitted' | 'received';
+    /** 'supplier' when filled in through the portal, 'staff' when typed here. */
+    origin: 'staff' | 'supplier';
+    /** False while the supplier still has it as an unsent draft. */
+    selectable: boolean;
+    submitted_at: string | null;
+    received_at: string | null;
+    due: string;
+    due_raw: string | null;
+    scope_of_work: string | null;
+    duration_days: number | null;
+    terms: string | null;
+    inclusions: string | null;
+    exclusions: string | null;
+    quotation_file: string | null;
+    grand_total: number;
+    created_at: string;
+    items: RfqItem[];
+}
+
 interface RfqRow {
     id: number;
     contractor: string;
@@ -24,19 +54,22 @@ interface RfqRow {
     has_ntp: boolean;
     ntp_status?: 'pending_review' | 'issued' | 'rejected' | null;
     audit_trail?: { action: string; user: string; date: string; type: string; fields?: { field: string; old: string; new: string }[] }[];
+    /** The final quotation's items — what this row is costed and NTP'd on. */
     items?: RfqItem[];
+    quotations: QuotationRow[];
+    final_quotation_id: number | null;
     sub_project_id: number | null;
     sub_project_no: string | null;
-}
-
-interface RfqPageProps {
-    auth: { user: { email: string } };
-    [key: string]: unknown;
 }
 
 const STATUS_TONE: Record<RfqStatus, 'yellow' | 'green' | 'slate' | 'red'> = {
     Awarded: 'yellow', Submitted: 'green', Pending: 'slate', Expired: 'red',
 };
+
+/** A supplier may list several mailboxes; the first is the recipient, the rest are CC'd. */
+function splitEmails(value: string | null | undefined): string[] {
+    return (value ?? '').split(/[,;]+/).map(e => e.trim()).filter(Boolean);
+}
 
 const UNITS = ['—', 'pcs', 'lot', 'set', 'unit', 'lm', 'sqm', 'cbm', 'kg', 'ton', 'hr', 'day', 'wk', 'mo', 'L', 'bag', 'roll', 'sht', 'box'];
 
@@ -85,19 +118,20 @@ function QuotationRows({ rows, onRowChange }: {
 }
 
 // ── RFQ View Modal ─────────────────────────────────────────────────────────
-function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; project: HubProject; onClose: () => void; canEdit?: boolean }) {
-    const [scope, setScope]           = useState(row.scope_of_work ?? '');
-    const [due, setDue]               = useState(row.due_raw ?? '');
-    const [duration, setDuration]     = useState(row.duration_days?.toString() ?? '');
-    const [terms, setTerms]           = useState(row.terms ?? '');
-    const [inclusions, setInclusions] = useState(row.inclusions ?? '');
-    const [exclusions, setExclusions] = useState(row.exclusions ?? '');
+function RfqViewModal({ row, quotation, project, onClose, canEdit = true }: { row: RfqRow; quotation: QuotationRow; project: HubProject; onClose: () => void; canEdit?: boolean }) {
+    const [label, setLabel]           = useState(quotation.label ?? '');
+    const [scope, setScope]           = useState(quotation.scope_of_work ?? '');
+    const [due, setDue]               = useState(quotation.due_raw ?? '');
+    const [duration, setDuration]     = useState(quotation.duration_days?.toString() ?? '');
+    const [terms, setTerms]           = useState(quotation.terms ?? '');
+    const [inclusions, setInclusions] = useState(quotation.inclusions ?? '');
+    const [exclusions, setExclusions] = useState(quotation.exclusions ?? '');
     const [saving, setSaving]         = useState(false);
     const [error, setError]           = useState('');
     const [quotationFile, setQuotationFile] = useState<File | null>(null);
     const [rows, setRows]             = useState<RfqItem[]>(() =>
         Array.from({ length: 10 }, (_, i) => {
-            const src = row.items?.[i];
+            const src = quotation.items?.[i];
             return {
                 seq:         i + 1,
                 description: src?.description ?? null,
@@ -140,6 +174,7 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
         setSaving(true);
 
         const basePayload = {
+            label:            label.trim() || null,
             scope_of_work:    scope,
             due_date:         due || null,
             duration_days:    duration || null,
@@ -151,19 +186,18 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
 
         const opts = { preserveScroll: true, onSuccess: onClose, onFinish: () => setSaving(false) };
 
+        const target = route('hub.rfq.quotations.update', [project.id, row.id, quotation.id]);
+
         if (quotationFile) {
             // PHP only parses $_FILES for POST — use method-spoofed POST so the file is accessible
-            router.post(route('hub.rfq.update', [project.id, row.id]),
-                { ...basePayload, _method: 'patch', quotation_file: quotationFile },
-                opts,
-            );
+            router.post(target, { ...basePayload, _method: 'patch', quotation_file: quotationFile }, opts);
         } else {
-            router.patch(route('hub.rfq.update', [project.id, row.id]), basePayload, opts);
+            router.patch(target, basePayload, opts);
         }
     };
 
     return (
-        <Modal title="RFQ & Quotation Details" onClose={onClose} size="900px"
+        <Modal title={`${quotation.name}${quotation.is_final ? ' (Final)' : ''} — ${row.contractor}`} onClose={onClose} size="900px"
             footer={<>
                 <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Close</button>
                 {canEdit && (
@@ -174,6 +208,25 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
             </>}
         >
             {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginBottom: '14px' }}>{error}</div>}
+
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', marginBottom: '18px' }}>
+                <div style={{ flex: 1 }}>
+                    <Field label="Quotation Label (Optional)">
+                        <input
+                            value={label}
+                            onChange={e => setLabel(e.target.value)}
+                            placeholder={`e.g. Revised offer — defaults to "Quotation #${quotation.seq}"`}
+                            disabled={!canEdit}
+                            style={inputStyle}
+                        />
+                    </Field>
+                </div>
+                <div style={{ paddingBottom: '8px' }}>
+                    {quotation.is_final
+                        ? <Badge tone="green">Final quotation</Badge>
+                        : <Badge tone="slate">Not final</Badge>}
+                </div>
+            </div>
 
             <ModalSection>I. Project Specifications</ModalSection>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '22px' }}>
@@ -261,10 +314,10 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
                         </div>
                     )}
                 </div>
-                {row.quotation_file && (
+                {quotation.quotation_file && (
                     <div style={{ flexShrink: 0, paddingTop: '20px' }}>
                         <a
-                            href={row.quotation_file}
+                            href={quotation.quotation_file}
                             target="_blank"
                             rel="noreferrer"
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb', fontSize: '12px', fontWeight: 700, textDecoration: 'none' }}
@@ -280,108 +333,182 @@ function RfqViewModal({ row, project, onClose, canEdit = true }: { row: RfqRow; 
     );
 }
 
-// ── Send Confirm Modal ─────────────────────────────────────────────────────
-function SendConfirmModal({ contractor, dueDate, email, onClose, onSend }: {
-    contractor: string;
-    dueDate: string;
-    email: string;
+const QUOTE_STATUS: Record<QuotationRow['status'], { tone: 'slate' | 'blue' | 'green'; label: string }> = {
+    draft:     { tone: 'slate', label: 'Supplier draft' },
+    submitted: { tone: 'blue',  label: 'Submitted' },
+    received:  { tone: 'green', label: 'Received' },
+};
+
+// ── Quotations Modal ───────────────────────────────────────────────────────
+// A vendor may put several offers against one RFQ. They are all listed here;
+// whichever is marked final is the one the hub table, the printed form and any
+// NTP raised from this RFQ use.
+function QuotationsModal({ row, project, canEdit, onClose, onEdit }: {
+    row: RfqRow;
+    project: HubProject;
+    canEdit: boolean;
     onClose: () => void;
-    onSend: (email: string, additionalRecipients: string[], ccSelf: boolean) => void;
+    onEdit: (quotation: QuotationRow) => void;
 }) {
-    const { auth } = usePage<RfqPageProps>().props;
-    const [recipientEmail, setRecipientEmail]   = useState(email);
-    const [additionalInput, setAdditionalInput] = useState('');
-    const [ccSelf, setCcSelf]                   = useState(false);
-    const [emailError, setEmailError]           = useState('');
+    const [adding, setAdding]   = useState(false);
+    const [label, setLabel]     = useState('');
+    const [copyFrom, setCopyFrom] = useState<string>('');
+    const [busy, setBusy]       = useState(false);
+    const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
-    const parseAdditional = () =>
-        additionalInput.split(',').map(e => e.trim()).filter(Boolean);
+    const quotations = row.quotations ?? [];
+    const peso = (n: number) => `PhP ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    const handleConfirm = () => {
-        if (!recipientEmail.trim()) { setEmailError('Email address is required.'); return; }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail.trim())) { setEmailError('Please enter a valid email address.'); return; }
-        const additional = parseAdditional();
-        const invalid = additional.find(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
-        if (invalid) { setEmailError(`"${invalid}" is not a valid email address.`); return; }
-        setEmailError('');
-        onSend(recipientEmail.trim(), additional, ccSelf);
+    const handleAdd = () => {
+        setBusy(true);
+        router.post(route('hub.rfq.quotations.store', [project.id, row.id]), {
+            label:     label.trim() || null,
+            copy_from: copyFrom || null,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => { setAdding(false); setLabel(''); setCopyFrom(''); },
+            onFinish:  () => setBusy(false),
+        });
+    };
+
+    const handleReceive = (q: QuotationRow) => {
+        showConfirm(
+            `Mark ${q.name} from ${row.contractor} as received? ${row.contractor} will no longer be able to edit it.`,
+            () => router.patch(route('hub.rfq.quotations.received', [project.id, row.id, q.id]), {}, { preserveScroll: true }),
+            { title: 'Mark Received', confirmLabel: 'Mark Received', variant: 'warning' },
+        );
+    };
+
+    const handleSetFinal = (q: QuotationRow) => {
+        showConfirm(
+            `Use ${q.name} as the final quotation for ${row.contractor}? The RFQ table, the printed form and any NTP will follow this offer.`,
+            () => router.patch(route('hub.rfq.quotations.final', [project.id, row.id, q.id]), {}, { preserveScroll: true }),
+            { title: 'Set Final Quotation', confirmLabel: 'Set as Final', variant: 'warning' },
+        );
+    };
+
+    const handleDelete = (q: QuotationRow) => {
+        showConfirm(
+            `Delete ${q.name} for ${row.contractor}? Its line items and attachment go with it.`,
+            () => router.delete(route('hub.rfq.quotations.destroy', [project.id, row.id, q.id]), { preserveScroll: true }),
+            { title: 'Delete Quotation', confirmLabel: 'Delete', variant: 'danger' },
+        );
+    };
+
+    const smallBtn = (text: string, onClick: () => void, tone: 'blue' | 'green' | 'red' | 'plain'): React.ReactNode => {
+        const palette = {
+            blue:  ['#eff6ff', '#bfdbfe', '#2563eb'],
+            green: ['#f0fdf4', '#bbf7d0', '#15803d'],
+            red:   ['#fef2f2', '#fecaca', '#dc2626'],
+            plain: ['#fff',    '#e2e8f0', '#475569'],
+        }[tone];
+        return (
+            <button type="button" onClick={onClick}
+                style={{ padding: '5px 11px', borderRadius: '6px', background: palette[0], border: `1px solid ${palette[1]}`, color: palette[2], fontSize: '11.5px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                {text}
+            </button>
+        );
     };
 
     return (
-        <Modal title="Confirm & Send RFQ" onClose={onClose} size="460px" headerBg="#2563eb"
-            footer={<>
-                <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Cancel</button>
-                <button type="button" onClick={handleConfirm} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                    Send RFQ
-                </button>
-            </>}
+        <Modal title={`Quotations — ${row.contractor}`} onClose={onClose} size="820px" headerBg="#1e3a8a"
+            footer={<button type="button" onClick={onClose} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#0f172a', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Close</button>}
         >
-            {/* Contractor info strip */}
-            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '12px 16px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                <div>
-                    <div style={{ fontSize: '10px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Service Contractor</div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e3a8a' }}>{contractor}</div>
-                </div>
-                {dueDate && (
-                    <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Due Date</div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e3a8a' }}>{dueDate}</div>
+            {confirmDialog}
+
+            <div style={{ padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', marginBottom: '18px', fontSize: '12.5px', color: '#1e40af', lineHeight: 1.6 }}>
+                {row.contractor} fills these in through the link in their RFQ email. Mark one <strong>Received</strong> to close it for further edits, then set it <strong>Final</strong> — that is the offer the RFQ table shows and the one an NTP is issued from.
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                {quotations.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '22px 0', color: '#94a3b8', fontSize: '13px' }}>
+                        No quotations recorded yet.
                     </div>
                 )}
+
+                {quotations.map(q => (
+                    <div key={q.id} style={{
+                        border: `1.5px solid ${q.is_final ? '#86efac' : '#e2e8f0'}`,
+                        background: q.is_final ? '#f0fdf4' : '#fff',
+                        borderRadius: '9px', padding: '13px 16px',
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
+                            <div style={{ flex: 1, minWidth: '220px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                                    <strong style={{ fontSize: '13.5px', color: '#0f172a' }}>{q.name}</strong>
+                                    {q.is_final && <Badge tone="green">Final</Badge>}
+                                    {q.origin === 'supplier' && <Badge tone={QUOTE_STATUS[q.status].tone}>{QUOTE_STATUS[q.status].label}</Badge>}
+                                </div>
+                                <div style={{ fontSize: '11.5px', color: '#64748b' }}>
+                                    {q.origin === 'supplier' ? `From ${row.contractor}` : 'Entered by the project team'} · Added {q.created_at}
+                                    {q.submitted_at ? ` · sent ${q.submitted_at}` : ''}
+                                    {q.received_at && q.origin === 'supplier' ? ` · received ${q.received_at}` : ''}
+                                    {q.duration_days ? ` · ${q.duration_days} calendar day${q.duration_days === 1 ? '' : 's'}` : ''}
+                                    {q.due_raw ? ` · due ${q.due}` : ''}
+                                    {` · ${q.items.length} item${q.items.length === 1 ? '' : 's'}`}
+                                </div>
+                                {q.scope_of_work && (
+                                    <div style={{ fontSize: '12px', color: '#475569', marginTop: '5px', lineHeight: 1.5 }}>
+                                        {q.scope_of_work.length > 120 ? `${q.scope_of_work.slice(0, 120)}…` : q.scope_of_work}
+                                    </div>
+                                )}
+                            </div>
+                            <div style={{ textAlign: 'right', minWidth: '130px' }}>
+                                <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Total</div>
+                                <strong style={{ fontSize: '14px', color: q.grand_total > 0 ? '#2563eb' : '#cbd5e1' }}>
+                                    {q.grand_total > 0 ? peso(q.grand_total) : '—'}
+                                </strong>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '6px', marginTop: '11px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {smallBtn(canEdit ? 'Edit quotation' : 'View quotation', () => onEdit(q), 'blue')}
+                            {canEdit && q.status === 'submitted' && smallBtn('Mark received', () => handleReceive(q), 'green')}
+                            {q.quotation_file && (
+                                <a href={q.quotation_file} target="_blank" rel="noreferrer"
+                                    style={{ padding: '5px 11px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', color: '#475569', fontSize: '11.5px', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
+                                    Attached file
+                                </a>
+                            )}
+                            {canEdit && !q.is_final && (q.selectable
+                                ? smallBtn('Set as final', () => handleSetFinal(q), 'green')
+                                : <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
+                                    Awaiting the supplier to send it
+                                </span>)}
+                            {canEdit && quotations.length > 1 && smallBtn('Delete', () => handleDelete(q), 'red')}
+                        </div>
+                    </div>
+                ))}
             </div>
 
-            {/* Email input */}
-            <div style={{ marginBottom: '6px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
-                    Recipient Email Address
-                </label>
-                <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                    </span>
-                    <input
-                        type="email"
-                        value={recipientEmail}
-                        onChange={e => { setRecipientEmail(e.target.value); setEmailError(''); }}
-                        placeholder="contractor@example.com"
-                        autoFocus
-                        style={{
-                            width: '100%', boxSizing: 'border-box', padding: '9px 11px 9px 34px',
-                            border: `1.5px solid ${emailError ? '#fca5a5' : '#e2e8f0'}`,
-                            borderRadius: '7px', fontSize: '13px', fontFamily: 'inherit', outline: 'none',
-                            background: emailError ? '#fff7f7' : '#fff',
-                        }}
-                    />
+            {canEdit && (
+                <div style={{ marginTop: '18px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+                    {adding ? (
+                        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '9px', padding: '14px' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                <Field label="Label (Optional)">
+                                    <input value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. Revised offer" style={inputStyle} />
+                                </Field>
+                                <Field label="Start From">
+                                    <select value={copyFrom} onChange={e => setCopyFrom(e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
+                                        <option value="">Blank quotation</option>
+                                        {quotations.map(q => <option key={q.id} value={q.id}>Copy of {q.name}</option>)}
+                                    </select>
+                                </Field>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '12px' }}>
+                                <button type="button" onClick={() => setAdding(false)} style={{ padding: '7px 16px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Cancel</button>
+                                <button type="button" onClick={handleAdd} disabled={busy} style={{ padding: '7px 20px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
+                                    {busy ? 'Adding…' : 'Add Quotation'}
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <Button onClick={() => setAdding(true)}>+ Add Quotation</Button>
+                    )}
                 </div>
-                {emailError && <div style={{ color: '#dc2626', fontSize: '11.5px', fontWeight: 600, marginTop: '5px' }}>{emailError}</div>}
-                <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '5px' }}>You can edit the email before sending.</div>
-            </div>
-
-            {/* Additional recipients */}
-            <div style={{ marginBottom: '14px' }}>
-                <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
-                    Additional Recipients (Optional)
-                </label>
-                <input
-                    type="text"
-                    value={additionalInput}
-                    onChange={e => { setAdditionalInput(e.target.value); setEmailError(''); }}
-                    placeholder="another@example.com, another2@example.com"
-                    style={{
-                        width: '100%', boxSizing: 'border-box', padding: '9px 11px',
-                        border: '1.5px solid #e2e8f0', borderRadius: '7px', fontSize: '13px', fontFamily: 'inherit', outline: 'none',
-                    }}
-                />
-                <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '5px' }}>Separate multiple email addresses with commas.</div>
-            </div>
-
-            {/* Send me a copy */}
-            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12.5px', color: '#334155', cursor: 'pointer' }}>
-                <input type="checkbox" checked={ccSelf} onChange={e => setCcSelf(e.target.checked)} />
-                Send me a copy of this email ({auth.user.email})
-            </label>
+            )}
         </Modal>
     );
 }
@@ -390,6 +517,12 @@ function SendConfirmModal({ contractor, dueDate, email, onClose, onSend }: {
 // Add N calendar days to a YYYY-MM-DD date, returning YYYY-MM-DD.
 // Number(days) guards against `days` arriving as a string (e.g. "30"), which
 // would otherwise make `getDate() + days` concatenate instead of add.
+function todayIso(): string {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 function addDays(dateStr: string, days: number): string {
     if (!dateStr) return '';
     const [y, m, d] = dateStr.split('-').map(Number);
@@ -409,6 +542,15 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
     const [cost, setCost] = useState((rfqTotal > 0 ? rfqTotal : (project.budget_total ?? 0)).toString());
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+
+    // Back-dating is legitimate when the paperwork lags the work, so a past
+    // baseline is a warning rather than a block — but it is far more often a
+    // typo or a stale draft, and it skews every schedule metric downstream.
+    const today = todayIso();
+    const pastDates = [
+        start && start < today ? 'Baseline Start' : null,
+        end && end < today ? 'Baseline End' : null,
+    ].filter(Boolean) as string[];
 
     // Baseline end date is auto-suggested from the start date + the RFQ's target
     // duration (calendar days) whenever the start changes, but stays editable so
@@ -442,6 +584,17 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
             </>}
         >
             {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginBottom: '12px' }}>{error}</div>}
+            {pastDates.length > 0 && (
+                <div style={{ display: 'flex', gap: '9px', padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', color: '#92400e', fontSize: '12.5px', marginBottom: '12px', lineHeight: 1.6 }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0, marginTop: '2px' }}>
+                        <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    <span>
+                        <strong>{pastDates.join(' and ')}</strong> {pastDates.length > 1 ? 'are' : 'is'} earlier than today.
+                        Check the date{pastDates.length > 1 ? 's' : ''} before submitting — you can still proceed if the work genuinely started already.
+                    </span>
+                </div>
+            )}
             <div style={{ padding: '10px 14px', background: '#e0f2fe', border: '1px solid #bae6fd', borderRadius: '8px', marginBottom: '18px', fontSize: '12.5px', color: '#075985' }}>
                 This NTP will be sent to the department user for review before it is issued.<br />
                 For: <strong>{row.contractor}</strong>
@@ -625,17 +778,27 @@ function RfqHistoryModal({ row, onClose }: { row: RfqRow; onClose: () => void })
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }: { project: HubProject; rfqs: RfqRow[]; suppliers?: { name: string; email: string }[]; canEdit?: boolean }) {
-    const logo = useLogoSrc();
     const [dispatchContractor, setDispatchContractor] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [showSuccess, setShowSuccess]   = useState(false);
     const [sentContractor, setSentContractor] = useState('');
     const [showSendModal, setShowSendModal]   = useState(false);
-    const [viewRow, setViewRow]           = useState<RfqRow | null>(null);
+    const [viewIds, setViewIds]           = useState<{ rfq: number; quotation: number } | null>(null);
+    const [quotesRfqId, setQuotesRfqId]   = useState<number | null>(null);
+    const [resendRfqId, setResendRfqId]   = useState<number | null>(null);
     const [ntpRow, setNtpRow]             = useState<RfqRow | null>(null);
-    const [historyRow, setHistoryRow]     = useState<RfqRow | null>(null);
+    const [historyRfqId, setHistoryRfqId] = useState<number | null>(null);
     const [sending, setSending]           = useState(false);
     const [sendError, setSendError]       = useState('');
+
+    // Modals read live rows, so adding, editing or re-finaling a quotation is
+    // reflected without closing and reopening them.
+    const rfqById   = (id: number | null) => (id == null ? null : rfqs.find(r => r.id === id) ?? null);
+    const quotesRow = rfqById(quotesRfqId);
+    const resendRow = rfqById(resendRfqId);
+    const historyRow = rfqById(historyRfqId);
+    const viewRow   = rfqById(viewIds?.rfq ?? null);
+    const viewQuotation = viewRow?.quotations?.find(q => q.id === viewIds?.quotation) ?? null;
 
     // Set of contractors that already have an RFQ on this project
     // Own rows only — sub-project RFQs are shown read-only and shouldn't block
@@ -644,6 +807,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
     const hasSubRows = rfqs.some(r => !!r.sub_project_id);
 
     const selectedContractor = suppliers.find(c => c.name === dispatchContractor) ?? null;
+    const supplierEmails = splitEmails(selectedContractor?.email);
 
     const handleOpenSendModal = () => {
         if (!dispatchContractor) { setSendError('Please select a contractor before sending.'); return; }
@@ -672,6 +836,17 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
         });
     };
 
+    const handleResend = (recipientEmail: string, additionalRecipients: string[], ccSelf: boolean) => {
+        const rfqId = resendRfqId;
+        setResendRfqId(null);
+        if (rfqId == null) return;
+        router.post(route('hub.rfq.resend', [project.id, rfqId]), {
+            recipient_email: recipientEmail,
+            additional_recipients: additionalRecipients,
+            cc_self: ccSelf,
+        }, { preserveScroll: true });
+    };
+
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
     const handleDelete = (rfq: RfqRow) => {
@@ -687,126 +862,54 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
     };
 
     /**
-     * Request for Quotation — PMD-PRJ-FRM-03. Reference No. and Revision No.
-     * are assigned on paper when the form is logged, so they print as blanks.
+     * Request for Quotation — PMD-PRJ-FRM-03, rendered to PDF server-side and
+     * previewed in a new tab. A sub-project's RFQ belongs to the sub-project,
+     * so that is the project the form is printed against.
      */
     const handlePrint = (row: RfqRow) => {
-        const items = row.items ?? [];
-        const grandTotal = items.reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
-        const num = (n: number | null | undefined) =>
-            n == null ? '' : Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-        // The paper form offers a fixed set of scope options; tick whichever the
-        // stored free-text scope names, and fall back to "Others" when it is set
-        // to something outside the list.
-        const SCOPES = ['Conceptual Design', 'Detailed Drawing', 'Detailed Estimate', 'Preliminary', 'Ballpark Estimate'];
-        const scope = (row.scope_of_work ?? '').trim();
-        const matched = SCOPES.find(o => o.toLowerCase() === scope.toLowerCase());
-        const tick = (on: boolean) => (on ? '&#9746;' : '&#9744;');
-        const scopeCell = `
-            <table style="width:100%;border-collapse:collapse;font-size:11.5px;">
-                <tr>
-                    <td style="padding:1px 0;">${tick(matched === 'Conceptual Design')} Conceptual Design</td>
-                    <td style="padding:1px 0;">${tick(matched === 'Detailed Drawing')} Detailed Drawing</td>
-                    <td style="padding:1px 0;">${tick(matched === 'Detailed Estimate')} Detailed Estimate</td>
-                </tr>
-                <tr>
-                    <td style="padding:1px 0;">${tick(matched === 'Preliminary')} Preliminary</td>
-                    <td style="padding:1px 0;">${tick(matched === 'Ballpark Estimate')} Ballpark Estimate</td>
-                    <td style="padding:1px 0;">${tick(!!scope && !matched)} Others: <span class="fill" style="min-width:70px;">${!matched ? escapeHtml(scope) : ''}</span></td>
-                </tr>
-            </table>`;
-
-        const detail = (k: string, v: string) =>
-            `<tr><td class="k">${escapeHtml(k)}</td><td class="c">:</td><td>${v}</td></tr>`;
-
-        const itemRows = padRows(
-            items.map((i, idx) => `<tr>
-                <td class="num">${idx + 1}</td>
-                <td>${escapeHtml(i.description)}</td>
-                <td class="num">${orBlank(i.qty)}</td>
-                <td class="num">${orBlank(i.unit)}</td>
-                <td class="r">${num(i.unit_cost)}</td>
-                <td class="r">${num(i.total_cost)}</td>
-            </tr>`),
-            10,
-            '<tr class="blank"><td class="num">%N%</td><td></td><td></td><td></td><td></td><td></td></tr>',
-        ).join('');
-
-        const sigs = project.signatories;
-        const inner = formHeader({
-            docNo: 'PMD-PRJ-FRM-03', rev: '00', effective: 'October 05, 2025',
-            sheet: 'Page 1 of 1', title: 'REQUEST FOR QUOTATION', logo,
-        }) + `
-            <div class="secrow">
-                <h3 class="sec" style="margin:0;">PROJECT DETAILS</h3>
-                <div class="refno">Reference No.: <span class="fill"></span></div>
-            </div>
-            <table class="kv">
-                ${detail('Service Contractor', orBlank(row.contractor))}
-                ${detail('Date', orBlank(row.sent))}
-                ${detail('Project Number', orBlank(project.project_no))}
-                ${detail('Revision No.', '<span class="fill"></span>')}
-                ${detail('Project Title', orBlank(project.title))}
-                ${detail('Sub Project', orBlank(row.sub_project_no) || 'N/A')}
-                ${detail('Job Site / Location', orBlank(project.site))}
-                ${detail('Project Owner', orBlank(project.dept_owner))}
-                ${detail('Scope of Work', scopeCell)}
-                ${detail('Date Needed', orBlank(row.due))}
-            </table>
-
-            <div class="sig">
-                ${sigCell('Requested by:', sigs?.prepared_by ?? '', 'Printed Name and Signature')}
-                ${sigCell('Reviewed by:', sigs?.pmd_assistant_manager ?? '', 'PMD Assistant Manager')}
-                ${sigCell('Noted by:', sigs?.pmd_manager ?? '', 'PMD Manager')}
-            </div>
-
-            <div class="instruct">Please submit/list down a conceptual estimate for the deliverables/activities, target duration, and conditions for the above-mentioned project.</div>
-
-            <table class="box">
-                <thead>
-                    <tr>
-                        <th class="hd" style="width:34px;">NO.</th>
-                        <th class="hd">DELIVERABLES, ACTIVITIES AND/OR RENTAL</th>
-                        <th class="hd" style="width:60px;">QTY</th>
-                        <th class="hd" style="width:60px;">UOM</th>
-                        <th class="hd" style="width:100px;">UNIT COST</th>
-                        <th class="hd" style="width:105px;">TOTAL COST</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${itemRows}
-                    ${grandTotal > 0 ? `<tr><td colspan="5" class="r" style="font-weight:800;">Grand Total</td><td class="r" style="font-weight:800;">${num(grandTotal)}</td></tr>` : ''}
-                    <tr><td colspan="6" class="band">Other Quotation Details</td></tr>
-                    <tr>
-                        <td class="num">A.</td>
-                        <td>Target Project Duration</td>
-                        <td colspan="4">${row.duration_days != null ? `${escapeHtml(row.duration_days)} Working Days` : ''}</td>
-                    </tr>
-                    <tr>
-                        <td class="num">B.</td>
-                        <td>Terms and Conditions;<br>Inclusions and exclusions</td>
-                        <td colspan="4" style="height:76px;">${[row.terms, row.inclusions, row.exclusions].filter(Boolean).map(t => escapeHtml(t)).join('<br>')}</td>
-                    </tr>
-                </tbody>
-            </table>
-
-            <div class="sig two tight" style="margin-top:14px;">
-                ${sigCell('Prepared by:', sigs?.prepared_by ?? '', 'Printed Name and Signature')}
-                ${sigCell('Noted by: (END USER)', '', 'Printed Name and Signature')}
-            </div>`;
-
-        openPrintWindow(`RFQ — ${project.project_no} — ${row.contractor}`, inner);
+        window.open(route('print.rfq', [row.sub_project_id ?? project.id, row.id]), '_blank');
     };
 
     // Quotation stays editable at any status until an NTP has been created for it.
     const canEditRfq = (row: RfqRow) => canEdit && !row.has_ntp;
 
+    /** Open the quotation form on a specific offer, defaulting to the final one. */
+    const openQuotation = (row: RfqRow, quotation?: QuotationRow) => {
+        const target = quotation
+            ?? row.quotations?.find(q => q.is_final)
+            ?? row.quotations?.[0];
+        if (target) setViewIds({ rfq: row.id, quotation: target.id });
+    };
+
+    const quotationsBtn = (row: RfqRow) => (
+        <button
+            type="button"
+            title="Manage quotations for this vendor"
+            onClick={() => setQuotesRfqId(row.id)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '6px', border: '1px solid #c7d2fe', background: '#eef2ff', color: '#4338ca', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+            Quotations · {row.quotations?.length ?? 0}
+        </button>
+    );
+
+    const resendBtn = (row: RfqRow) => (
+        <button
+            type="button"
+            title="Re-send the RFQ email to this vendor"
+            onClick={() => setResendRfqId(row.id)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '6px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            Resend
+        </button>
+    );
+
     const historyBtn = (row: RfqRow) => (
         <button
             type="button"
             title="View audit history"
-            onClick={() => setHistoryRow(row)}
+            onClick={() => setHistoryRfqId(row.id)}
             style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '5px', borderRadius: '6px', border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer' }}
         >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -817,10 +920,22 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
         <ActionBtns
             view={!canEditRfq(row)}
             edit={canEditRfq(row)}
-            onView={() => setViewRow(row)}
-            onEdit={() => setViewRow(row)}
+            onView={() => openQuotation(row)}
+            onEdit={() => openQuotation(row)}
         />
     );
+
+    /** Names which of several quotations the row's figures come from. */
+    const finalNote = (row: RfqRow) => {
+        const count = row.quotations?.length ?? 0;
+        if (count < 2) return null;
+        const final = row.quotations.find(q => q.is_final);
+        return (
+            <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#4338ca', marginTop: '3px' }}>
+                {final ? `${final.name} of ${count}` : `${count} quotations · none final`}
+            </div>
+        );
+    };
 
     const actionCell = (row: RfqRow) => {
         // Sub-project RFQs are read-only in the parent — view/print, or open the sub-project.
@@ -828,10 +943,11 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 <ActionBtns
                     view print open
-                    onView={() => setViewRow(row)}
+                    onView={() => openQuotation(row)}
                     onPrint={() => handlePrint(row)}
                     onOpen={() => router.visit(route('projects.hub.rfq', row.sub_project_id!))}
                 />
+                {quotationsBtn(row)}
                 {historyBtn(row)}
             </div>
         );
@@ -839,6 +955,8 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
+                {quotationsBtn(row)}
+                {canEdit && resendBtn(row)}
                 {historyBtn(row)}
                 {canEdit && (
                     row.ntp_status === 'issued' ? (
@@ -859,6 +977,8 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
+                {quotationsBtn(row)}
+                {canEdit && resendBtn(row)}
                 {historyBtn(row)}
                 {canEdit && <ActionBtns trophy onTrophy={() => handleStatus(row, 'awarded', 'Awarded')} />}
                 {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
@@ -871,6 +991,8 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
+                {quotationsBtn(row)}
+                {canEdit && resendBtn(row)}
                 {historyBtn(row)}
                 {canEdit && (
                     <>
@@ -901,6 +1023,8 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
+                {quotationsBtn(row)}
+                {canEdit && resendBtn(row)}
                 {historyBtn(row)}
                 {canEdit && <ActionBtns refresh onRefresh={() => handleStatus(row, 'pending', 'Re-activated')} />}
                 {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
@@ -916,14 +1040,45 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                 <SendConfirmModal
                     contractor={selectedContractor.name}
                     dueDate={dueDate}
-                    email={selectedContractor.email}
+                    email={supplierEmails[0] ?? ''}
+                    additional={supplierEmails.slice(1).join(', ')}
                     onClose={() => setShowSendModal(false)}
                     onSend={handleSend}
                 />
             )}
-            {viewRow       && <RfqViewModal row={viewRow} project={project} onClose={() => setViewRow(null)} canEdit={canEditRfq(viewRow) && !viewRow.sub_project_id} />}
+            {resendRow && (
+                <SendConfirmModal
+                    contractor={resendRow.contractor}
+                    dueDate={resendRow.due_raw ? resendRow.due : ''}
+                    email={resendRow.recipient_email ?? ''}
+                    title="Re-send RFQ"
+                    sendLabel="Re-send RFQ"
+                    note={`This sends the Request for Quotation to ${resendRow.contractor} again, download link for the quotation template included.`}
+                    onClose={() => setResendRfqId(null)}
+                    onSend={handleResend}
+                />
+            )}
+            {quotesRow && (
+                <QuotationsModal
+                    row={quotesRow}
+                    project={project}
+                    canEdit={canEditRfq(quotesRow) && !quotesRow.sub_project_id}
+                    onClose={() => setQuotesRfqId(null)}
+                    onEdit={q => { setQuotesRfqId(null); openQuotation(quotesRow, q); }}
+                />
+            )}
+            {viewRow && viewQuotation && (
+                <RfqViewModal
+                    key={viewQuotation.id}
+                    row={viewRow}
+                    quotation={viewQuotation}
+                    project={project}
+                    onClose={() => setViewIds(null)}
+                    canEdit={canEditRfq(viewRow) && !viewRow.sub_project_id}
+                />
+            )}
             {ntpRow        && <NtpModal row={ntpRow} project={project} onClose={() => setNtpRow(null)} />}
-            {historyRow    && <RfqHistoryModal row={historyRow} onClose={() => setHistoryRow(null)} />}
+            {historyRow    && <RfqHistoryModal row={historyRow} onClose={() => setHistoryRfqId(null)} />}
 
             {canEdit && (
                 <>
@@ -942,7 +1097,8 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                                     {selectedContractor && (
                                         <>
                                             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                                            {selectedContractor.email}
+                                            {supplierEmails[0] ?? 'No email on file'}
+                                            {supplierEmails.length > 1 && ` +${supplierEmails.length - 1} more`}
                                         </>
                                     )}
                                 </div>
@@ -988,9 +1144,13 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                                     <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
                                         {row.duration_days ? `${row.duration_days} calendar day${row.duration_days === 1 ? '' : 's'}` : 'No duration set'}
                                     </div>
+                                    {finalNote(row)}
                                 </div>
                             )
-                            : <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>,
+                            : <div>
+                                <span style={{ color: '#cbd5e1', fontSize: '12px' }}>—</span>
+                                {finalNote(row)}
+                            </div>,
                         actionCell(row),
                     ];
                 })}

@@ -9,6 +9,7 @@ class ProjectRfqItem extends Model
 {
     protected $fillable = [
         'project_rfq_id',
+        'project_rfq_quotation_id',
         'seq',
         'description',
         'qty',
@@ -26,5 +27,10 @@ class ProjectRfqItem extends Model
     public function rfq(): BelongsTo
     {
         return $this->belongsTo(ProjectRfq::class, 'project_rfq_id');
+    }
+
+    public function quotation(): BelongsTo
+    {
+        return $this->belongsTo(ProjectRfqQuotation::class, 'project_rfq_quotation_id');
     }
 }

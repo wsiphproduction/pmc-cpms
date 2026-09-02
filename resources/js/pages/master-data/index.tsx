@@ -224,6 +224,30 @@ const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode; addLabel:
     },
 ];
 
+// ── Remembered Tab ───────────────────────────────────────────────────────
+// Master Data is a screen people come back to repeatedly, usually for the same
+// list, so the tab they were last on is kept per browser. It is a convenience
+// only: any failure to read or write just lands them on the first tab.
+const TAB_STORAGE_KEY = 'master-data:active-tab';
+
+function readStoredTab(): TabKey | null {
+    try {
+        const saved = window.localStorage.getItem(TAB_STORAGE_KEY);
+        return TAB_CONFIG.some(t => t.key === saved) ? (saved as TabKey) : null;
+    } catch {
+        // Private windows and browsers set to block site data throw on access.
+        return null;
+    }
+}
+
+function writeStoredTab(tab: TabKey): void {
+    try {
+        window.localStorage.setItem(TAB_STORAGE_KEY, tab);
+    } catch {
+        // Nothing to do — the tab simply won't be remembered.
+    }
+}
+
 // ── Route Map ──────────────────────────────────────────────────────────────
 const ROUTE_MAP: Record<TabKey, string> = {
     job_types:     'master.job-types',
@@ -613,6 +637,7 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
     const [showSuggest, setShowSuggest] = useState(false);
     const [matches, setMatches] = useState<SupplierMatch[]>([]);
     const [searching, setSearching] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     const field: React.CSSProperties = { width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', color: '#0f172a' };
     const lbl: React.CSSProperties = { fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' };
@@ -660,11 +685,19 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
     const handleSubmit = () => {
         if (!company.trim()) return;
         setSubmitting(true);
+        setErrors({});
         const data = { company: company.trim(), email: email.trim() || null, telephone_no: tel.trim() || null, mobile_no: mobile.trim() || null };
+        // Close only on success: closing on finish swallowed validation errors,
+        // so a rejected add looked like one that silently vanished.
+        const opts = {
+            onSuccess: onClose,
+            onError:   (formErrors: Record<string, string>) => setErrors(formErrors),
+            onFinish:  () => setSubmitting(false),
+        };
         if (isEdit) {
-            router.put(route('master.suppliers.update', supplier!.id), data, { onFinish: () => { setSubmitting(false); onClose(); } });
+            router.put(route('master.suppliers.update', supplier!.id), data, opts);
         } else {
-            router.post(route('master.suppliers.store'), data, { onFinish: () => { setSubmitting(false); onClose(); } });
+            router.post(route('master.suppliers.store'), data, opts);
         }
     };
 
@@ -724,7 +757,16 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
                     </div>
                     <div>
                         <label style={lbl}>Email</label>
-                        <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="name@company.com" style={field} />
+                        <input
+                            type="text"
+                            value={email}
+                            onChange={e => { setEmail(e.target.value); setErrors(prev => ({ ...prev, email: '' })); }}
+                            placeholder="sales@company.com, admin@company.com"
+                            style={{ ...field, borderColor: errors.email ? '#fca5a5' : '#e2e8f0' }}
+                        />
+                        <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '5px' }}>
+                            Separate multiple addresses with commas — the first is the main recipient when an RFQ is sent.
+                        </div>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         <div>
@@ -737,6 +779,11 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
                         </div>
                     </div>
                 </div>
+                {Object.values(errors).filter(Boolean).length > 0 && (
+                    <div style={{ margin: '0 22px 14px', padding: '9px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, lineHeight: 1.5 }}>
+                        {Object.values(errors).filter(Boolean).map((message, i) => <div key={i}>{message}</div>)}
+                    </div>
+                )}
                 <div style={{ padding: '14px 22px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
                     <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #e2e8f0', background: '#fff', fontSize: '12.5px', cursor: 'pointer', color: '#374151', fontWeight: 500 }}>Cancel</button>
                     <button onClick={handleSubmit} disabled={submitting || !company.trim()}
@@ -987,6 +1034,18 @@ export default function MasterData({
     const flash = pageProps.flash;
     const fileError = pageProps.errors?.file;
 
+    // Restored after mount rather than in the initial state, so the first paint
+    // matches what a server-rendered pass would produce.
+    useEffect(() => {
+        const saved = readStoredTab();
+        if (saved) setActiveTab(saved);
+    }, []);
+
+    const selectTab = (tab: TabKey) => {
+        setActiveTab(tab);
+        writeStoredTab(tab);
+    };
+
     const dataMap: Record<Exclude<TabKey, 'suppliers'>, MasterItem[]> = {
         job_types:     jobTypes,
         job_locations: jobLocations,
@@ -1092,7 +1151,7 @@ export default function MasterData({
                             return (
                                 <button
                                     key={tab.key}
-                                    onClick={() => setActiveTab(tab.key)}
+                                    onClick={() => selectTab(tab.key)}
                                     style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: isActive ? 700 : 500, color: isActive ? '#2563eb' : '#64748b', borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent', transition: 'all 0.15s', fontFamily: 'inherit', marginBottom: '-1px', whiteSpace: 'nowrap' }}
                                     onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = '#334155'; }}
                                     onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = '#64748b'; }}

@@ -203,6 +203,38 @@ class MasterDataController extends Controller
     // ── Suppliers ─────────────────────────────────────────────────────────
 
     /**
+     * Validation for the supplier contact email.
+     *
+     * Suppliers commonly quote through several mailboxes, so the field takes a
+     * comma- or semicolon-separated list and each address is checked in turn.
+     * A single address still validates exactly as before.
+     */
+    private function supplierEmailRules(): array
+    {
+        return ['nullable', 'string', function ($attribute, $value, $fail) {
+            if (trim((string) $value) === '') {
+                return;
+            }
+
+            $emails = Supplier::parseEmails($value);
+
+            if ($emails === []) {
+                $fail('Enter at least one valid email address.');
+
+                return;
+            }
+
+            foreach ($emails as $email) {
+                if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $fail("\"{$email}\" is not a valid email address.");
+
+                    return;
+                }
+            }
+        }];
+    }
+
+    /**
      * Type-ahead for the Add Supplier form.
      *
      * Searches every supplier on file, not just PMD's list, so the dormant pool
@@ -246,10 +278,11 @@ class MasterDataController extends Controller
         $data = $request->validate([
             'company'      => 'required|string|max:191',
             'accredited'   => 'nullable|boolean',
-            'email'        => 'nullable|email|max:191',
+            'email'        => $this->supplierEmailRules(),
             'telephone_no' => 'nullable|string|max:100',
             'mobile_no'    => 'nullable|string|max:100',
         ]);
+        $data['email'] = Supplier::normalizeEmails($data['email'] ?? null);
         // The Add form no longer asks about accreditation — being on PMD's list
         // is what makes a supplier usable — so an absent value means true.
         $data['accredited'] = $request->boolean('accredited', true);
@@ -294,11 +327,12 @@ class MasterDataController extends Controller
         $data = $request->validate([
             'company'      => 'required|string|max:191|unique:suppliers,company,' . $supplier->id,
             'accredited'   => 'nullable|boolean',
-            'email'        => 'nullable|email|max:191',
+            'email'        => $this->supplierEmailRules(),
             'telephone_no' => 'nullable|string|max:100',
             'mobile_no'    => 'nullable|string|max:100',
         ]);
         $data['accredited'] = $request->boolean('accredited', true);
+        $data['email']      = Supplier::normalizeEmails($data['email'] ?? null);
 
         $supplier->update($data);
 
@@ -398,7 +432,7 @@ class MasterDataController extends Controller
                 // Existing rows keep whatever source they already have — the
                 // upsert below only touches the contact columns.
                 'source'       => Supplier::SOURCE_IMPORT,
-                'email'        => $email !== null ? mb_substr($email, 0, 191) : null,
+                'email'        => $email !== null ? Supplier::normalizeEmails($email) : null,
                 'telephone_no' => $cell($row, $telIdx) !== null ? mb_substr($cell($row, $telIdx), 0, 100) : null,
                 'mobile_no'    => $cell($row, $mobileIdx) !== null ? mb_substr($cell($row, $mobileIdx), 0, 100) : null,
                 'created_at'   => $now,

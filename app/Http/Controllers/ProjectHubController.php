@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\NtpIssuedToVendor;
 use App\Mail\RfqDispatched;
 use App\Models\AuditTrail;
 use Illuminate\Support\Facades\Mail;
@@ -14,6 +15,7 @@ use App\Models\ProjectNtp;
 use App\Models\ProjectPermit;
 use App\Models\ProjectQualityDoc;
 use App\Models\ProjectRfq;
+use App\Models\ProjectRfqQuotation;
 use App\Models\ProjectVariationOrder;
 use App\Models\ProjectTask;
 use App\Models\ProjectWeeklyReport;
@@ -58,32 +60,306 @@ class ProjectHubController extends Controller
             'created_by'      => auth()->id(),
         ]);
 
-        if (!empty($data['recipient_email'])) {
-            $ccRecipients = $data['additional_recipients'] ?? [];
-            if ($data['cc_self'] ?? false) {
-                $ccRecipients[] = auth()->user()->email;
-            }
+        // Every RFQ starts with one (empty) quotation so the vendor's first
+        // offer has somewhere to land; further ones are added from the hub.
+        $rfq->quotations()->create([
+            'seq'         => 1,
+            'label'       => 'Original quotation',
+            'due_date'    => $data['due_date'] ?? null,
+            'is_final'    => true,
+            'origin'      => ProjectRfqQuotation::ORIGIN_STAFF,
+            'status'      => ProjectRfqQuotation::STATUS_RECEIVED,
+            'received_at' => now(),
+            'received_by' => auth()->id(),
+            'created_by'  => auth()->id(),
+        ]);
 
-            try {
-                Mail::to($data['recipient_email'])
-                    ->when(!empty($ccRecipients), fn ($mail) => $mail->cc($ccRecipients))
-                    ->send(new RfqDispatched($rfq, $project));
-            } catch (\Throwable $e) {
-                \Log::error("RFQ email failed for RFQ #{$rfq->id}: " . $e->getMessage());
-            }
-        }
+        $this->mailRfq($rfq, $project, $data);
 
         AuditTrail::log("Dispatched RFQ to {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'create', 'rfq_id' => $rfq->id]);
 
         return back()->with('success', 'RFQ dispatched successfully.');
     }
 
+    /**
+     * Send the RFQ email again — same recipients dialog as the first dispatch,
+     * so the address can be corrected or more people copied in.
+     */
+    public function resendRfq(Request $request, Project $project, ProjectRfq $rfq): RedirectResponse
+    {
+        abort_unless((int) $rfq->project_id === (int) $project->id, 403);
+
+        $data = $request->validate([
+            'recipient_email' => ['required', 'email', 'max:255'],
+            'additional_recipients'   => ['nullable', 'array'],
+            'additional_recipients.*' => ['email', 'max:255'],
+            'cc_self'         => ['nullable', 'boolean'],
+        ]);
+
+        $oldEmail = (string) $rfq->recipient_email;
+        $rfq->update(['recipient_email' => $data['recipient_email']]);
+
+        $sent = $this->mailRfq($rfq, $project, $data);
+
+        // The address change is persisted either way, so it is audited either
+        // way — a silent edit with no trail is worse than a failed send.
+        $fields = $oldEmail !== $data['recipient_email']
+            ? [['field' => 'Recipient Email', 'old' => $oldEmail, 'new' => $data['recipient_email']]]
+            : [];
+
+        AuditTrail::log(
+            $sent
+                ? "Re-sent RFQ email to {$data['recipient_email']} ({$rfq->contractor_name})"
+                : "RFQ re-send to {$data['recipient_email']} failed ({$rfq->contractor_name})",
+            $project,
+            ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id, 'fields' => $fields],
+        );
+
+        if (! $sent) {
+            return back()->with('error', 'The RFQ email could not be sent. Please check the mail settings and try again.');
+        }
+
+        return back()->with('success', "RFQ re-sent to {$data['recipient_email']}.");
+    }
+
+    /**
+     * Deliver the RFQ mail to the recipient plus any CCs the sender chose.
+     *
+     * @param  array{recipient_email?: string|null, additional_recipients?: array<int, string>, cc_self?: bool}  $data
+     * @return bool Whether the mail went out (false when it failed or no recipient was given).
+     */
+    private function mailRfq(ProjectRfq $rfq, Project $project, array $data): bool
+    {
+        if (empty($data['recipient_email'])) {
+            return false;
+        }
+
+        $ccRecipients = $data['additional_recipients'] ?? [];
+        if ($data['cc_self'] ?? false) {
+            $ccRecipients[] = auth()->user()->email;
+        }
+
+        try {
+            Mail::to($data['recipient_email'])
+                ->when(!empty($ccRecipients), fn ($mail) => $mail->cc($ccRecipients))
+                ->send(new RfqDispatched($rfq, $project));
+        } catch (\Throwable $e) {
+            \Log::error("RFQ email failed for RFQ #{$rfq->id}: " . $e->getMessage());
+
+            return false;
+        }
+
+        return true;
+    }
+
+    // ── RFQ quotations ───────────────────────────────────────────────────────
+
+    /**
+     * Add another quotation to an RFQ — a revision, or a competing offer from
+     * the same vendor. Optionally seeded from an existing one so a small change
+     * doesn't mean retyping the whole form.
+     */
+    public function storeRfqQuotation(Request $request, Project $project, ProjectRfq $rfq): RedirectResponse
+    {
+        $this->guardRfqEditable($rfq, $project);
+
+        $data = $request->validate([
+            'label'     => ['nullable', 'string', 'max:255'],
+            'copy_from' => ['nullable', Rule::exists('project_rfq_quotations', 'id')->where('project_rfq_id', $rfq->id)],
+        ]);
+
+        $seq    = (int) $rfq->quotations()->max('seq') + 1;
+        $source = !empty($data['copy_from']) ? $rfq->quotations()->with('items')->find($data['copy_from']) : null;
+
+        $quotation = $rfq->quotations()->create([
+            'seq'         => $seq,
+            'label'       => ($data['label'] ?? '') ?: null,
+            'is_final'    => false,
+            'origin'      => ProjectRfqQuotation::ORIGIN_STAFF,
+            'status'      => ProjectRfqQuotation::STATUS_RECEIVED,
+            'received_at' => now(),
+            'received_by' => auth()->id(),
+            'created_by'  => auth()->id(),
+            // A copy carries the quotation body over; the file stays with the
+            // original, since it is the document that offer was quoted on.
+            ...collect(ProjectRfq::MIRRORED)
+                ->reject(fn ($field) => $field === 'quotation_file')
+                ->mapWithKeys(fn ($field) => [$field => $source?->{$field}])
+                ->all(),
+        ]);
+
+        foreach ($source?->items ?? [] as $item) {
+            $quotation->items()->create([
+                'project_rfq_id' => $rfq->id,
+                'seq'            => $item->seq,
+                'description'    => $item->description,
+                'qty'            => $item->qty,
+                'unit'           => $item->unit,
+                'unit_cost'      => $item->unit_cost,
+                'total_cost'     => $item->total_cost,
+            ]);
+        }
+
+        AuditTrail::log(
+            "Added {$quotation->displayName()} for {$rfq->contractor_name}",
+            $project,
+            ['module' => 'RFQ', 'type' => 'create', 'rfq_id' => $rfq->id],
+        );
+
+        return back()->with('success', "{$quotation->displayName()} added.");
+    }
+
+    /** Kept for callers that address the RFQ rather than a specific quotation. */
     public function updateRfq(Request $request, Project $project, ProjectRfq $rfq): RedirectResponse
     {
         abort_unless((int) $rfq->project_id === (int) $project->id, 403);
 
+        $this->guardRfqEditable($rfq, $project);
+
+        $quotation = $rfq->finalQuotation()->first()
+            ?? $rfq->quotations()->create([
+                'seq'         => 1,
+                'is_final'    => true,
+            'origin'      => ProjectRfqQuotation::ORIGIN_STAFF,
+            'status'      => ProjectRfqQuotation::STATUS_RECEIVED,
+            'received_at' => now(),
+            'received_by' => auth()->id(),
+                'created_by'  => auth()->id(),
+            ]);
+
+        return $this->saveQuotation($request, $project, $rfq, $quotation);
+    }
+
+    public function updateRfqQuotation(Request $request, Project $project, ProjectRfq $rfq, ProjectRfqQuotation $quotation): RedirectResponse
+    {
+        $this->guardQuotation($rfq, $project, $quotation);
+        $this->guardRfqEditable($rfq, $project);
+
+        return $this->saveQuotation($request, $project, $rfq, $quotation);
+    }
+
+    /**
+     * Choose which quotation the project runs with. The RFQ row mirrors it, so
+     * the hub table, the printed form and any NTP raised from here all follow.
+     */
+    public function setFinalRfqQuotation(Project $project, ProjectRfq $rfq, ProjectRfqQuotation $quotation): RedirectResponse
+    {
+        $this->guardQuotation($rfq, $project, $quotation);
+        $this->guardRfqEditable($rfq, $project);
+
+        if (! $quotation->isSelectable()) {
+            return back()->with('error', "{$quotation->displayName()} is still a draft the supplier has not sent — it cannot be made final.");
+        }
+
+        $previous = $rfq->finalQuotation()->first();
+        if ($previous && (int) $previous->id === (int) $quotation->id) {
+            return back();
+        }
+
+        DB::transaction(function () use ($rfq, $quotation) {
+            $rfq->quotations()->update(['is_final' => false]);
+            $quotation->update(['is_final' => true]);
+            $rfq->refresh()->syncFromFinalQuotation();
+        });
+
+        AuditTrail::log(
+            "Set {$quotation->displayName()} as the final quotation for {$rfq->contractor_name}",
+            $project,
+            ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id, 'fields' => [[
+                'field' => 'Final Quotation',
+                'old'   => $previous?->displayName() ?? '',
+                'new'   => $quotation->displayName(),
+            ]]],
+        );
+
+        return back()->with('success', "{$quotation->displayName()} is now the final quotation.");
+    }
+
+    /**
+     * Acknowledge a supplier's quotation. This is the point the offer is fixed:
+     * the supplier can still see it in their portal, but no longer change it.
+     */
+    public function receiveRfqQuotation(Project $project, ProjectRfq $rfq, ProjectRfqQuotation $quotation): RedirectResponse
+    {
+        $this->guardQuotation($rfq, $project, $quotation);
+
+        if ($quotation->status === ProjectRfqQuotation::STATUS_RECEIVED) {
+            return back();
+        }
+
+        if ($quotation->status !== ProjectRfqQuotation::STATUS_SUBMITTED) {
+            return back()->with('error', "{$quotation->displayName()} has not been sent by the supplier yet.");
+        }
+
+        $quotation->update([
+            'status'      => ProjectRfqQuotation::STATUS_RECEIVED,
+            'received_at' => now(),
+            'received_by' => auth()->id(),
+        ]);
+
+        AuditTrail::log(
+            "Marked {$quotation->displayName()} from {$rfq->contractor_name} as received",
+            $project,
+            ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id, 'fields' => [[
+                'field' => 'Quotation Status', 'old' => 'submitted', 'new' => 'received',
+            ]]],
+        );
+
+        return back()->with('success', "{$quotation->displayName()} marked as received. The supplier can no longer edit it.");
+    }
+
+    public function destroyRfqQuotation(Project $project, ProjectRfq $rfq, ProjectRfqQuotation $quotation): RedirectResponse
+    {
+        $this->guardQuotation($rfq, $project, $quotation);
+        $this->guardRfqEditable($rfq, $project);
+
+        if ($rfq->quotations()->count() <= 1) {
+            return back()->with('error', 'An RFQ must keep at least one quotation.');
+        }
+
+        $name    = $quotation->displayName();
+        $wasFinal = $quotation->is_final;
+
+        DB::transaction(function () use ($rfq, $quotation, $wasFinal) {
+            if ($quotation->quotation_file) {
+                Storage::disk('public')->delete($quotation->quotation_file);
+            }
+            // Items carry no foreign key onto the quotation (see the migration),
+            // so they are removed here rather than by a cascade.
+            $quotation->items()->delete();
+            $quotation->delete();
+
+            // Fall back to the latest offer the team actually holds. An unsent
+            // supplier draft is not one, and promoting it would blank the RFQ's
+            // mirrored scope and terms — better to leave no final at all until
+            // someone picks a real one.
+            if ($wasFinal) {
+                // reorder(), because the relation already sorts by seq ascending
+                // and SQL Server rejects the column appearing twice.
+                $rfq->quotations()
+                    ->whereIn('status', [ProjectRfqQuotation::STATUS_SUBMITTED, ProjectRfqQuotation::STATUS_RECEIVED])
+                    ->reorder('seq', 'desc')
+                    ->first()
+                    ?->update(['is_final' => true]);
+            }
+            $rfq->refresh()->syncFromFinalQuotation();
+        });
+
+        AuditTrail::log(
+            "Deleted {$name} for {$rfq->contractor_name}",
+            $project,
+            ['module' => 'RFQ', 'type' => 'delete', 'rfq_id' => $rfq->id],
+        );
+
+        return back()->with('success', "{$name} deleted.");
+    }
+
+    /** Write the quotation form onto one quotation, with a field-level audit diff. */
+    private function saveQuotation(Request $request, Project $project, ProjectRfq $rfq, ProjectRfqQuotation $quotation): RedirectResponse
+    {
         // All quotation fields are required except the file attachment.
         $data = $request->validate([
+            'label'               => ['nullable', 'string', 'max:255'],
             'scope_of_work'       => ['required', 'string'],
             'due_date'            => ['required', 'date'],
             'duration_days'       => ['required', 'integer', 'min:1'],
@@ -101,6 +377,7 @@ class ProjectHubController extends Controller
 
         // Capture field-level old → new changes for the audit trail.
         $labels = [
+            'label'            => 'Quotation Label',
             'scope_of_work'    => 'Scope of Work',
             'due_date'         => 'Due Date',
             'duration_days'    => 'Duration (days)',
@@ -108,14 +385,11 @@ class ProjectHubController extends Controller
             'inclusions'       => 'Inclusions',
             'exclusions'       => 'Exclusions',
         ];
-        $newValues = [
-            'scope_of_work'    => ($data['scope_of_work']    ?? '') ?: null,
-            'due_date'         => ($data['due_date']         ?? '') ?: null,
-            'duration_days'    => ($data['duration_days']    ?? '') ?: null,
-            'terms_conditions' => ($data['terms_conditions'] ?? '') ?: null,
-            'inclusions'       => ($data['inclusions']       ?? '') ?: null,
-            'exclusions'       => ($data['exclusions']       ?? '') ?: null,
-        ];
+        $newValues = collect($labels)
+            ->keys()
+            ->mapWithKeys(fn ($field) => [$field => ($data[$field] ?? '') ?: null])
+            ->all();
+
         $stringify = function ($value) {
             if ($value === null) return '';
             if ($value instanceof \DateTimeInterface) return $value->format('Y-m-d');
@@ -123,7 +397,7 @@ class ProjectHubController extends Controller
         };
         $changedFields = [];
         foreach ($newValues as $field => $newValue) {
-            $oldStr = $stringify($rfq->getOriginal($field));
+            $oldStr = $stringify($quotation->getOriginal($field));
             $newStr = $stringify($newValue);
             if ($oldStr !== $newStr) {
                 $changedFields[] = ['field' => $labels[$field], 'old' => $oldStr, 'new' => $newStr];
@@ -132,8 +406,8 @@ class ProjectHubController extends Controller
 
         // Snapshot the file and line items *before* they are changed below, so we
         // can record their old → new values in the audit trail too.
-        $oldFile  = $rfq->quotation_file;
-        $oldItems = $rfq->items()->get(['description', 'qty', 'unit', 'unit_cost', 'total_cost'])
+        $oldFile  = $quotation->quotation_file;
+        $oldItems = $quotation->items()->get(['description', 'qty', 'unit', 'unit_cost', 'total_cost'])
             ->map(fn ($it) => [
                 'description' => $it->description,
                 'qty'         => $it->qty !== null ? (float) $it->qty : null,
@@ -160,14 +434,14 @@ class ProjectHubController extends Controller
             return implode("\n", $lines);
         };
 
-        $rfq->update($newValues);
+        $quotation->update($newValues);
 
         if (!empty($data['quotation_file'])) {
             if ($oldFile) {
                 Storage::disk('public')->delete($oldFile);
             }
             $path = $data['quotation_file']->store('rfq-files', 'public');
-            $rfq->update(['quotation_file' => $path]);
+            $quotation->update(['quotation_file' => $path]);
 
             $changedFields[] = [
                 'field' => 'Quotation File',
@@ -191,9 +465,12 @@ class ProjectHubController extends Controller
                 ];
             }
 
-            $rfq->items()->delete();
+            $quotation->items()->delete();
             foreach ($newItems as $i => $item) {
-                $rfq->items()->create(array_merge(['seq' => $i + 1], $item));
+                $quotation->items()->create(array_merge(
+                    ['project_rfq_id' => $rfq->id, 'seq' => $i + 1],
+                    $item,
+                ));
             }
 
             $oldItemsStr = $fmtItems($oldItems);
@@ -203,9 +480,36 @@ class ProjectHubController extends Controller
             }
         }
 
-        AuditTrail::log("Updated RFQ details for {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id, 'fields' => $changedFields]);
+        // The RFQ row mirrors the final quotation, so re-sync when that is the
+        // one just edited.
+        if ($quotation->is_final) {
+            $rfq->syncFromFinalQuotation();
+        }
+
+        AuditTrail::log(
+            "Updated {$quotation->displayName()} for {$rfq->contractor_name}",
+            $project,
+            ['module' => 'RFQ', 'type' => 'update', 'rfq_id' => $rfq->id, 'fields' => $changedFields],
+        );
 
         return back()->with('success', 'Quotation details saved.');
+    }
+
+    private function guardQuotation(ProjectRfq $rfq, Project $project, ProjectRfqQuotation $quotation): void
+    {
+        abort_unless((int) $rfq->project_id === (int) $project->id, 403);
+        abort_unless((int) $quotation->project_rfq_id === (int) $rfq->id, 403);
+    }
+
+    /** Once an NTP is riding on an RFQ its quotations are frozen. */
+    private function guardRfqEditable(ProjectRfq $rfq, Project $project): void
+    {
+        abort_unless((int) $rfq->project_id === (int) $project->id, 403);
+        abort_if(
+            $project->ntps()->where('project_rfq_id', $rfq->id)->where('status', '!=', 'rejected')->exists(),
+            403,
+            'This RFQ already has an NTP — its quotations can no longer be changed.',
+        );
     }
 
     public function updateRfqStatus(Request $request, Project $project, ProjectRfq $rfq): RedirectResponse
@@ -259,27 +563,83 @@ class ProjectHubController extends Controller
 
         $ntpNo = $this->nextNtpNo();
 
-        // Submitted for department-user review — NOT issued yet. The RFQ is not
-        // awarded and the budget is not recalculated until the NTP is approved.
-        $project->ntps()->create([
+        // Submitted for review — NOT issued yet. The RFQ is not awarded and the
+        // budget is not recalculated until the whole chain has signed: the
+        // department user first, then PMD and the Division Manager.
+        $ntp = $project->ntps()->create([
             ...$data,
             'ntp_no'      => $ntpNo,
             'status'      => 'pending_review',
             'created_by'  => auth()->id(),
         ]);
 
+        $ntp->startApprovalChain();
+
         AuditTrail::log("NTP {$ntpNo} submitted for department review ({$data['contractor_name']})", $project, array_filter(['module' => 'NTP', 'type' => 'create', 'rfq_id' => $data['project_rfq_id'] ?? null]));
 
-        // Notify the project's department user (requester) that an NTP awaits review.
-        if ($requesterId = $project->projectRequest?->requester_id) {
-            Notification::notify(
-                $requesterId,
-                "NTP {$ntpNo} for {$data['contractor_name']} is awaiting your review on project {$project->project_no}.",
-                route('ntp-reviews.index', absolute: false)
-            );
-        }
+        // Notify the project's department side that an NTP awaits review: its
+        // requester, or the owning department when there is no request.
+        Notification::notify(
+            $project->departmentAudience(),
+            "NTP {$ntpNo} for {$data['contractor_name']} is awaiting your review on project {$project->project_no}.",
+            route('ntp-reviews.index', absolute: false)
+        );
 
         return back()->with('success', "NTP {$ntpNo} submitted for department review.");
+    }
+
+    /**
+     * Send the issued NTP to the contractor.
+     *
+     * Only once the chain is complete: until the Division Manager has signed
+     * there is no notice to give, and telling a vendor to proceed on an
+     * unapproved NTP is the one mistake this must not allow.
+     */
+    public function sendNtp(Request $request, Project $project, ProjectNtp $ntp): RedirectResponse
+    {
+        abort_unless((int) $ntp->project_id === (int) $project->id, 403);
+
+        if ($ntp->status !== 'issued') {
+            return back()->with('error', "NTP {$ntp->ntp_no} has not completed its approval chain yet.");
+        }
+
+        $data = $request->validate([
+            'recipient_email'         => ['required', 'email', 'max:255'],
+            'additional_recipients'   => ['nullable', 'array'],
+            'additional_recipients.*' => ['email', 'max:255'],
+            'cc_self'                 => ['nullable', 'boolean'],
+        ]);
+
+        $cc = $data['additional_recipients'] ?? [];
+        if ($data['cc_self'] ?? false) {
+            $cc[] = auth()->user()->email;
+        }
+
+        try {
+            Mail::to($data['recipient_email'])
+                ->when(!empty($cc), fn ($mail) => $mail->cc($cc))
+                ->send(new NtpIssuedToVendor($ntp, $project));
+        } catch (\Throwable $e) {
+            \Log::error("NTP email failed for NTP #{$ntp->id}: " . $e->getMessage());
+
+            AuditTrail::log(
+                "NTP {$ntp->ntp_no} send to {$data['recipient_email']} failed",
+                $project,
+                array_filter(['module' => 'NTP', 'type' => 'update', 'rfq_id' => $ntp->project_rfq_id]),
+            );
+
+            return back()->with('error', 'The NTP email could not be sent. Please check the mail settings and try again.');
+        }
+
+        $ntp->update(['vendor_notified_at' => now()]);
+
+        AuditTrail::log(
+            "NTP {$ntp->ntp_no} sent to {$ntp->contractor_name} at {$data['recipient_email']}",
+            $project,
+            array_filter(['module' => 'NTP', 'type' => 'update', 'rfq_id' => $ntp->project_rfq_id]),
+        );
+
+        return back()->with('success', "NTP {$ntp->ntp_no} sent to {$data['recipient_email']}.");
     }
 
     public function destroyNtp(Project $project, ProjectNtp $ntp): RedirectResponse
@@ -314,11 +674,18 @@ class ProjectHubController extends Controller
 
         foreach ($request->file('files', []) as $file) {
             $path = $file->store("hub/permits/{$project->id}", 'public');
-            $permit->files()->create([
+            $permitFile = $permit->files()->create([
                 'filename'  => $file->getClientOriginalName(),
                 'path'      => $path,
                 'mime_type' => $file->getMimeType(),
             ]);
+
+            $permitFile->recordFileVersion(
+                $path,
+                $file->getClientOriginalName(),
+                mimeType: $file->getMimeType(),
+                size: $file->getSize(),
+            );
         }
 
         AuditTrail::log("Permit added: {$data['label']} ({$data['doc_type']})", $project, ['module' => 'Permit', 'type' => 'upload']);
@@ -372,7 +739,8 @@ class ProjectHubController extends Controller
             $attachmentPath = $request->file('attachment')->store('vof-files', 'public');
         }
 
-        $project->variationOrders()->create([
+
+        $vof = $project->variationOrders()->create([
             'title'             => $data['title'],
             'description'       => ($data['description']       ?? '') ?: null,
             'amount'            => $data['amount'],
@@ -395,6 +763,16 @@ class ProjectHubController extends Controller
             'submitted_date'    => now()->toDateString(),
             'created_by'        => auth()->id(),
         ]);
+
+        if ($attachmentPath) {
+            $upload = $request->file('attachment');
+            $vof->recordFileVersion(
+                $attachmentPath,
+                $upload->getClientOriginalName(),
+                mimeType: $upload->getMimeType(),
+                size: $upload->getSize(),
+            );
+        }
 
         // A variation only moves the project cost once approved, but recompute
         // anyway so the figure is never stale relative to the list.
@@ -453,10 +831,10 @@ class ProjectHubController extends Controller
         ]);
 
         if ($request->hasFile('attachment')) {
-            $oldPath = $vof->fresh()->attachment;
-            if ($oldPath) Storage::disk('public')->delete($oldPath);
-            $path = $request->file('attachment')->store('vof-files', 'public');
-            $vof->update(['attachment' => $path]);
+            // The superseded file stays on disk — it is v(n-1) of this VOF's
+            // attachment and has to remain openable from the history.
+            $version = $vof->storeVersionedFile($request->file('attachment'), 'vof-files');
+            $vof->update(['attachment' => $version->filepath]);
         }
 
         $project->refreshBudgetTotal();
@@ -511,13 +889,20 @@ class ProjectHubController extends Controller
         $file = $request->file('file');
         $path = $file->store("hub/qpp/{$project->id}", 'public');
 
-        $project->qualityDocs()->create([
+        $doc = $project->qualityDocs()->create([
             'label'      => $data['label'],
             'doc_type'   => $data['doc_type'],
             'file_path'  => $path,
             'filename'   => $file->getClientOriginalName(),
             'created_by' => auth()->id(),
         ]);
+
+        $doc->recordFileVersion(
+            $path,
+            $file->getClientOriginalName(),
+            mimeType: $file->getMimeType(),
+            size: $file->getSize(),
+        );
 
         AuditTrail::log("Quality document uploaded: {$data['label']} ({$data['doc_type']})", $project, ['module' => 'QPP', 'type' => 'upload']);
 
@@ -548,7 +933,7 @@ class ProjectHubController extends Controller
         $file = $request->file('file');
         $path = $file->store("hub/mtr/{$project->id}", 'public');
 
-        $project->mtrDocs()->create([
+        $doc = $project->mtrDocs()->create([
             'label'         => $data['label'],
             'material_type' => $data['material_type'],
             'test_date'     => now()->toDateString(),
@@ -556,6 +941,13 @@ class ProjectHubController extends Controller
             'filename'      => $file->getClientOriginalName(),
             'created_by'    => auth()->id(),
         ]);
+
+        $doc->recordFileVersion(
+            $path,
+            $file->getClientOriginalName(),
+            mimeType: $file->getMimeType(),
+            size: $file->getSize(),
+        );
 
         AuditTrail::log("Material test report uploaded: {$data['label']} ({$data['material_type']})", $project, ['module' => 'MTR', 'type' => 'upload']);
 
@@ -608,7 +1000,7 @@ class ProjectHubController extends Controller
             $filename = $file->getClientOriginalName();
         }
 
-        $project->billings()->create([
+        $billing = $project->billings()->create([
             'project_ntp_id' => ($data['project_ntp_id'] ?? '') ?: null,
             'billing_type'   => $data['billing_type'],
             'period_from'    => ($data['period_from']  ?? '') ?: null,
@@ -627,6 +1019,16 @@ class ProjectHubController extends Controller
             'filename'       => $filename,
             'created_by'     => auth()->id(),
         ]);
+
+        if ($filePath) {
+            $upload = $request->file('file');
+            $billing->recordFileVersion(
+                $filePath,
+                $upload->getClientOriginalName(),
+                mimeType: $upload->getMimeType(),
+                size: $upload->getSize(),
+            );
+        }
 
         AuditTrail::log("Billing {$stmtNo} submitted ({$data['billing_type']}) — PhP {$data['amount']}", $project, ['module' => 'RFP', 'type' => 'finance']);
 
@@ -677,16 +1079,13 @@ class ProjectHubController extends Controller
         ]);
 
         if ($request->hasFile('file')) {
-            if ($billing->file_path) {
-                Storage::disk('public')->delete($billing->file_path);
-            }
-
-            $file = $request->file('file');
-            $path = $file->store("hub/rfp/{$project->id}", 'public');
+            // The statement this replaces stays on disk as the previous
+            // version — a billing's paper trail must not lose what was filed.
+            $version = $billing->storeVersionedFile($request->file('file'), "hub/rfp/{$project->id}");
 
             $billing->update([
-                'file_path' => $path,
-                'filename'  => $file->getClientOriginalName(),
+                'file_path' => $version->filepath,
+                'filename'  => $version->filename,
             ]);
         }
 
@@ -752,26 +1151,24 @@ class ProjectHubController extends Controller
     {
         $project->update(['budget_paid' => $this->approvedBillingTotal($project)]);
 
-        // Billing a sub-project also moves its parent's total: the parent's
-        // budget_total is the sum of its issued NTPs, which includes the ones
-        // that spawned the sub-projects, so their billings belong in the
-        // numerator too. Without this the parent's payment figure lists rows
-        // it does not count.
-        if ($project->parent) {
-            $project->parent->update([
-                'budget_paid' => $this->approvedBillingTotal($project->parent),
-            ]);
+        // Billing a sub-project moves every ancestor's total too: each one's
+        // hub lists the billings of its whole subtree, so they belong in its
+        // numerator. Walking all the way up rather than one level keeps a
+        // sub-sub-project's billing from stopping at its immediate parent.
+        for ($ancestor = $project->parent, $i = 0; $ancestor !== null && $i < 10; $ancestor = $ancestor->parent, $i++) {
+            $ancestor->update(['budget_paid' => $this->approvedBillingTotal($ancestor)]);
         }
     }
 
     /**
      * Approved billings for a project, rolled up with its sub-projects'.
      * "Approved" is treated as paid — an approved statement is cleared for
-     * payment. A sub-project has no children, so this is just its own total.
+     * payment. The subtree is walked in full, so a sub-sub-project's billings
+     * reach every project above it.
      */
     private function approvedBillingTotal(Project $project): float
     {
-        $ids = $project->children()->pluck('id')->push($project->id);
+        $ids = $project->subtreeIds();
 
         // Retention is withheld until the project completes, so an approved
         // billing only counts for what it actually releases.
@@ -810,7 +1207,7 @@ class ProjectHubController extends Controller
             $filename = $file->getClientOriginalName();
         }
 
-        $project->iocItems()->create([
+        $ioc = $project->iocItems()->create([
             'description' => $data['description'],
             'cost_code'   => ($data['cost_code'] ?? '') ?: null,
             'amount'      => $data['amount'],
@@ -818,6 +1215,16 @@ class ProjectHubController extends Controller
             'filename'    => $filename,
             'created_by'  => auth()->id(),
         ]);
+
+        if ($filePath) {
+            $upload = $request->file('file');
+            $ioc->recordFileVersion(
+                $filePath,
+                $upload->getClientOriginalName(),
+                mimeType: $upload->getMimeType(),
+                size: $upload->getSize(),
+            );
+        }
 
         AuditTrail::log("Other cost logged: {$data['description']} — PhP {$data['amount']}", $project, ['module' => 'IOC', 'type' => 'create']);
 
@@ -928,6 +1335,16 @@ class ProjectHubController extends Controller
             'submitted_date'    => now()->toDateString(),
             'created_by'        => auth()->id(),
         ]);
+
+        if ($filePath) {
+            $upload = $request->file('file');
+            $report->recordFileVersion(
+                $filePath,
+                $upload->getClientOriginalName(),
+                mimeType: $upload->getMimeType(),
+                size: $upload->getSize(),
+            );
+        }
 
         // Reflect the latest report's progress on the project.
         $this->recalculateCompletionPercent($project);
