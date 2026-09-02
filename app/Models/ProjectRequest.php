@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasApprovalChain;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,7 +13,18 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class ProjectRequest extends Model
 {
-    use SoftDeletes, HasFactory;
+    use SoftDeletes, HasFactory, HasApprovalChain;
+
+    /**
+     * Sign-off order. The project engineer reviews and endorses first, then it
+     * rises through PMD. A request only reaches "approved" — and so becomes
+     * convertible to a project — once the last signature is in.
+     */
+    public const APPROVAL_CHAIN = [
+        User::ROLE_ENGINEER,
+        User::ROLE_PMD_ASST_MANAGER,
+        User::ROLE_PMD_DEPT_MANAGER,
+    ];
 
     protected $fillable = [
         'request_no',
@@ -73,6 +85,25 @@ class ProjectRequest extends Model
     public function scopePending($query)
     {
         return $query->where('status', 'pending');
+    }
+
+    /** Endorsed by the engineer and still climbing the PMD chain. */
+    /**
+     * The first step belongs to project delivery, not to the "approver" role
+     * alone: assistant managers have always been able to settle a request, and
+     * ProjectRequestPolicy::decide still shows them the buttons. Without this
+     * they saw Approve/Reject and got a 403 on click.
+     */
+    public function approvalStepAuthorizes(ApprovalStep $step, User $user): bool
+    {
+        return $step->role === User::ROLE_ENGINEER
+            ? $user->hasRole(User::DELIVERY_ROLES)
+            : $user->hasRole($step->role);
+    }
+
+    public function scopeInApproval($query)
+    {
+        return $query->where('status', 'in_approval');
     }
 
     public function scopeApproved($query)

@@ -17,11 +17,13 @@ interface ProjectRequest {
     title: string;
     job_type: string;
     job_location: string;
-    status: 'approved' | 'pending' | 'hold' | 'ongoing' | 'rejected' | 'completed';
+    status: 'approved' | 'pending' | 'in_approval' | 'hold' | 'ongoing' | 'rejected' | 'completed';
     costcode: string | null;
     created_at: string | null;
     requester?: { name: string; department?: string | null };
     project?: { id: number; project_no: string } | null;
+    // Who the sign-off chain is currently waiting on, once it has left the engineer.
+    awaiting_role_label?: string | null;
     unread_comments?: number;
     comments?: Comment[];
     can: {
@@ -60,6 +62,8 @@ interface Filters {
 interface Props {
     requests: Paginated<ProjectRequest>;
     filters: Filters;
+    // The PMD/division approval roles review requests but never raise them.
+    canCreate: boolean;
 }
 
 type RequestDecision = 'approved' | 'rejected';
@@ -69,6 +73,7 @@ function StatusBadge({ status }: { status: ProjectRequest['status'] }) {
     const map: Record<ProjectRequest['status'], { bg: string; color: string; label: string }> = {
         approved:  { bg: '#dcfce7', color: '#166534', label: 'Approved' },
         pending:   { bg: '#fef9c3', color: '#854d0e', label: 'For Approval' },
+        in_approval: { bg: '#e0e7ff', color: '#3730a3', label: 'In Approval' },
         hold:      { bg: '#ffedd5', color: '#9a3412', label: 'Hold' },
         ongoing:   { bg: '#dbeafe', color: '#1e40af', label: 'Ongoing' },
         rejected:  { bg: '#fee2e2', color: '#991b1b', label: 'Rejected' },
@@ -324,6 +329,7 @@ function AdvancedSearchModal({ filters, onClose }: { filters: Filters; onClose: 
                             {[
                                 { value: 'approved',  label: 'Approved' },
                                 { value: 'pending',   label: 'For Approval' },
+                                { value: 'in_approval', label: 'In Approval' },
                                 { value: 'hold',      label: 'Hold' },
                                 { value: 'ongoing',   label: 'Ongoing' },
                                 { value: 'rejected',  label: 'Rejected' },
@@ -437,7 +443,7 @@ function Pagination({ data }: { data: Paginated<unknown> }) {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function RequestsIndex({ requests, filters }: Props) {
+export default function RequestsIndex({ requests, filters, canCreate }: Props) {
     const [search,        setSearch]        = useState(filters.search ?? '');
     const [commentTarget, setCommentTarget] = useState<ProjectRequest | null>(null);
     const [showAdvSearch, setShowAdvSearch] = useState(false);
@@ -523,10 +529,12 @@ export default function RequestsIndex({ requests, filters }: Props) {
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
                             Advanced Search
                         </button>
-                        <Link href={route('requests.create')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#2563eb', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                            Add Request
-                        </Link>
+                        {canCreate && (
+                            <Link href={route('requests.create')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#2563eb', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                Add Request
+                            </Link>
+                        )}
                     </div>
                 </div>
 
@@ -566,7 +574,14 @@ export default function RequestsIndex({ requests, filters }: Props) {
                                         )}
                                     </td>
                                     <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{req.created_at ?? '—'}</td>
-                                    <td style={{ padding: '12px 16px' }}><StatusBadge status={req.status} /></td>
+                                    <td style={{ padding: '12px 16px' }}>
+                                        <StatusBadge status={req.status} />
+                                        {req.awaiting_role_label && ['pending', 'in_approval', 'hold'].includes(req.status) && (
+                                            <div style={{ fontSize: '10.5px', color: '#9ca3af', marginTop: '4px', whiteSpace: 'nowrap' }}>
+                                                with {req.awaiting_role_label}
+                                            </div>
+                                        )}
+                                    </td>
                                     <td style={{ padding: '12px 16px' }}>
                                         {req.project?.project_no
                                             ? <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#374151' }}>{req.project.project_no}</span>

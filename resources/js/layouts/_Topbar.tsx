@@ -14,6 +14,7 @@ interface PageProps {
     notifications: NotificationRow[];
     unread_notifications_count: number;
     ntp_reviews_count?: number;
+    approvals_count?: number;
     [key: string]: unknown;
 }
 
@@ -70,8 +71,13 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
 
     const role = auth?.user?.role;
     const ntpReviewsCount = props.ntp_reviews_count ?? 0;
+    const approvalsCount = props.approvals_count ?? 0;
     const isRequestor = role === 'requestor';
     const isAdmin = role === 'admin';
+    // The PMD/division sign-off roles: their portal is For Approval, Requests
+    // and Projects — they review the work rather than execute it, so the
+    // delivery-side sections (master data, weekly status, reports) stay hidden.
+    const isApprovalRole = ['pmd_asst_manager', 'pmd_dept_manager', 'division_manager'].includes(role ?? '');
     // User management is admin-only.
     const canManageUsers = isAdmin;
     // Project engineers ("approver") own the weekly status; assistant managers
@@ -134,7 +140,19 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 </svg>
             ),
         }] : []),
-        ...(isRequestor ? [] : [{
+        // The PMD/division approval queue.
+        ...(isApprovalRole || isAdmin ? [{
+            label: 'For Approval',
+            href: route('approvals.index'),
+            badge: approvalsCount,
+            icon: (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/><polyline points="9 15 11 17 15 12"/>
+                </svg>
+            ),
+        }] : []),
+        ...(isRequestor || isApprovalRole ? [] : [{
             label: 'Master Data',
             href: route('master.index'),
             icon: (
@@ -145,7 +163,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 </svg>
             ),
         }]),
-        {
+        ...(isApprovalRole ? [] : [{
             label: 'Reports',
             href: route('reports.index'),
             icon: (
@@ -155,7 +173,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     <line x1="6" y1="20" x2="6" y2="14"/>
                 </svg>
             ),
-        },
+        }]),
         ...(canManageUsers ? [{
             label: 'Users',
             href: route('users.index'),

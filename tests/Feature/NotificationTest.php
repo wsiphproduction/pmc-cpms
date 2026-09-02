@@ -179,9 +179,13 @@ it('notifies the requester when a request status changes', function () {
         ->patch(route('requests.update', $pr), ['status' => 'approved'])
         ->assertRedirect();
 
+    // The engineer's approval is the first signature of the chain, so the
+    // requester is told who it moved on to rather than that it is settled.
     $notification = Notification::where('recipient', $requestor->id)->first();
     expect($notification)->not->toBeNull();
-    expect($notification->message)->toBe("Project Request #{$pr->request_no} status was changed to: Approved");
+    expect($notification->message)->toBe(
+        "Project Request #{$pr->request_no} was approved by the Project Engineer and is now with the PMD Assistant Manager."
+    );
     expect(Notification::where('recipient', $approver->id)->count())->toBe(0);
 });
 

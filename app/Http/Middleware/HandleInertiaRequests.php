@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Http\Controllers\ApprovalController;
 use App\Models\Notification;
 use App\Models\ProjectNtp;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -75,14 +77,19 @@ class HandleInertiaRequests extends Middleware
                 ? Notification::where('recipient', $request->user()->id)->where('is_read', false)->count()
                 : 0,
             // NTPs awaiting review, scoped the same way as NtpReviewController::index
-            // (admins see all pending; everyone else only their requested projects).
+            // (admins see all pending; everyone else their requested projects plus
+            // the ones their department owns).
             'ntp_reviews_count' => $request->user()
                 ? ProjectNtp::where('status', 'pending_review')
                     ->when(
                         ! $request->user()->hasRole('admin'),
-                        fn ($q) => $q->whereHas('project.projectRequest', fn ($rq) => $rq->where('requester_id', $request->user()->id))
+                        fn ($q) => $q->whereHas('project', fn (Builder $p) => $p->forDepartmentUser($request->user()))
                     )
                     ->count()
+                : 0,
+            // Items sitting in the signed-in approval role's queue.
+            'approvals_count' => $request->user()
+                ? ApprovalController::pendingCountFor($request->user())
                 : 0,
         ]);
     }

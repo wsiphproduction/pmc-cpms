@@ -14,7 +14,7 @@ class ProjectRequestPolicy
 
     public function view(User $user, ProjectRequest $projectRequest): bool
     {
-        if ($user->hasRole(['approver', 'assistant_manager', 'admin'])) {
+        if ($user->hasRole(User::INTERNAL_ROLES)) {
             return true;
         }
 
@@ -23,7 +23,8 @@ class ProjectRequestPolicy
 
     public function create(User $user): bool
     {
-        return true;
+        // The PMD/division approval roles review requests; they do not raise them.
+        return ! $user->isApprovalRole();
     }
 
     public function update(User $user, ProjectRequest $projectRequest): bool
@@ -44,9 +45,18 @@ class ProjectRequestPolicy
 
     public function decide(User $user, ProjectRequest $projectRequest): bool
     {
-        // Approvers/admins can approve or reject while the request is still open
-        // for a decision — either awaiting approval or on hold.
-        return $user->hasRole(['approver', 'assistant_manager', 'admin'])
-            && in_array($projectRequest->status, ['pending', 'hold'], true);
+        if (! $user->hasRole(User::DELIVERY_ROLES)) {
+            return false;
+        }
+
+        if (! in_array($projectRequest->status, ['pending', 'hold'], true)) {
+            return false;
+        }
+
+        // The engineer holds the first signature; once it is given, the request
+        // belongs to PMD and is settled from the approvals portal instead. A
+        // request predating the chain has no steps and stays decidable here.
+        return ! $projectRequest->approvalChainStarted()
+            || $projectRequest->currentApprovalRole() === User::ROLE_ENGINEER;
     }
 }

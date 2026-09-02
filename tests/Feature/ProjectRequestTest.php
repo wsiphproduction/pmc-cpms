@@ -29,6 +29,17 @@ function makeApprover(): User
     return $user;
 }
 
+/** A user holding one of the PMD/division sign-off roles. */
+function makeChainApprover(string $role): User
+{
+    Role::firstOrCreate(['name' => $role]);
+
+    $user = User::factory()->create();
+    $user->assignRole($role);
+
+    return $user;
+}
+
 function makeRequest(array $overrides = []): ProjectRequest
 {
     return ProjectRequest::factory()->create($overrides);
@@ -410,10 +421,51 @@ describe('update', function () {
             ->patch(route('requests.update', $pr), ['status' => 'approved'])
             ->assertRedirect();
 
+        // The engineer holds only the first signature: approving endorses the
+        // request up to PMD rather than settling it.
         $this->assertDatabaseHas('project_requests', [
             'id'     => $pr->id,
-            'status' => 'approved',
+            'status' => 'in_approval',
         ]);
+
+        expect($pr->fresh()->currentApprovalRole())->toBe('pmd_asst_manager');
+    });
+
+    it('approves a request only once the whole chain has signed', function () {
+        $approver = makeApprover();
+        $pr       = makeRequest(['status' => 'pending']);
+
+        $asst        = makeChainApprover('pmd_asst_manager');
+        $deptManager = makeChainApprover('pmd_dept_manager');
+
+        $this->actingAs($approver)
+            ->patch(route('requests.update', $pr), ['status' => 'approved'])
+            ->assertRedirect();
+
+        $this->actingAs($asst)
+            ->patch(route('approvals.requests.approve', $pr))
+            ->assertRedirect();
+
+        expect($pr->fresh()->status)->toBe('in_approval');
+
+        $this->actingAs($deptManager)
+            ->patch(route('approvals.requests.approve', $pr))
+            ->assertRedirect();
+
+        expect($pr->fresh()->status)->toBe('approved');
+    });
+
+    it('refuses an approval from a role the chain is not waiting on', function () {
+        $pr = makeRequest(['status' => 'pending']);
+
+        // The PMD Department Manager cannot sign before the two before them have.
+        $deptManager = makeChainApprover('pmd_dept_manager');
+
+        $this->actingAs($deptManager)
+            ->patch(route('approvals.requests.approve', $pr))
+            ->assertForbidden();
+
+        expect($pr->fresh()->status)->toBe('pending');
     });
 
     it('cannot re-decide a request that is already approved or rejected', function () {
