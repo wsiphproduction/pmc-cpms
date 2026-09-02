@@ -56,7 +56,11 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
-            'engine' => null,
+            // Stated outright rather than left to the server default: the
+            // production host defaults to MyISAM, which silently discards the
+            // foreign keys the migrations declare and then refuses any added
+            // through ALTER TABLE.
+            'engine' => 'InnoDB',
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
@@ -76,7 +80,11 @@ return [
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
-            'engine' => null,
+            // Stated outright rather than left to the server default: the
+            // production host defaults to MyISAM, which silently discards the
+            // foreign keys the migrations declare and then refuses any added
+            // through ALTER TABLE.
+            'engine' => 'InnoDB',
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
