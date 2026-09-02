@@ -54,15 +54,43 @@ class PdfRenderer
     }
 
     /**
-     * A PDF response the browser previews in place rather than downloading —
-     * `inline`, so opening it in a new tab shows Chrome's PDF viewer with its
-     * own print and save controls.
+     * The form, ready to print, opened in a new tab.
+     *
+     * Under the 'browser' driver this is the form itself as HTML, opening the
+     * print dialog on load — the viewer's own Chrome lays it out and writes the
+     * PDF, so the server needs neither node nor Chrome. Under 'chrome' it is a
+     * real PDF shown inline, which falls back to the printable page if the
+     * render fails: a host without Chrome should still be able to print.
      */
     public function stream(string $view, array $data, string $filename): Response
     {
-        return response($this->render($view, $data), 200, [
-            'Content-Type'        => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="' . $this->safeName($filename) . '"',
+        if (config('pdf.driver', 'browser') !== 'chrome') {
+            return $this->printable($view, $data);
+        }
+
+        try {
+            return response($this->render($view, $data), 200, [
+                'Content-Type'        => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="' . $this->safeName($filename) . '"',
+            ]);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return $this->printable($view, $data);
+        }
+    }
+
+    /**
+     * The form as an HTML page that prints itself.
+     *
+     * `autoPrint` is what the layout keys off to open the dialog; the page is
+     * otherwise byte-for-byte the document Chrome would have rendered, since
+     * it is the same view and the same stylesheet.
+     */
+    private function printable(string $view, array $data): Response
+    {
+        return response(view($view, [...$data, 'autoPrint' => true])->render(), 200, [
+            'Content-Type' => 'text/html; charset=UTF-8',
         ]);
     }
 

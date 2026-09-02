@@ -92,14 +92,53 @@
     .docimgs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .docimgs img { width: 100%; height: 150px; object-fit: cover; border: 1px solid #000; }
 
+    /* Zero page margins so the body's own margin is the only one, and so
+       Chrome leaves off the URL/date headers it otherwise stamps on. */
+    @page { size: A4; margin: 0; }
+
     @media print {
         body { margin: 12mm; }
         .sig { page-break-inside: avoid; }
         table.box { page-break-inside: auto; }
+        /* Keep the gold headings and the approval stamp when printing —
+           browsers drop backgrounds by default. */
+        * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .noprint { display: none !important; }
     }
+
+    /* Only ever seen on screen, in the tab the form opens in. */
+    .noprint {
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        text-align: center; margin: 0 0 18px;
+    }
+    .noprint button {
+        font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+        padding: 7px 18px; border-radius: 6px;
+        border: 1px solid #2563eb; background: #2563eb; color: #fff;
+    }
+    .noprint p { font-size: 12px; color: #64748b; margin: 7px 0 0; }
     </style>
 </head>
 <body>
+@if ($autoPrint ?? false)
+    {{-- The dialog opens on load; this is here for when it is dismissed, and
+         so there is a way back to it without reloading the page. --}}
+    <div class="noprint">
+        <button type="button" onclick="window.print()">Print / Save as PDF</button>
+        <p>Choose “Save as PDF” as the destination to keep a copy.</p>
+    </div>
+@endif
+
 @yield('form')
+
+@if ($autoPrint ?? false)
+    <script>
+        // Wait for the crest images to decode, or the first page prints with
+        // a gap where the header banner should be.
+        window.addEventListener('load', function () {
+            window.setTimeout(function () { window.print(); }, 250);
+        });
+    </script>
+@endif
 </body>
 </html>

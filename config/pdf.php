@@ -4,6 +4,28 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | How a form reaches the printer
+    |--------------------------------------------------------------------------
+    |
+    | 'browser'  — serve the form as an HTML page that opens the print dialog
+    |              itself, and let the viewer's own Chrome make the PDF. No
+    |              server dependencies at all, which is what shared hosting
+    |              gives us: cPanel has neither node nor Chrome.
+    |
+    | 'chrome'   — render to a PDF server-side through headless Chrome, so the
+    |              route returns a real PDF file. Needs node and Chrome on the
+    |              box; falls back to 'browser' if the render fails, rather
+    |              than handing the user a 500.
+    |
+    | The layout is the same either way — the only difference is who runs the
+    | print engine.
+    |
+    */
+
+    'driver' => env('PDF_DRIVER', 'browser'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Headless Chrome
     |--------------------------------------------------------------------------
     |

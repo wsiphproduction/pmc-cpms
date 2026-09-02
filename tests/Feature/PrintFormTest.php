@@ -188,7 +188,9 @@ it('will not print an rfq belonging to another project', function () {
         ->assertNotFound();
 });
 
-it('streams a real pdf for inline preview', function () {
+it('streams a real pdf for inline preview under the chrome driver', function () {
+    config(['pdf.driver' => 'chrome']);
+
     $response = $this->actingAs($this->engineer)
         ->get(route('print.ntp', [$this->project, $this->ntp]));
 
@@ -201,3 +203,19 @@ it('streams a real pdf for inline preview', function () {
     expect(substr($body, 0, 5))->toBe('%PDF-')
         ->and(strlen($body))->toBeGreaterThan(1000);
 })->group('browser');
+
+it('serves a self-printing html page by default', function () {
+    // The default driver, for hosts with neither node nor Chrome.
+    $response = $this->actingAs($this->engineer)
+        ->get(route('print.ntp', [$this->project, $this->ntp]));
+
+    $response->assertOk()
+        ->assertHeader('content-type', 'text/html; charset=UTF-8');
+
+    $body = $response->getContent();
+
+    // The form itself, plus what opens the print dialog on it.
+    expect($body)->toContain($this->ntp->ntp_no)
+        ->and($body)->toContain('window.print()')
+        ->and($body)->toContain('@page');
+});
