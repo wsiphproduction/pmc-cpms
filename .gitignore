@@ -23,3 +23,6 @@ Homestead.json
 Homestead.yaml
 npm-debug.log
 yarn-error.log
+
+# Deployment archives — zipped up for upload, never part of the source.
+*.zip
