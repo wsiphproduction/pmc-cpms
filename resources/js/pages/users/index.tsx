@@ -31,6 +31,8 @@ interface Props {
     trashedUsers: TrashedUserRow[];
     roles: string[];
     departments: DepartmentOption[];
+    // Roles limited to one holder → the name of whoever holds each one now.
+    singletonRoles: Record<string, string | null>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -48,6 +50,9 @@ const ROLE_LABELS: Record<string, string> = {
     admin:             'Admin',
     approver:          'Project Engineer',
     assistant_manager: 'Assistant Manager',
+    pmd_asst_manager:  'PMD Assistant Manager',
+    pmd_dept_manager:  'PMD Department Manager',
+    division_manager:  'Division Manager',
     requestor:         'Department User',
 };
 
@@ -59,6 +64,9 @@ function RoleBadge({ role }: { role: string | null }) {
         admin:             { bg: '#dbeafe', color: '#1e40af' },
         approver:          { bg: '#dcfce7', color: '#166534' },
         assistant_manager: { bg: '#ede9fe', color: '#5b21b6' },
+        pmd_asst_manager:  { bg: '#cffafe', color: '#155e75' },
+        pmd_dept_manager:  { bg: '#e0e7ff', color: '#3730a3' },
+        division_manager:  { bg: '#fce7f3', color: '#9d174d' },
         requestor:         { bg: '#fef9c3', color: '#854d0e' },
     };
     const s = map[role ?? ''] ?? { bg: '#f3f4f6', color: '#374151' };
@@ -213,7 +221,7 @@ function DepartmentSelect({ value, options, onChange, required }: {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function UsersIndex({ users, trashedUsers, roles, departments }: Props) {
+export default function UsersIndex({ users, trashedUsers, roles, departments, singletonRoles }: Props) {
     const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string> }>();
     const flash  = props.flash;
     const errors = props.errors ?? {};
@@ -615,6 +623,11 @@ export default function UsersIndex({ users, trashedUsers, roles, departments }: 
                             <select style={inputStyle} value={addForm.role} onChange={e => setAddForm(f => ({ ...f, role: e.target.value }))} required>
                                 {roles.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                             </select>
+                            {singletonRoles?.[addForm.role] && (
+                                <p style={{ margin: '4px 0 0', color: '#b45309', fontSize: '11.5px' }}>
+                                    Limited to one user — currently held by {singletonRoles[addForm.role]}.
+                                </p>
+                            )}
                             {errors.role && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.role}</p>}
                         </div>
                         {addForm.role === 'requestor' && (
@@ -660,6 +673,11 @@ export default function UsersIndex({ users, trashedUsers, roles, departments }: 
                             <select style={inputStyle} value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} required>
                                 {roles.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                             </select>
+                            {singletonRoles?.[editForm.role] && (
+                                <p style={{ margin: '4px 0 0', color: '#b45309', fontSize: '11.5px' }}>
+                                    Limited to one user — currently held by {singletonRoles[editForm.role]}.
+                                </p>
+                            )}
                             {errors.role && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.role}</p>}
                         </div>
                         {editForm.role === 'requestor' && (

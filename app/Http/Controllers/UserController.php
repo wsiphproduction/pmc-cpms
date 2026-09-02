@@ -32,6 +32,13 @@ class UserController extends Controller
                 'deleted_at' => $user->deleted_at,
             ]),
             'roles' => Role::orderBy('name')->pluck('name'),
+            // Roles only one person may hold, and who holds them now, so the
+            // form can say so before the save is rejected.
+            'singletonRoles' => collect(User::SINGLETON_ROLES)->mapWithKeys(fn (string $role) => [
+                $role => User::whereHas('roles', fn ($q) => $q->where('name', $role))
+                    ->value('name'),
+            ]),
+            'roleLabels' => User::ROLE_LABELS,
             'departments' => Department::where('is_active', true)->orderBy('name')->get(['name', 'description'])->map(fn (Department $row) => [
                 'value'        => (string) $row->name,
                 'label'        => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,
@@ -46,15 +53,15 @@ class UserController extends Controller
             'name'       => 'required|string|max:255',
             'email'      => 'required|email|max:255|unique:users,email',
             'password'   => ['required', Password::min(8)],
-            'role'       => 'required|string|exists:roles,name',
-            'department' => [Rule::requiredIf(fn () => $request->input('role') === 'requestor'), 'nullable', 'string', 'max:191'],
+            'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule()],
+            'department' => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_REQUESTOR), 'nullable', 'string', 'max:191'],
         ]);
 
         $user = User::create([
             'name'       => $data['name'],
             'email'      => $data['email'],
             'password'   => Hash::make($data['password']),
-            'department' => $data['role'] === 'requestor' ? ($data['department'] ?? null) : null,
+            'department' => $data['role'] === User::ROLE_REQUESTOR ? ($data['department'] ?? null) : null,
         ]);
 
         $user->assignRole($data['role']);
@@ -67,14 +74,14 @@ class UserController extends Controller
         $data = $request->validate([
             'name'       => 'required|string|max:255',
             'email'      => 'required|email|max:255|unique:users,email,' . $user->id,
-            'role'       => 'required|string|exists:roles,name',
-            'department' => [Rule::requiredIf(fn () => $request->input('role') === 'requestor'), 'nullable', 'string', 'max:191'],
+            'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule($user)],
+            'department' => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_REQUESTOR), 'nullable', 'string', 'max:191'],
         ]);
 
         $user->update([
             'name'       => $data['name'],
             'email'      => $data['email'],
-            'department' => $data['role'] === 'requestor' ? ($data['department'] ?? null) : null,
+            'department' => $data['role'] === User::ROLE_REQUESTOR ? ($data['department'] ?? null) : null,
         ]);
 
         $user->syncRoles([$data['role']]);
@@ -107,6 +114,16 @@ class UserController extends Controller
     public function restore(int $id)
     {
         $user = User::onlyTrashed()->findOrFail($id);
+
+        // Restoring must not put a second holder into a single-holder role.
+        $role = $user->roles->first()?->name;
+        if ($role && in_array($role, User::SINGLETON_ROLES, true) && $this->singletonHolder($role)) {
+            return redirect()->back()->withErrors([
+                'error' => User::roleLabel($role) . ' is already held by ' . $this->singletonHolder($role)
+                    . '. Reassign that user first, then restore this one.',
+            ]);
+        }
+
         $user->restore();
 
         return redirect()->back()->with('success', 'User restored successfully.');
@@ -123,5 +140,31 @@ class UserController extends Controller
         $user->forceDelete();
 
         return redirect()->back()->with('success', 'User permanently deleted.');
+    }
+
+    /**
+     * Guards the roles limited to one holder (PMD Department Manager, Division
+     * Manager). Passing the user being edited lets them keep their own role.
+     */
+    private function singletonRoleRule(?User $editing = null): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($editing) {
+            if (! in_array($value, User::SINGLETON_ROLES, true)) {
+                return;
+            }
+
+            $holder = User::whereHas('roles', fn ($q) => $q->where('name', $value))
+                ->when($editing, fn ($q) => $q->whereKeyNot($editing->id))
+                ->first();
+
+            if ($holder) {
+                $fail(User::roleLabel($value) . " is limited to one user and is currently held by {$holder->name}.");
+            }
+        };
+    }
+
+    private function singletonHolder(string $role): ?string
+    {
+        return User::whereHas('roles', fn ($q) => $q->where('name', $role))->value('name');
     }
 }
