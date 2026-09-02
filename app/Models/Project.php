@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasFileVersions;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,10 +11,17 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class Project extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasFileVersions;
+
+    /**
+     * How deep the project tree may go: a project, its sub-projects, and
+     * theirs. `depth()` is 1-based, so the deepest allowed project is at 3.
+     */
+    public const MAX_DEPTH = 3;
 
     /** Human-readable label for each status_key. */
     public const STATUS_LABELS = [
@@ -101,6 +110,66 @@ class Project extends Model
     public function children(): HasMany
     {
         return $this->hasMany(Project::class, 'parent_id')->latest();
+    }
+
+    // ── Walking the tree ──────────────────────────────────────────────────
+
+    /**
+     * Where this project sits in its tree, counting from 1: a top-level
+     * project is 1, its sub-project 2, and a sub-sub-project 3.
+     */
+    public function depth(): int
+    {
+        $depth   = 1;
+        $ancestor = $this->parent;
+
+        while ($ancestor !== null) {
+            $depth++;
+            $ancestor = $ancestor->parent;
+        }
+
+        return $depth;
+    }
+
+    /** Whether the tree has room for another level under this project. */
+    public function canHaveSubProjects(): bool
+    {
+        return $this->depth() < self::MAX_DEPTH;
+    }
+
+    /**
+     * The top-level project this one hangs from — itself, when it is already
+     * the root. A sub-project carries no request of its own, so ownership
+     * questions resolve here.
+     */
+    public function rootAncestor(): self
+    {
+        $project = $this;
+
+        while ($project->parent !== null) {
+            $project = $project->parent;
+        }
+
+        return $project;
+    }
+
+    /** Every project below this one, at any depth. */
+    public function descendants(): Collection
+    {
+        return $this->children->flatMap(
+            fn (self $child) => collect([$child])->concat($child->descendants())
+        );
+    }
+
+    /**
+     * This project's id together with every descendant's — what a roll-up
+     * across the whole subtree filters on.
+     */
+    public function subtreeIds(): array
+    {
+        return collect([$this->id])
+            ->concat($this->descendants()->pluck('id'))
+            ->all();
     }
 
     /** The issued NTP a sub-project was created from (null for main projects). */
@@ -215,9 +284,12 @@ class Project extends Model
             return (int) $this->completion_percent;
         }
 
-        $reported = $children->pluck('completion_percent')
-            ->push($this->completion_percent)
-            ->map(fn ($v) => (float) $v)
+        // Each child contributes its own rolled-up figure, not its raw one, so
+        // the tree folds one level at a time: a sub-sub-project's progress
+        // reaches the root through its parent rather than being averaged in
+        // flat beside it.
+        $reported = $children->map(fn (self $child) => (float) $child->effectiveCompletionPercent())
+            ->push((float) $this->completion_percent)
             ->filter(fn ($v) => $v > 0);
 
         return $reported->isEmpty() ? 0 : (int) round($reported->avg());
@@ -310,6 +382,100 @@ class Project extends Model
         $onTrackRatio = ($completion / $expectedPercent) * 100;
 
         return $onTrackRatio < $kpiThreshold ? 'Delayed' : 'On-Time';
+    }
+
+    // ── Department ownership ──────────────────────────────────────────────
+
+    /**
+     * Narrow a project query to what a user is allowed to see. Internal roles
+     * run the whole portfolio, so for them this is a no-op; a department user
+     * sees only their own department's work.
+     */
+    public function scopeVisibleTo(Builder $query, ?User $user): Builder
+    {
+        if ($user === null || $user->hasRole(User::INTERNAL_ROLES)) {
+            return $query;
+        }
+
+        return $query->forDepartmentUser($user);
+    }
+
+    /**
+     * Projects a department user owns: the ones they raised the request for,
+     * plus the ones their department is down as owner of. Applied on its own
+     * (rather than through `visibleTo`) where even an internal user should be
+     * held to their own department's queue.
+     *
+     * A sub-project carries no request of its own, so the filter also reaches
+     * up the tree — bounded by MAX_DEPTH, since each level nests another
+     * `whereHas`.
+     */
+    public function scopeForDepartmentUser(Builder $query, ?User $user, int $levels = self::MAX_DEPTH): Builder
+    {
+        if ($user === null) {
+            return $query;
+        }
+
+        return $query->where(function (Builder $q) use ($user, $levels) {
+            $q->whereHas('projectRequest', fn (Builder $r) => $r->where('requester_id', $user->id));
+
+            if (filled($user->department)) {
+                $q->orWhere('dept_owner', $user->department);
+            }
+
+            if ($levels > 1) {
+                $q->orWhereHas('parent', fn (Builder $p) => $p->forDepartmentUser($user, $levels - 1));
+            }
+        });
+    }
+
+    /**
+     * Whether the project belongs to the user's department. Sub-projects
+     * inherit the owner from their parent, so a blank one falls back to the
+     * root's.
+     */
+    public function belongsToDepartmentOf(User $user): bool
+    {
+        if (blank($user->department)) {
+            return false;
+        }
+
+        $owner = $this->dept_owner ?: $this->rootAncestor()->dept_owner;
+
+        // Case-insensitive, to match how the SQL Server comparison behaves in
+        // `scopeForDepartmentUser`.
+        return filled($owner) && strcasecmp((string) $owner, (string) $user->department) === 0;
+    }
+
+    /**
+     * The ids of everyone in the department that owns this project — who to
+     * tell when there is no single requester waiting on it.
+     */
+    public function departmentAudience(): Collection
+    {
+        $owner = $this->dept_owner ?: $this->rootAncestor()->dept_owner;
+
+        if (blank($owner)) {
+            return collect();
+        }
+
+        return User::where('department', $owner)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+    }
+
+    /**
+     * The engineers behind this project. The manager and the creator are
+     * usually the same person, so they are de-duplicated and hear about a
+     * thing once.
+     */
+    public function team(): Collection
+    {
+        return collect([$this->manager, $this->creator])
+            ->filter()
+            ->unique('id')
+            ->values();
     }
 
     // ── Notifications ─────────────────────────────────────────────────────

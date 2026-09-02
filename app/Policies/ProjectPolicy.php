@@ -14,22 +14,28 @@ class ProjectPolicy
 
     public function view(User $user, Project $project): bool
     {
-        if ($user->hasRole(['approver', 'assistant_manager', 'admin'])) {
+        if ($user->hasRole(User::INTERNAL_ROLES)) {
             return true;
         }
 
-        // A sub-project carries no request of its own — it is spawned from an NTP
-        // on its parent — so ownership resolves against the parent. The requester
-        // who asked for the parent owns everything under it. Nesting is one level
-        // deep by design: sub-projects have no RFQ/NTP sections to spawn from.
-        $owningRequest = $project->projectRequest ?? $project->parent?->projectRequest;
+        // A sub-project carries no request of its own, so ownership resolves
+        // against the tree it hangs from: the requester who asked for the root
+        // owns everything under it, however deep it is nested.
+        $owningRequest = $project->projectRequest ?? $project->rootAncestor()->projectRequest;
 
-        return $owningRequest?->requester_id === $user->id;
+        if ($owningRequest?->requester_id === $user->id) {
+            return true;
+        }
+
+        // A project an engineer registered directly has no request, and so no
+        // requester — the owning department sees it by department instead.
+        return $project->belongsToDepartmentOf($user);
     }
 
     public function create(User $user): bool
     {
-        return $user->hasRole(['approver', 'assistant_manager', 'admin']);
+        // The PMD/division approval roles have a read-only view of projects.
+        return $user->hasRole(User::DELIVERY_ROLES);
     }
 
     public function update(User $user, Project $project): bool

@@ -198,7 +198,7 @@ export function ActionBtns({
             {print    && mkBtn('#fff',    '#e2e8f0', '#475569', 'Print',    <PrintIcon />,   onPrint)}
             {edit     && mkBtn('#eff6ff', '#bfdbfe', '#2563eb', 'Edit',     <PencilIcon />,  onEdit)}
             {trophy   && mkBtn('#f0fdf4', '#bbf7d0', '#15803d', 'Award',    <TrophyIcon />,  onTrophy)}
-            {refresh  && mkBtn('#fef2f2', '#fecaca', '#dc2626', 'Resend',   <RefreshIcon />, onRefresh)}
+            {refresh  && mkBtn('#fef2f2', '#fecaca', '#dc2626', 'Re-activate', <RefreshIcon />, onRefresh)}
             {open     && mkBtn('#eef2ff', '#c7d2fe', '#4338ca', 'Open sub-project', <OpenIcon />, onOpen)}
             {del      && mkBtn('#fef2f2', '#fecaca', '#dc2626', 'Delete',   <TrashIcon />,   onDelete)}
         </div>

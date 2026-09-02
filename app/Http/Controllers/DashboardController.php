@@ -37,14 +37,14 @@ class DashboardController extends Controller
     {
         /** @var User $user */
         $user = auth()->user();
-        $isDeptUser = !$user->hasRole(['approver', 'assistant_manager', 'admin']);
+        $isDeptUser = $user->isDepartmentUser();
         $today = now()->startOfDay();
 
         // Sub-projects are components of their parent, not standalone entries —
         // exclude them everywhere on the dashboard so counts/averages don't double up.
         $projectsQuery = Project::query()
             ->whereNull('parent_id')
-            ->when($isDeptUser, fn (Builder $q) => $q->whereHas('projectRequest', fn ($rq) => $rq->where('requester_id', $user->id)));
+            ->visibleTo($user);
 
         $requestsQuery = ProjectRequest::query()
             ->when($isDeptUser, fn (Builder $q) => $q->where('requester_id', $user->id));
@@ -65,11 +65,12 @@ class DashboardController extends Controller
                         ->avg(fn (Project $p) => $p->effectiveCompletionPercent()) ?? 0
                 ),
             ],
-            // Dept users review NTPs submitted on the projects they requested.
+            // Dept users review NTPs on the projects they requested and on the
+            // ones their department owns.
             'ntps_for_review' => $isDeptUser
                 ? ProjectNtp::with(['project', 'creator'])
                     ->where('status', 'pending_review')
-                    ->whereHas('project.projectRequest', fn (Builder $q) => $q->where('requester_id', $user->id))
+                    ->whereHas('project', fn (Builder $q) => $q->forDepartmentUser($user))
                     ->latest()
                     ->take(6)
                     ->get()
@@ -144,7 +145,10 @@ class DashboardController extends Controller
                 ->whereNotIn('status_key', self::INACTIVE_STATUSES)
                 ->whereBetween('deadline', [$today, $today->copy()->addDays(7)])
                 ->count(),
-            'pending_request' => ProjectRequest::where('status', 'pending')->count(),
+            // Anything not yet settled: a request part-way up the approval
+            // chain is still outstanding, and counting only 'pending' reported
+            // the backlog as cleared the moment the first signature landed.
+            'pending_request' => ProjectRequest::whereIn('status', ['pending', 'in_approval', 'hold'])->count(),
         ];
     }
 

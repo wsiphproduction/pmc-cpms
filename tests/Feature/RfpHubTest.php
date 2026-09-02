@@ -72,7 +72,7 @@ it('updates the recommendation when a billing is edited', function () {
     expect($billing->fresh()->recommendation)->toBe('Withhold (Pending Clarification)');
 });
 
-it('offers the source NTP pre-selected on a sub-project billing form', function () {
+it('still offers a legacy source NTP on a sub-project billing form, unlocked', function () {
     $approver = makeApproverForRfp();
     $parent   = makeProjectForRfp($approver);
 
@@ -89,8 +89,8 @@ it('offers the source NTP pre-selected on a sub-project billing form', function 
     $sub = makeProjectForRfp($approver);
     $sub->forceFill(['parent_id' => $parent->id, 'source_ntp_id' => $ntp->id])->save();
 
-    // The sub-project raises no NTPs of its own, so without the source-NTP
-    // fallback the billing form would offer nothing to bill against.
+    // Sub-projects raise their own NTPs now, but one spawned from a parent's
+    // NTP before that change still offers it, so its billings keep a target.
     expect($sub->ntps()->count())->toBe(0);
 
     $this->actingAs($approver)
@@ -102,7 +102,9 @@ it('offers the source NTP pre-selected on a sub-project billing form', function 
             ->where('hub_data.ntps.0.ntp_no', 'PMC-NTP-2026-0044')
             ->where('hub_data.ntps.0.contractor', 'Primo Konstruk')
             ->where('hub_data.default_ntp_id', $ntp->id)
-            ->where('hub_data.ntp_locked', true));
+            // No longer fixed: the sub-project can raise NTPs of its own and
+            // bill against those instead.
+            ->where('hub_data.ntp_locked', false));
 });
 
 it('leaves the billing NTP unselected and choosable on a top-level project', function () {

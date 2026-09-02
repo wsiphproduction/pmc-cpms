@@ -14,9 +14,8 @@ interface SubContext {
     parent_id: number;
     parent_no: string;
     parent_title: string;
-    source_ntp_id: number;
-    ntp_no: string;
-    contractor: string;
+    /** Where this new project will sit in the tree — 2 for a sub, 3 for a sub-sub. */
+    depth: number;
 }
 
 interface Props {
@@ -121,18 +120,27 @@ function InputField({
 }
 
 function SelectField({
-    value, onChange, options, placeholder, required, error, id,
+    value, onChange, options, placeholder, required, error, id, opaqueValue = false,
 }: {
     value: string; onChange: (v: string) => void;
     options: SelectOption[]; placeholder?: string; required?: boolean; error?: string; id: string;
+    /**
+     * True when the stored value is an id rather than the text itself (the
+     * Project Manager field). An unmatched id means nothing to the reader, so
+     * it shows as empty instead of leaking a raw number into the box.
+     */
+    opaqueValue?: boolean;
 }) {
     const [open, setOpen] = useState(false);
-    const selectedOption = options.find(option => option.value === value);
-    const [inputValue, setInputValue] = useState(selectedOption?.displayLabel ?? selectedOption?.label ?? value);
+    const labelFor = (v: string) => {
+        const selected = options.find(option => option.value === v);
+        return selected?.displayLabel ?? selected?.label ?? (opaqueValue ? '' : v);
+    };
+    const [inputValue, setInputValue] = useState(() => labelFor(value));
 
     useEffect(() => {
-        const selected = options.find(option => option.value === value);
-        setInputValue(selected?.displayLabel ?? selected?.label ?? value);
+        setInputValue(labelFor(value));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [options, value]);
 
     const filtered = useMemo(() => {
@@ -302,7 +310,6 @@ export default function ProjectCreate({
         if (proposalFile) payload.proposal_document = proposalFile;
         if (sub_context) {
             payload.parent_id = String(sub_context.parent_id);
-            payload.source_ntp_id = String(sub_context.source_ntp_id);
         }
 
         if (isEditing) {
@@ -346,9 +353,9 @@ export default function ProjectCreate({
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M3 3v18h18"/><path d="M7 16l4-4 3 3 5-5"/></svg>
                     <div style={{ fontSize: '12.5px', color: '#166534', lineHeight: 1.5 }}>
                         Creating a sub-project under{' '}
-                        <strong>{sub_context.parent_no} — {sub_context.parent_title}</strong>, spawned from{' '}
-                        <strong>NTP {sub_context.ntp_no}</strong>{sub_context.contractor ? <> ({sub_context.contractor})</> : null}.
-                        <span style={{ color: '#15803d', opacity: 0.85 }}> Fields are prefilled from the parent — adjust as needed.</span>
+                        <strong>{sub_context.parent_no} — {sub_context.parent_title}</strong>.
+                        It runs on its own — its own RFQs, NTPs, billings and reports.
+                        <span style={{ color: '#15803d', opacity: 0.85 }}> Details are prefilled from the parent — adjust as needed.</span>
                     </div>
                 </div>
             )}
@@ -458,6 +465,7 @@ export default function ProjectCreate({
                                 value={data.project_manager}
                                 onChange={set('project_manager')}
                                 options={managers}
+                                opaqueValue
                                 placeholder="Select Manager"
                                 required
                                 error={errors.project_manager}

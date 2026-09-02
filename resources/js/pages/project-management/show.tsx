@@ -12,6 +12,7 @@ import PsrHub from './hub/PsrHub';
 import QppHub from './hub/QppHub';
 import RfpHub from './hub/RfpHub';
 import RfqHub from './hub/RfqHub';
+import SubProjectsHub from './hub/SubProjectsHub';
 import TodoHub from './hub/TodoHub';
 import VofHub from './hub/VofHub';
 import { CompletionPanel, type CompletionData, type Signatories } from './CompletionCertificate';
@@ -132,6 +133,7 @@ const STATUS_HINTS: Record<string, string> = {
 const OPS_MENU = [
     { key: 'rfq', label: 'Request for Quotations', short: 'RFQ', action: 'Create RFQ Package', summary: 'Prepare quotation requests, contractor scopes, and bid comparison notes.' },
     { key: 'ntp', label: 'Notice to Proceed', short: 'NTP', action: 'Prepare NTP', summary: 'Track approval readiness, signatures, and notice issuance details.' },
+    { key: 'subprojects', label: 'Sub-Projects', short: 'SUB', action: 'Add Sub-Project', summary: 'Split the project into parts that are planned, procured and billed on their own.' },
     { key: 'permits', label: 'Permits', short: 'PER', action: 'Add Permit', summary: 'Monitor required permits, filing dates, and release status.' },
     { key: 'vof', label: 'Variation Order Form', short: 'VOF', action: 'Create Variation', summary: 'Log scope changes, cost movement, and approval remarks.' },
     { key: 'qpp', label: 'Quality Plan & Procedures', short: 'QPP', action: 'Add Quality Plan', summary: 'Maintain quality procedures, inspection points, and acceptance criteria.' },
@@ -162,6 +164,14 @@ function renderHubSection(
     switch (section) {
         case 'rfq':     return <RfqHub     project={hubProject} rfqs={hubData.rfqs ?? []} suppliers={hubData.suppliers ?? []} canEdit={canEdit} />;
         case 'ntp':     return <NtpHub     project={hubProject} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
+        case 'subprojects': return <SubProjectsHub
+            project={hubProject}
+            subprojects={hubData.subprojects ?? []}
+            depth={hubData.depth ?? 1}
+            maxDepth={hubData.max_depth ?? 3}
+            canAdd={hubData.can_add ?? false}
+            canEdit={canEdit}
+        />;
         case 'permits': return <PermitsHub project={hubProject} permits={hubData.permits ?? []} canEdit={canEdit} />;
         case 'vof':     return <VofHub     project={hubProject} vofs={hubData.vofs ?? []} canEdit={canEdit} />;
         case 'qpp':     return <QppHub     project={hubProject} qpps={hubData.qpps ?? []} canEdit={canEdit} />;
@@ -912,7 +922,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                         <div style={{ padding: '10px 14px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
                             <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Action Menu</span>
                         </div>
-                        {(project.parent ? OPS_MENU.filter(m => m.key !== 'rfq' && m.key !== 'ntp') : OPS_MENU).map(item => {
+                        {OPS_MENU.map(item => {
                             const isActive = activeMenu === item.key;
                             // Audit Trail has no meaningful "pending" count — hide its badge.
                             const count = item.key === 'at' ? 0 : (hub_counts[item.key] ?? 0);
