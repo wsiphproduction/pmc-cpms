@@ -1,6 +1,5 @@
 import { router } from '@inertiajs/react';
 import { useState } from 'react';
-import { escapeHtml, formHeader, openPrintWindow, sigCell, useLogoSrc } from './hub/printForm';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 export interface CompletionPhoto { path: string; url: string }
@@ -283,119 +282,17 @@ function Inp({ v, on, type = 'text', ph }: { v: string; on: (v: string) => void;
 }
 
 // ── Printable HTML ──────────────────────────────────────────────────────────
-function acceptanceHtml(project: ProjectLite, c: CompletionData | null, s: Signatories, logo: string) {
-    const row = (k: string, v: string) => `<tr><td class="k">${escapeHtml(k)}</td><td>:</td><td>${escapeHtml(v || '')}</td></tr>`;
-    return formHeader({ docNo: 'PMD-PRJ-FRM-06', rev: '00', effective: 'October 05, 2025', title: 'PROJECT COMPLETION AND ACCEPTANCE CERTIFICATE', logo }) + `
-    <h3 class="sec">PROJECT DETAILS <span style="float:right;font-weight:400;">Reference No.: ${escapeHtml(c?.reference_no || '')}</span></h3>
-    <table class="kv">
-        ${row('Project Number', project.project_no)}
-        ${row('Project Title', project.title)}
-        ${row('Sub-Project Title', c?.sub_project_title || 'N/A')}
-        ${row('Job Site/Location', project.site)}
-        ${row('Project Owner', project.owner_name)}
-        ${row('Cost Code', project.cost_code)}
-        ${row('Service Contractor', c?.contractor || '')}
-        ${row('Actual Start Date', fmtShort(c?.con_actual_start))}
-        ${row('Actual End Date', fmtShort(c?.con_actual_end))}
-    </table>
-
-    <p class="para">This is to formally certify that the project referenced above has been successfully completed in full compliance with the approved design specifications, standard engineering practices, and all relevant codes, safety regulations, and contractual obligations.</p>
-    <p class="para">The completion of this project reflects the diligent efforts, coordination, and technical competence demonstrated throughout all phases of execution, from planning and mobilization to implementation, testing, and final inspection.</p>
-    <p class="para">We further certify that the quality standards, performance criteria, and full scope of work, as outlined in the original Work Request, Quotation, Inspection and Test Plan, and/or Construction/Service Agreement, have been entirely fulfilled. All deliverables have been reviewed, verified, and accepted by the Project Management Department (PMD) and the designated end-user representative.</p>
-    <p class="para">Comprehensive inspections, quality assurance procedures, and functional testing have been conducted where applicable, and the completed work meets or exceeds the expectations and requirements set forth at the outset of the project.</p>
-    <p class="para">This certificate is issued as a formal recognition of the project's successful completion, and it signifies the transfer of responsibility from the executing party to the end-user.</p>
-
-    <p style="margin-top:14px;"><strong>Issued on:</strong> ${escapeHtml(fmtLong(c?.issued_on))}</p>
-
-    <div class="sig">
-        ${sigCell('Prepared by:', s.prepared_by, 'Project Management Engineer')}
-        ${sigCell('Reviewed by:', s.pmd_assistant_manager, 'Project Management Dept. Asst. Manager')}
-        ${sigCell('Received by:', c?.received_by || '', 'Project Owner Representative')}
-        ${sigCell('Noted by:', s.pmd_manager, 'Project Management Dept. Manager')}
-        ${sigCell('Endorsed by:', s.ecs_division_manager, 'ECS Division Manager')}
-        ${sigCell('Accepted by:', c?.accepted_by || '', 'Project Owner Division Manager')}
-    </div>`;
+/**
+ * The completion documents — PMD-PRJ-FRM-06 and FRM-12 — are rendered to PDF
+ * server-side from the saved completion record and previewed in a new tab, so
+ * the printout is the controlled form rather than a copy of the screen.
+ */
+export function printAcceptanceCertificate(project: ProjectLite) {
+    window.open(route('print.acceptance', project.id), '_blank');
 }
 
-function summaryHtml(project: ProjectLite, c: CompletionData | null, s: Signatories, logo: string) {
-    const planSlip = daysBetween(c?.plan_actual_end, c?.plan_baseline_end);
-    const conSlip  = daysBetween(c?.con_actual_end, c?.con_baseline_end);
-    const baseline = c?.baseline_amount ?? null;
-    const actual   = c?.actual_amount ?? null;
-    let variance = '';
-    if (baseline != null && actual != null && baseline !== 0) {
-        const diff = baseline - actual;
-        const pct  = (diff / baseline) * 100;
-        variance = `${pct.toFixed(1)}% (₱${diff.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })})`;
-    }
-    const timeline = conSlip == null ? '' : conSlip > 0 ? 'Delayed' : conSlip < 0 ? 'Advanced' : 'On-Time';
-
-    const boxRow = (k: string, v: string) => `<tr><td>${escapeHtml(k)}</td><td>${escapeHtml(v || '')}</td></tr>`;
-
-    const photos = (c?.photos ?? []).slice(0, 4);
-    const photoHtml = photos.length
-        ? `<div class="docimgs">${photos.map(p => `<img src="${escapeHtml(p.url)}" />`).join('')}</div>`
-        : `<div style="border:1px solid #000;padding:40px;text-align:center;color:#666;">No documentation photos attached.</div>`;
-
-    return formHeader({ docNo: 'PMD-PRJ-FRM-12', rev: '00', effective: 'November 01, 2025', title: 'PROJECT COMPLETION SUMMARY', logo }) + `
-    <p style="margin:10px 0;"><strong>Date Prepared:</strong> ${escapeHtml(fmtLong(c?.date_prepared))}
-        <span style="float:right;">Reference Number: ${escapeHtml(c?.reference_no || '')}</span></p>
-
-    <table class="box" style="margin-bottom:12px;">
-        <tr><td class="hd" style="width:140px;">Project Number</td><td>${escapeHtml(project.project_no)}</td><td class="hd" style="width:130px;">Job Site/Location</td><td>${escapeHtml(project.site)}</td></tr>
-        <tr><td class="hd">Project Title</td><td>${escapeHtml(project.title)}</td><td class="hd">Project Owner</td><td>${escapeHtml(project.owner_name)}</td></tr>
-        <tr><td class="hd">Sub-Project Title</td><td>${escapeHtml(c?.sub_project_title || 'N/A')}</td><td class="hd">Contractor</td><td>${escapeHtml(c?.contractor || '')}</td></tr>
-        <tr><td class="hd">Project Classification</td><td>${escapeHtml(c?.classification || '')}</td><td class="hd">Request Date</td><td>${escapeHtml(fmtShort(c?.request_date))}</td></tr>
-    </table>
-
-    <table style="width:100%;border-collapse:collapse;"><tr>
-    <td style="width:49%;vertical-align:top;">
-        <table class="box"><tr><th class="hd" colspan="2">PLANNING STATUS</th></tr>
-            ${boxRow('Baseline Start Date', fmtShort(c?.plan_baseline_start))}
-            ${boxRow('Baseline End Date', fmtShort(c?.plan_baseline_end))}
-            ${boxRow('Actual Start Date', fmtShort(c?.plan_actual_start))}
-            ${boxRow('Actual End Date', fmtShort(c?.plan_actual_end))}
-            ${boxRow('Slippage (days)', planSlip == null ? '' : String(planSlip))}
-        </table>
-        <table class="box" style="margin-top:10px;"><tr><th class="hd" colspan="2">PROJECT COST</th></tr>
-            ${boxRow('Cost Code', project.cost_code)}
-            ${boxRow('Baseline Amount', money(baseline))}
-            ${boxRow('Actual Amount', money(actual))}
-            ${boxRow('Variance', variance)}
-            ${boxRow('Payment Status', c?.payment_status || '')}
-        </table>
-        <table class="box" style="margin-top:10px;"><tr><th class="hd" colspan="2">CONSTRUCTION STATUS</th></tr>
-            ${boxRow('Baseline Start Date', fmtShort(c?.con_baseline_start))}
-            ${boxRow('Baseline End Date', fmtShort(c?.con_baseline_end))}
-            ${boxRow('Actual Start Date', fmtShort(c?.con_actual_start))}
-            ${boxRow('Actual End Date', fmtShort(c?.con_actual_end))}
-            ${boxRow('Slippage (days)', conSlip == null ? '' : String(conSlip))}
-            ${boxRow('Timeline Status', timeline)}
-            ${boxRow('Completion Status', c?.completion_status || '')}
-        </table>
-    </td>
-    <td style="width:2%;"></td>
-    <td style="vertical-align:top;">
-        <table class="box"><tr><th class="hd">DOCUMENTATION</th></tr><tr><td>${photoHtml}</td></tr></table>
-    </td>
-    </tr></table>
-
-    <div class="sig">
-        ${sigCell('Prepared by:', s.prepared_by, 'Project Management Engineer')}
-        ${sigCell('Checked by:', s.pmd_assistant_manager, 'PMD Assistant Manager')}
-        ${sigCell('Noted by:', s.pmd_manager, 'PMD Manager')}
-    </div>
-    <div class="sig two">
-        ${sigCell('Endorsed by:', s.ecs_division_manager, 'ECS Division Manager')}
-        ${sigCell('Acknowledged by:', c?.acknowledged_by || '', 'Project Owner – Department Manager')}
-    </div>`;
-}
-
-export function printAcceptanceCertificate(project: ProjectLite, c: CompletionData | null, s: Signatories, logo: string) {
-    openPrintWindow(`Acceptance Certificate — ${project.project_no}`, acceptanceHtml(project, c, s, logo));
-}
-export function printCompletionSummary(project: ProjectLite, c: CompletionData | null, s: Signatories, logo: string) {
-    openPrintWindow(`Completion Summary — ${project.project_no}`, summaryHtml(project, c, s, logo));
+export function printCompletionSummary(project: ProjectLite) {
+    window.open(route('print.completion-summary', project.id), '_blank');
 }
 
 // ── Panel shown on the project page when status is COMPLETED ─────────────────
@@ -407,7 +304,6 @@ export function CompletionPanel({ project, completion, signatories, canEdit }: {
 }) {
     const [showModal, setShowModal] = useState(false);
     const filled = !!completion;
-    const logo = useLogoSrc();
 
     const btn = (bg: string, color: string, border: string): React.CSSProperties => ({
         padding: '8px 16px', borderRadius: '8px', border: `1px solid ${border}`, background: bg, color,
@@ -438,13 +334,13 @@ export function CompletionPanel({ project, completion, signatories, canEdit }: {
                             {filled ? 'Edit Details' : 'Fill Details'}
                         </button>
                     )}
-                    <button onClick={() => printAcceptanceCertificate(project, completion, signatories, logo)} disabled={!filled}
+                    <button onClick={() => printAcceptanceCertificate(project)} disabled={!filled}
                         title={filled ? '' : 'Fill in the completion details first'}
                         style={{ ...btn(filled ? '#16a34a' : '#f1f5f9', filled ? '#fff' : '#94a3b8', filled ? '#16a34a' : '#e2e8f0'), cursor: filled ? 'pointer' : 'not-allowed' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Acceptance Certificate
                     </button>
-                    <button onClick={() => printCompletionSummary(project, completion, signatories, logo)} disabled={!filled}
+                    <button onClick={() => printCompletionSummary(project)} disabled={!filled}
                         title={filled ? '' : 'Fill in the completion details first'}
                         style={{ ...btn(filled ? '#0f766e' : '#f1f5f9', filled ? '#fff' : '#94a3b8', filled ? '#0f766e' : '#e2e8f0'), cursor: filled ? 'pointer' : 'not-allowed' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
