@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import { FileHistory, FileVersion, ReplaceFileButton, VersionBadge } from '@/components/FileVersions';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ExistingAttachment {
@@ -9,6 +10,7 @@ interface ExistingAttachment {
     filepath: string;
     description: string | null;
     url: string;
+    versions?: FileVersion[];
 }
 
 interface UploadRow {
@@ -119,7 +121,7 @@ function UploadSection({ label, icon, accept, placeholder, rows, onAdd, onRemove
 }
 
 // ── Existing Attachment Row ────────────────────────────────────────────────
-function ExistingAttachmentRow({ att, onDelete }: { att: ExistingAttachment; onDelete: (id: number) => void }) {
+function ExistingAttachmentRow({ att, requestId, onDelete }: { att: ExistingAttachment; requestId: number; onDelete: (id: number) => void }) {
     const [deleted, setDeleted] = useState(false);
     if (deleted) return null;
 
@@ -127,7 +129,7 @@ function ExistingAttachmentRow({ att, onDelete }: { att: ExistingAttachment; onD
     const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext);
 
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: '#f8fafc', borderRadius: '7px', border: '1px solid #e5e7eb' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '8px 10px', background: '#f8fafc', borderRadius: '7px', border: '1px solid #e5e7eb' }}>
             <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: isImage ? '#dbeafe' : '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 {isImage ? (
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -136,11 +138,18 @@ function ExistingAttachmentRow({ att, onDelete }: { att: ExistingAttachment; onD
                 )}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-                <a href={att.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12.5px', fontWeight: 600, color: '#2563eb', textDecoration: 'none', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {att.filename}
-                </a>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <a href={att.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '12.5px', fontWeight: 600, color: '#2563eb', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {att.filename}
+                    </a>
+                    <VersionBadge versions={att.versions} />
+                </div>
                 {att.description && <span style={{ fontSize: '11px', color: '#9ca3af' }}>{att.description}</span>}
+                <FileHistory versions={att.versions} />
             </div>
+            {/* Uploading here keeps the attachment and adds a version to it —
+                unlike Remove, which drops the file and its whole history. */}
+            <ReplaceFileButton url={route('requests.attachments.replace', [requestId, att.id])} />
             <button
                 type="button"
                 onClick={() => { setDeleted(true); onDelete(att.id); }}
@@ -347,7 +356,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                         <SectionTitle>Current Attachments</SectionTitle>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '28px' }}>
                             {projectRequest.attachments.map(att => (
-                                <ExistingAttachmentRow key={att.id} att={att} onDelete={markDeleted} />
+                                <ExistingAttachmentRow key={att.id} att={att} requestId={projectRequest.id} onDelete={markDeleted} />
                             ))}
                             {deletedAttachments.length > 0 && (
                                 <p style={{ fontSize: '11.5px', color: '#f59e0b', margin: '6px 0 0' }}>

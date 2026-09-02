@@ -10,6 +10,7 @@ use App\Models\Notification;
 use App\Models\Project;
 use App\Models\ProjectRequest;
 use App\Models\User;
+use App\Support\ApprovalFlow;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -19,12 +20,17 @@ use Inertia\Response;
 
 class ProjectRequestController extends Controller
 {
+    public function __construct(private readonly ApprovalFlow $flow)
+    {
+    }
+
     public function index(Request $request): Response
     {
-        $query = ProjectRequest::with(['requester', 'project'])->latest();
+        $query = ProjectRequest::with(['requester', 'project', 'approvals.user'])->latest();
 
+        // Everyone inside PMD sees every request; department users see their own.
         $user = $request->user();
-        if (!$user->hasRole(['approver', 'assistant_manager', 'admin'])) {
+        if (!$user->hasRole(User::INTERNAL_ROLES)) {
             $query->where('requester_id', $user->id);
         }
 
@@ -51,6 +57,7 @@ class ProjectRequestController extends Controller
             'requests' => $query->paginate(15)->withQueryString()
                 ->through(fn (ProjectRequest $projectRequest) => $this->requestListData($projectRequest)),
             'filters'  => $request->only(['search', 'job_type', 'job_location', 'costcode', 'status']),
+            'canCreate' => $user->can('create', ProjectRequest::class),
         ]);
     }
 
@@ -85,6 +92,7 @@ class ProjectRequestController extends Controller
             'attachments.*.description' => ['nullable', 'string', 'max:255'],
         ]);
 
+        /** @var ProjectRequest $projectRequest */
         $projectRequest = ProjectRequest::create([
             'request_no'    => $this->nextRequestNo(),
             'title'         => $request->title,
@@ -98,6 +106,9 @@ class ProjectRequestController extends Controller
             'for_budgeting' => $request->boolean('for_budgeting'),
             'status'        => 'pending',
         ]);
+
+        // Engineer → PMD Assistant Manager → PMD Department Manager.
+        $projectRequest->startApprovalChain();
 
         $this->storeAttachments($request, $projectRequest);
 
@@ -116,7 +127,11 @@ class ProjectRequestController extends Controller
 
         return Inertia::render('requests/show', [
             'projectRequest' => [
-                ...$projectRequest->load(['requester', 'attachments', 'project'])->toArray(),
+                ...$projectRequest->load(['requester', 'attachments.fileVersions.uploader', 'project', 'approvals.user'])->toArray(),
+                'approvals' => $projectRequest->approvalTimeline(),
+                'awaiting_role_label' => $projectRequest->currentApprovalRole()
+                    ? User::roleLabel($projectRequest->currentApprovalRole())
+                    : null,
                 'can' => $this->abilities($projectRequest),
             ],
             'feedbacks' => $projectRequest->technicalFeedback()->with('user')->latest()->get()
@@ -138,7 +153,7 @@ class ProjectRequestController extends Controller
         $this->authorize('update', $projectRequest);
 
         return Inertia::render('requests/edit', [
-            'projectRequest' => $projectRequest->load('attachments'),
+            'projectRequest' => $projectRequest->load('attachments.fileVersions.uploader'),
             'jobTypes'       => JobType::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'jobLocations'   => JobLocation::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'costCodes'      => $this->costCodeOptions(),
@@ -174,6 +189,25 @@ class ProjectRequestController extends Controller
             $request->validate([
                 'status' => ['required', 'string', 'in:approved,rejected,ongoing,completed,pending,hold'],
             ]);
+
+            // Approving or rejecting here is the engineer's signature — the first
+            // step of the chain — so it goes through the flow, which decides
+            // whether the request advances to PMD or stops dead.
+            if (in_array($request->status, ['approved', 'rejected'], true)) {
+                $signed = $request->status === 'approved'
+                    ? $this->flow->approveRequest($projectRequest, $request->user())
+                    : $this->flow->rejectRequest($projectRequest, $request->user());
+
+                abort_unless($signed, 403, 'This request is not awaiting your decision.');
+
+                $projectRequest->refresh();
+
+                return back()->with('success', $projectRequest->status === 'approved'
+                    ? 'Request fully approved.'
+                    : ($request->status === 'rejected'
+                        ? 'Request rejected.'
+                        : 'Request endorsed to the ' . User::roleLabel($projectRequest->currentApprovalRole()) . '.'));
+            }
 
             $old = $projectRequest->status;
 
@@ -246,6 +280,9 @@ class ProjectRequestController extends Controller
                 ->get();
 
             foreach ($toDelete as $att) {
+                // Removing the attachment removes its whole history — every
+                // superseded file goes with it, not just the current one.
+                $att->purgeFileVersions();
                 Storage::disk('public')->delete($att->filepath); // ✅ fixed: was Storage::delete()
                 $att->delete();
             }
@@ -267,6 +304,7 @@ class ProjectRequestController extends Controller
         $this->authorize('delete', $projectRequest);
 
         foreach ($projectRequest->attachments as $att) {
+            $att->purgeFileVersions();
             Storage::disk('public')->delete($att->filepath);
             $att->delete(); // 👈 this was missing!
         }
@@ -297,7 +335,7 @@ class ProjectRequestController extends Controller
             $folder   = "requests/{$projectRequest->id}/{$type}s";
             $filepath = $file->store($folder, 'public');
 
-            Attachment::create([
+            $attachment = Attachment::create([
                 'filename'       => $file->getClientOriginalName(),
                 'filepath'       => $filepath,
                 'type'           => $type,
@@ -305,7 +343,52 @@ class ProjectRequestController extends Controller
                 'reference_type' => ProjectRequest::class,
                 'description'    => $desc,
             ]);
+
+            $attachment->recordFileVersion(
+                $filepath,
+                $file->getClientOriginalName(),
+                mimeType: $file->getMimeType(),
+                size: $file->getSize(),
+            );
         }
+    }
+
+    /**
+     * Swap the file behind an attachment for a newer one. The attachment keeps
+     * its identity, type and description — only the file moves on, to v2, v3,
+     * and so on. The file it replaces stays on disk and stays downloadable
+     * from the attachment's history.
+     */
+    public function replaceAttachment(Request $request, ProjectRequest $projectRequest, Attachment $attachment): RedirectResponse
+    {
+        $this->authorize('update', $projectRequest);
+
+        abort_unless(
+            (int) $attachment->reference_id === (int) $projectRequest->id
+                && $attachment->reference_type === ProjectRequest::class,
+            403,
+        );
+
+        $request->validate([
+            'file' => ['required', 'file', 'max:20480'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $file    = $request->file('file');
+        $folder  = "requests/{$projectRequest->id}/{$attachment->type}s";
+        $version = $attachment->storeVersionedFile($file, $folder, note: $request->input('note'));
+
+        $attachment->update([
+            'filename' => $version->filename,
+            'filepath' => $version->filepath,
+        ]);
+
+        $this->notifyApprovers(
+            "An attachment on Project Request #{$projectRequest->request_no} was replaced ({$version->label})",
+            $projectRequest
+        );
+
+        return back()->with('success', "Attachment updated to {$version->label}.");
     }
 
     private function notifyApprovers(string $message, ProjectRequest $projectRequest): void
@@ -345,6 +428,11 @@ class ProjectRequestController extends Controller
                 'id' => $projectRequest->project->id,
                 'project_no' => $projectRequest->project->project_no,
             ] : null,
+            'approvals' => $projectRequest->approvalTimeline(),
+            'awaiting_role' => $projectRequest->currentApprovalRole(),
+            'awaiting_role_label' => $projectRequest->currentApprovalRole()
+                ? User::roleLabel($projectRequest->currentApprovalRole())
+                : null,
             'can' => $this->abilities($projectRequest),
         ];
     }

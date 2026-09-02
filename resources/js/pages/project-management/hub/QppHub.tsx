@@ -2,8 +2,9 @@ import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, InfoStrip, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
+import { FileHistory, FileVersion, ReplaceFileButton, VersionBadge } from '@/components/FileVersions';
 
-interface QppRow { id: number; label: string; doc_type: string; filename: string; url: string; created: string; sub_project_id: number | null; sub_project_no: string | null }
+interface QppRow { id: number; label: string; doc_type: string; filename: string; url: string; created: string; sub_project_id: number | null; sub_project_no: string | null; versions?: FileVersion[] }
 
 export default function QppHub({ project, qpps, canEdit = true }: { project: HubProject; qpps: QppRow[]; canEdit?: boolean }) {
     const [label, setLabel]   = useState('');
@@ -80,11 +81,21 @@ export default function QppHub({ project, qpps, canEdit = true }: { project: Hub
                 </div>
             )}
             <DataTable
-                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Label', 'Type of Document', 'Date', 'Actions']}
+                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Label', 'Type of Document', 'File', 'Date', 'Actions']}
                 rows={qpps.map((doc, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
                     ...(hasSubRows ? [<SubTag no={doc.sub_project_no} />] : []),
                     <strong>{doc.label}</strong>,
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: '#0ea5e9', fontWeight: 600, textDecoration: 'none', fontSize: '12px' }}>{doc.filename}</a>
+                            <VersionBadge versions={doc.versions} tone="#0ea5e9" />
+                            {canEdit && !doc.sub_project_id && (
+                                <ReplaceFileButton url={route('files.replace', [project.id, 'qpp', doc.id])} tone="#0ea5e9" />
+                            )}
+                        </div>
+                        <FileHistory versions={doc.versions} tone="#0ea5e9" />
+                    </div>,
                     <Badge tone="blue">{doc.doc_type}</Badge>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{doc.created}</span>,
                     <ActionBtns

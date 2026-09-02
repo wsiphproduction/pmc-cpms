@@ -3,7 +3,9 @@ import { useRef, useState } from 'react';
 import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
-interface PermitFile { id: number; filename: string; url: string; mime: string }
+import { FileHistory, FileVersion, ReplaceFileButton, VersionBadge } from '@/components/FileVersions';
+
+interface PermitFile { id: number; filename: string; url: string; mime: string; versions?: FileVersion[] }
 interface PermitRow  { id: number; label: string; doc_type: string; files: PermitFile[]; sub_project_id: number | null; sub_project_no: string | null }
 
 export default function PermitsHub({ project, permits, canEdit = true }: { project: HubProject; permits: PermitRow[]; canEdit?: boolean }) {
@@ -111,12 +113,21 @@ export default function PermitsHub({ project, permits, canEdit = true }: { proje
                     ...(hasSubRows ? [<SubTag no={permit.sub_project_no} />] : []),
                     <div>
                         <strong>{permit.label}</strong>
-                        <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                        <div style={{ marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
                             {permit.files.map(f => (
-                                <a key={f.id} href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', background: f.mime?.includes('image') ? '#eff6ff' : '#fee2e2', color: f.mime?.includes('image') ? '#1e40af' : '#991b1b', padding: '2px 8px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}>
-                                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                    {f.filename}
-                                </a>
+                                <div key={f.id}>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px' }}>
+                                        <a href={f.url} target="_blank" rel="noreferrer" style={{ fontSize: '12px', background: f.mime?.includes('image') ? '#eff6ff' : '#fee2e2', color: f.mime?.includes('image') ? '#1e40af' : '#991b1b', padding: '2px 8px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px', textDecoration: 'none' }}>
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                                            {f.filename}
+                                        </a>
+                                        <VersionBadge versions={f.versions} />
+                                        {canEdit && !permit.sub_project_id && (
+                                            <ReplaceFileButton url={route('files.replace', [project.id, 'permit-file', f.id])} />
+                                        )}
+                                    </div>
+                                    <FileHistory versions={f.versions} />
+                                </div>
                             ))}
                         </div>
                     </div>,

@@ -3,8 +3,11 @@ import { useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, InfoStrip, Modal, ModalSection, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 
+import { FileHistory, FileVersion, VersionBadge } from '@/components/FileVersions';
+
 interface VofRow {
     id: number;
+    versions?: FileVersion[];
     vo_no: string;
     title: string;
     description: string | null;
@@ -307,10 +310,16 @@ function ViewVofModal({ vof, onClose }: { vof: VofRow; onClose: () => void }) {
             <div style={{ marginBottom: '20px' }}>
                 <Field label="Attachment">
                     {vof.attachment_url ? (
-                        <a href={vof.attachment_url} target="_blank" rel="noopener noreferrer"
-                           style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
-                            📎 View File ↗
-                        </a>
+                        <>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <a href={vof.attachment_url} target="_blank" rel="noopener noreferrer"
+                                   style={{ fontSize: '12px', color: '#2563eb', fontWeight: 600, textDecoration: 'none' }}>
+                                    📎 View File ↗
+                                </a>
+                                <VersionBadge versions={vof.versions} />
+                            </div>
+                            <FileHistory versions={vof.versions} />
+                        </>
                     ) : <div style={{ color: '#94a3b8', fontSize: '12px' }}>No attachment.</div>}
                 </Field>
             </div>

@@ -1,16 +1,20 @@
 <?php
 
 use App\Http\Controllers\AccountController;
+use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\FileVersionController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NtpReviewController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectHubController;
+use App\Http\Controllers\PrintController;
 use App\Http\Controllers\ProjectRequestController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingController;
+use App\Http\Controllers\SupplierQuotationController;
 use App\Http\Controllers\TechnicalFeedbackController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\WeeklyStatusController;
@@ -23,6 +27,15 @@ Route::get('/', function () {
 
 Route::get('/about', function () {
     return Inertia::render('about');
+});
+
+// Supplier quotation portal. Suppliers have no accounts — the unguessable
+// portal token in the link is what authorises them, and it scopes every action
+// to the single RFQ it belongs to.
+Route::prefix('quote/{token}')->group(function () {
+    Route::get('/',                        [SupplierQuotationController::class, 'show'])->name('supplier-quote.show');
+    Route::post('/',                       [SupplierQuotationController::class, 'store'])->name('supplier-quote.store');
+    Route::patch('{quotation}',            [SupplierQuotationController::class, 'update'])->name('supplier-quote.update');
 });
 
 Route::middleware(['auth'])->group(function () {
@@ -42,6 +55,10 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('requests', ProjectRequestController::class)
         ->parameters(['requests' => 'projectRequest']);
 
+    // Replacing an attachment's file keeps the attachment and adds a version.
+    Route::post('requests/{projectRequest}/attachments/{attachment}/replace', [ProjectRequestController::class, 'replaceAttachment'])
+        ->name('requests.attachments.replace');
+
     Route::get('requests/{projectRequest}/comments',  [CommentController::class, 'index'])->name('comments.index');
     Route::post('requests/{projectRequest}/comments', [CommentController::class, 'store'])->name('comments.store');
     Route::delete('comments/{comment}',               [CommentController::class, 'destroy'])->name('comments.destroy');
@@ -59,18 +76,43 @@ Route::middleware(['auth'])->group(function () {
     Route::patch('ntp-reviews/{ntp}/approve', [NtpReviewController::class, 'approve'])->name('ntp-reviews.approve');
     Route::patch('ntp-reviews/{ntp}/reject',  [NtpReviewController::class, 'reject'])->name('ntp-reviews.reject');
 
+    // ── For Approval portal (PMD Asst/Dept Manager, Division Manager) ──────
+    // Admins are included so the flow stays administrable, though they hold no
+    // queue of their own — the portal lists what the signed-in role is awaiting.
+    Route::middleware(['role:pmd_asst_manager|pmd_dept_manager|division_manager|admin'])->group(function () {
+        Route::get('approvals', [ApprovalController::class, 'index'])->name('approvals.index');
+        Route::patch('approvals/requests/{projectRequest}/approve', [ApprovalController::class, 'approveRequest'])->name('approvals.requests.approve');
+        Route::patch('approvals/requests/{projectRequest}/reject',  [ApprovalController::class, 'rejectRequest'])->name('approvals.requests.reject');
+        Route::patch('approvals/ntps/{ntp}/approve',                [ApprovalController::class, 'approveNtp'])->name('approvals.ntps.approve');
+        Route::patch('approvals/ntps/{ntp}/reject',                 [ApprovalController::class, 'rejectNtp'])->name('approvals.ntps.reject');
+    });
+
     // Project Management
     Route::get('projects/{project}/status', [ProjectController::class, 'status'])->name('projects.status');
     Route::patch('projects/{project}/status', [ProjectController::class, 'updateStatus'])->name('projects.update-status');
     Route::post('projects/{project}/completion', [ProjectController::class, 'saveCompletion'])
         ->middleware('can:update,project')->name('projects.completion.save');
 
-    foreach (['rfq', 'ntp', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'] as $section) {
+    foreach (['rfq', 'ntp', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'] as $section) {
         Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])
             ->defaults('section', $section)
             ->middleware('can:view,project')
             ->name("projects.hub.{$section}");
     }
+
+    // Printed PMD forms, rendered server-side to PDF and previewed in a new tab.
+    // Read-only, so they follow the hub's view permission rather than its edit one.
+    Route::middleware('can:view,project')->group(function () {
+        Route::get('projects/{project}/print/rfq/{rfq}', [PrintController::class, 'rfq'])->name('print.rfq');
+        Route::get('projects/{project}/print/ntp/{ntp}', [PrintController::class, 'ntp'])->name('print.ntp');
+        Route::get('projects/{project}/print/acceptance', [PrintController::class, 'acceptance'])->name('print.acceptance');
+        Route::get('projects/{project}/print/completion-summary', [PrintController::class, 'completionSummary'])->name('print.completion-summary');
+    });
+
+    // Replacing the file on any project record — the slot names which module.
+    Route::post('projects/{project}/files/{slot}/{id}/replace', [FileVersionController::class, 'replace'])
+        ->middleware('can:update,project')
+        ->name('files.replace');
 
     // Hub CRUD routes
     Route::prefix('projects/{project}/hub')->middleware('can:update,project')->group(function () {
@@ -79,8 +121,16 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('rfq/{rfq}',              [ProjectHubController::class, 'updateRfq'])->name('hub.rfq.update');
         Route::patch('rfq/{rfq}/status',       [ProjectHubController::class, 'updateRfqStatus'])->name('hub.rfq.update-status');
         Route::delete('rfq/{rfq}',             [ProjectHubController::class, 'destroyRfq'])->name('hub.rfq.destroy');
+        Route::post('rfq/{rfq}/resend',        [ProjectHubController::class, 'resendRfq'])->name('hub.rfq.resend');
+        // Quotations: a vendor may offer several against one RFQ, one of which is final.
+        Route::post('rfq/{rfq}/quotations',                        [ProjectHubController::class, 'storeRfqQuotation'])->name('hub.rfq.quotations.store');
+        Route::patch('rfq/{rfq}/quotations/{quotation}',           [ProjectHubController::class, 'updateRfqQuotation'])->name('hub.rfq.quotations.update');
+        Route::patch('rfq/{rfq}/quotations/{quotation}/final',     [ProjectHubController::class, 'setFinalRfqQuotation'])->name('hub.rfq.quotations.final');
+        Route::patch('rfq/{rfq}/quotations/{quotation}/received',  [ProjectHubController::class, 'receiveRfqQuotation'])->name('hub.rfq.quotations.received');
+        Route::delete('rfq/{rfq}/quotations/{quotation}',          [ProjectHubController::class, 'destroyRfqQuotation'])->name('hub.rfq.quotations.destroy');
         // NTP
         Route::post('ntp',                     [ProjectHubController::class, 'storeNtp'])->name('hub.ntp.store');
+        Route::post('ntp/{ntp}/send',          [ProjectHubController::class, 'sendNtp'])->name('hub.ntp.send');
         Route::delete('ntp/{ntp}',             [ProjectHubController::class, 'destroyNtp'])->name('hub.ntp.destroy');
         // Permits
         Route::post('permits',                 [ProjectHubController::class, 'storePermit'])->name('hub.permits.store');

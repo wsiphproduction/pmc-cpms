@@ -2,8 +2,9 @@ import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import { ActionBtns, Badge, DataTable, Field, HubProject, HubShell, InfoStrip, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
+import { FileHistory, FileVersion, ReplaceFileButton, VersionBadge } from '@/components/FileVersions';
 
-interface MtrRow { id: number; label: string; material_type: string; test_date: string; filename: string; url: string; sub_project_id: number | null; sub_project_no: string | null }
+interface MtrRow { id: number; label: string; material_type: string; test_date: string; filename: string; url: string; sub_project_id: number | null; sub_project_no: string | null; versions?: FileVersion[] }
 
 export default function MtrHub({ project, mtrs, canEdit = true }: { project: HubProject; mtrs: MtrRow[]; canEdit?: boolean }) {
     const [label, setLabel]           = useState('');
@@ -80,11 +81,21 @@ export default function MtrHub({ project, mtrs, canEdit = true }: { project: Hub
                 </div>
             )}
             <DataTable
-                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Report Name', 'Type of Report', 'Date Logged', 'Actions']}
+                headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Report Name', 'Type of Report', 'File', 'Date Logged', 'Actions']}
                 rows={mtrs.map((doc, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
                     ...(hasSubRows ? [<SubTag no={doc.sub_project_no} />] : []),
                     <strong>{doc.label}</strong>,
+                    <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <a href={doc.url} target="_blank" rel="noreferrer" style={{ color: '#f59e0b', fontWeight: 600, textDecoration: 'none', fontSize: '12px' }}>{doc.filename}</a>
+                            <VersionBadge versions={doc.versions} tone="#f59e0b" />
+                            {canEdit && !doc.sub_project_id && (
+                                <ReplaceFileButton url={route('files.replace', [project.id, 'mtr', doc.id])} tone="#f59e0b" />
+                            )}
+                        </div>
+                        <FileHistory versions={doc.versions} tone="#f59e0b" />
+                    </div>,
                     <Badge tone="yellow">{doc.material_type}</Badge>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{doc.test_date}</span>,
                     <ActionBtns

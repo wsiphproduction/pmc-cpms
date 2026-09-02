@@ -413,7 +413,7 @@ describe('update', function () {
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists($report->file_path);
     });
 
-    it('replaces an attachment and clears the old file', function () {
+    it('replaces an attachment and keeps the old file as an earlier version', function () {
         \Illuminate\Support\Facades\Storage::fake('public');
 
         $engineer = makeWeeklyStatusEngineer();
@@ -438,8 +438,15 @@ describe('update', function () {
         $report->refresh();
 
         expect($report->filename)->toBe('second.pdf');
-        \Illuminate\Support\Facades\Storage::disk('public')->assertMissing($oldPath);
+
+        // The replaced file is kept: it is v1 of this report's attachment and
+        // has to stay openable from the version history.
+        \Illuminate\Support\Facades\Storage::disk('public')->assertExists($oldPath);
         \Illuminate\Support\Facades\Storage::disk('public')->assertExists($report->file_path);
+
+        expect($report->versionsOf()->pluck('filename')->all())->toBe(['second.pdf', 'first.pdf'])
+            ->and($report->latestFileVersion()->version)->toBe(2)
+            ->and($report->latestFileVersion()->filepath)->toBe($report->file_path);
     });
 
     it('removes an attachment when asked', function () {

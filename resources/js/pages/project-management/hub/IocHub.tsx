@@ -6,7 +6,9 @@ import { useConfirm } from '@/components/useConfirm';
 // `label` is the full "code — department — description" line shown in the
 // dropdown; `displayLabel` is the bare code that stays in the field once picked.
 interface CostCodeOption { value: string; label: string; displayLabel?: string }
-interface IocRow { id: number; description: string; cost_code: string | null; amount: number; filename: string | null; url: string | null; created: string; sub_project_id: number | null; sub_project_no: string | null }
+import { FileHistory, FileVersion, ReplaceFileButton, VersionBadge } from '@/components/FileVersions';
+
+interface IocRow { id: number; description: string; cost_code: string | null; amount: number; filename: string | null; url: string | null; created: string; sub_project_id: number | null; sub_project_no: string | null; versions?: FileVersion[] }
 
 function CostCodeSelect({ value, onChange, options, id }: {
     value: string;
@@ -264,7 +266,16 @@ export default function IocHub({ project, iocs, costCodes = [], canEdit = true }
                     item.cost_code ?? <span style={{ color: '#94a3b8' }}>-</span>,
                     <strong>{item.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>,
                     item.filename
-                        ? <a href={item.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700 }}>{item.filename}</a>
+                        ? <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <a href={item.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700 }}>{item.filename}</a>
+                                <VersionBadge versions={item.versions} />
+                                {canEdit && !item.sub_project_id && (
+                                    <ReplaceFileButton url={route('files.replace', [project.id, 'ioc', item.id])} />
+                                )}
+                            </div>
+                            <FileHistory versions={item.versions} />
+                        </div>
                         : <span style={{ color: '#94a3b8' }}>—</span>,
                     <ActionBtns view edit={canEdit && !item.sub_project_id} del={canEdit && !item.sub_project_id} open={!!item.sub_project_id}
                         onView={() => setViewing(item)}

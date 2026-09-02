@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import { Badge, Button, DataTable, HubProject, HubShell, Modal, inputStyle, money } from './Common';
 import { useConfirm } from '@/components/useConfirm';
+import { FileHistory, FileVersion, VersionBadge } from '@/components/FileVersions';
 
 interface NtpOption {
     id: number;
@@ -12,6 +13,7 @@ interface NtpOption {
 
 interface BillingRow {
     id: number;
+    versions?: FileVersion[];
     stmt_no: string;
     billing_type: string;
     period_from: string;
@@ -832,9 +834,13 @@ function ViewBillingModal({ billing, onClose, onEdit, canEdit = true }: { billin
                         <tr>
                             <td style={labelCell}>Attached File</td>
                             <td style={ro}>
-                                <a href={billing.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>
-                                    {billing.filename}
-                                </a>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                    <a href={billing.url} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>
+                                        {billing.filename}
+                                    </a>
+                                    <VersionBadge versions={billing.versions} />
+                                </div>
+                                <FileHistory versions={billing.versions} />
                             </td>
                         </tr>
                     )}

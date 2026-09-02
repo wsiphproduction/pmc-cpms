@@ -218,6 +218,16 @@ class WeeklyStatusController extends Controller
             'created_by'        => auth()->id(),
         ]);
 
+        if ($filePath) {
+            $upload = $request->file('file');
+            $report->recordFileVersion(
+                $filePath,
+                $upload->getClientOriginalName(),
+                mimeType: $upload->getMimeType(),
+                size: $upload->getSize(),
+            );
+        }
+
         $project->refreshCompletionFromReports();
 
         AuditTrail::log("Weekly report {$report->week_code} submitted — {$data['completion_pct']}% complete", $project, ['module' => 'PSR', 'type' => 'upload']);
@@ -244,15 +254,13 @@ class WeeklyStatusController extends Controller
         $filePath = $report->file_path;
         $filename = $report->filename;
 
-        // A replacement upload wins over the remove flag; either way the old file
-        // goes, so revisions don't leave orphans on disk.
+        // A replacement upload wins over the remove flag. The file it replaces
+        // is kept — it becomes the previous version of this report's PDF, and
+        // stays openable from the report's history.
         if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            if ($filePath) {
-                Storage::disk('public')->delete($filePath);
-            }
-            $filePath = $file->store("hub/psr/{$project->id}", 'public');
-            $filename = $file->getClientOriginalName();
+            $version  = $report->storeVersionedFile($request->file('file'), "hub/psr/{$project->id}");
+            $filePath = $version->filepath;
+            $filename = $version->filename;
         } elseif ($request->boolean('remove_file') && $filePath) {
             Storage::disk('public')->delete($filePath);
             $filePath = null;

@@ -7,7 +7,9 @@ import {
 } from './PsrDocument';
 import { useConfirm } from '@/components/useConfirm';
 
-interface PsrRow { id: number; week_code: string; completion_pct: number; identified_issues: string | null; progress_updates: string | null; checklist: ChecklistEntry[]; issues: IssueEntry[]; submitted_date: string; filename: string | null; url: string | null; ntp_id: number | null; ntp_no: string | null; ntp_contractor: string | null; sub_project_id: number | null; sub_project_no: string | null }
+import { FileHistory, FileVersion, ReplaceFileButton, VersionBadge } from '@/components/FileVersions';
+
+interface PsrRow { id: number; week_code: string; completion_pct: number; identified_issues: string | null; progress_updates: string | null; checklist: ChecklistEntry[]; issues: IssueEntry[]; submitted_date: string; filename: string | null; url: string | null; ntp_id: number | null; ntp_no: string | null; ntp_contractor: string | null; sub_project_id: number | null; sub_project_no: string | null; versions?: FileVersion[] }
 interface NtpOption { id: number; ntp_no: string; contractor: string }
 
 function ProgressBar({ value }: { value: number }) {
@@ -387,7 +389,16 @@ export default function PsrHub({ project, reports, ntps = [], checklist = [], is
                     <span style={{ fontSize: '12.5px' }}>{r.identified_issues ?? '—'}</span>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{r.submitted_date}</span>,
                     r.filename
-                        ? <a href={r.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700, fontSize: '12.5px' }}>{r.filename}</a>
+                        ? <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <a href={r.url ?? '#'} target="_blank" rel="noreferrer" style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 700, fontSize: '12.5px' }}>{r.filename}</a>
+                                <VersionBadge versions={r.versions} />
+                                {canEdit && !r.sub_project_id && (
+                                    <ReplaceFileButton url={route('files.replace', [project.id, 'psr', r.id])} />
+                                )}
+                            </div>
+                            <FileHistory versions={r.versions} />
+                        </div>
                         : <span style={{ color: '#94a3b8' }}>—</span>,
                     r.sub_project_id ? (
                         <div style={{ display: 'flex', gap: '4px' }}>

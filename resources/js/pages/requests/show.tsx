@@ -1,6 +1,8 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import ApprovalTimeline, { ApprovalRemarks, ApprovalStep } from '@/components/ApprovalTimeline';
+import { FileHistory, FileVersion, VersionBadge } from '@/components/FileVersions';
 import { useConfirm } from '@/components/useConfirm';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -11,6 +13,7 @@ interface Attachment {
     type: 'picture' | 'drawing' | 'report' | 'other' | null;
     description: string | null;
     url: string;
+    versions?: FileVersion[];
 }
 
 interface Comment {
@@ -36,7 +39,9 @@ interface ProjectRequestData {
     opex: boolean;
     capex: boolean;
     for_budgeting: boolean;
-    status: 'pending' | 'approved' | 'hold' | 'ongoing' | 'rejected' | 'completed';
+    status: 'pending' | 'approved' | 'in_approval' | 'hold' | 'ongoing' | 'rejected' | 'completed';
+    approvals?: ApprovalStep[];
+    awaiting_role_label?: string | null;
     requester: User | null;
     project: { id: number; project_no: string } | null;
     attachments: Attachment[];
@@ -99,6 +104,7 @@ function InfoValue({ children }: { children: React.ReactNode }) {
 function StatusBadge({ status }: { status: ProjectRequestData['status'] }) {
     const map: Record<ProjectRequestData['status'], { bg: string; color: string; label: string }> = {
         pending:   { bg: '#fef9c3', color: '#854d0e', label: '⏳ For Approval' },
+        in_approval: { bg: '#e0e7ff', color: '#3730a3', label: '⏳ In Approval' },
         approved:  { bg: '#dcfce7', color: '#166534', label: '✓ Approved' },
         hold:      { bg: '#ffedd5', color: '#9a3412', label: '⏸ On Hold' },
         ongoing:   { bg: '#dbeafe', color: '#1e40af', label: '⚡ Ongoing' },
@@ -130,13 +136,12 @@ function AttachmentItem({ att }: { att: Attachment }) {
     const iconColor = isImage ? '#2563eb' : isPdf ? '#dc2626' : '#6b7280';
 
     return (
-        <a
-            href={att.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', textDecoration: 'none', color: 'inherit', marginBottom: '8px', transition: 'all 0.13s' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLAnchorElement).style.background = '#f8fafc'; (e.currentTarget as HTMLAnchorElement).style.borderColor = '#2563eb'; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLAnchorElement).style.background = '#fff'; (e.currentTarget as HTMLAnchorElement).style.borderColor = '#e5e7eb'; }}
+        // A plain div rather than a link: the history toggle below is a button,
+        // and a button inside an anchor would swallow its own click.
+        <div
+            style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', padding: '10px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', color: 'inherit', marginBottom: '8px', transition: 'all 0.13s' }}
+            onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#2563eb'; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.borderColor = '#e5e7eb'; }}
         >
             <div style={{ width: '38px', height: '38px', borderRadius: '8px', background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="2">
@@ -148,18 +153,29 @@ function AttachmentItem({ att }: { att: Attachment }) {
                 </svg>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {att.filename}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ fontSize: '12.5px', fontWeight: 600, color: '#0f172a', textDecoration: 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                        {att.filename}
+                    </a>
+                    <VersionBadge versions={att.versions} />
                 </div>
                 {att.description && (
                     <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '1px' }}>{att.description}</div>
                 )}
+                <FileHistory versions={att.versions} />
             </div>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ flexShrink: 0 }}>
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-        </a>
+            <a href={att.url} target="_blank" rel="noopener noreferrer" title="Download" style={{ flexShrink: 0, lineHeight: 0, marginTop: '2px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+            </a>
+        </div>
     );
 }
 
@@ -685,6 +701,22 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                     </div>
                     <StatusBadge status={projectRequest.status} />
                 </div>
+
+                {/* Sign-off chain: engineer → PMD Assistant Manager → PMD Department Manager */}
+                {(projectRequest.approvals?.length ?? 0) > 0 && (
+                    <div style={{ padding: '16px 28px', borderBottom: '1px solid #f3f4f6', background: '#fbfdff' }}>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                            Approval Chain
+                            {projectRequest.awaiting_role_label && (
+                                <span style={{ marginLeft: '8px', textTransform: 'none', letterSpacing: 0, color: '#2563eb', fontWeight: 700 }}>
+                                    · with the {projectRequest.awaiting_role_label}
+                                </span>
+                            )}
+                        </div>
+                        <ApprovalTimeline steps={projectRequest.approvals!} />
+                        <ApprovalRemarks steps={projectRequest.approvals!} />
+                    </div>
+                )}
 
                 {/* Card body */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px' }}>
