@@ -94,7 +94,11 @@ export default function MtrHub({ project, mtrs, canEdit = true }: { project: Hub
                                 <ReplaceFileButton url={route('files.replace', [project.id, 'mtr', doc.id])} tone="#f59e0b" />
                             )}
                         </div>
-                        <FileHistory versions={doc.versions} tone="#f59e0b" />
+                        <FileHistory
+                            versions={doc.versions}
+                            tone="#f59e0b"
+                            restoreUrl={canEdit && !doc.sub_project_id ? v => route('files.restore', [project.id, 'mtr', doc.id, v]) : undefined}
+                        />
                     </div>,
                     <Badge tone="yellow">{doc.material_type}</Badge>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{doc.test_date}</span>,

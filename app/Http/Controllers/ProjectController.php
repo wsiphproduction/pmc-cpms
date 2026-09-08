@@ -109,9 +109,11 @@ class ProjectController extends Controller
                 'Sub-projects can only go ' . Project::MAX_DEPTH . ' levels deep.',
             );
 
+            $projectNo = $this->subProjectNo($parent);
+
             return Inertia::render('project-management/create', [
-                'next_project_no' => $this->subProjectNo($parent),
-                'project' => $this->subProjectFormData($parent),
+                'next_project_no' => $projectNo,
+                'project' => $this->subProjectFormData($parent, $projectNo),
                 'sub_context' => [
                     'parent_id'    => $parent->id,
                     'parent_no'    => $parent->project_no,
@@ -1138,16 +1140,32 @@ class ProjectController extends Controller
      * than inheriting the parent's — a sub-project is a slice of the work, not
      * a copy of the whole budget. Everything stays editable.
      */
-    private function subProjectFormData(Project $parent): array
+    private function subProjectFormData(Project $parent, string $projectNo): array
     {
         return [
             ...$this->projectFormData($parent),
             'id' => null,
-            'title' => '',
+            'title' => $this->subProjectTitle($parent, $projectNo),
             'status' => 'PLANNING',
             'project_cost' => 0,
             'deadline' => optional($parent->deadline)->format('Y-m-d'),
         ];
+    }
+
+    /**
+     * The title a new sub-project opens with, built from the parent's title and
+     * the sequence its number ends in, so a tree still reads as a tree when
+     * nobody bothers to retype it. The field stays editable.
+     */
+    private function subProjectTitle(Project $parent, string $projectNo): string
+    {
+        $suffix = ' — Sub-Project ' . substr($projectNo, -2);
+
+        // Titles are capped at 255; trim the parent's so the suffix always fits
+        // and the prefill can never be rejected by its own validation.
+        $stem = mb_substr(trim($parent->title), 0, 255 - mb_strlen($suffix));
+
+        return rtrim($stem) . $suffix;
     }
 
     private function projectListData(Project $project): array

@@ -98,13 +98,38 @@ trait HasFileVersions
     }
 
     /**
+     * Put an earlier version back in front as the current file.
+     *
+     * The log stays append-only and its numbering stays honest: rather than
+     * moving the "current" marker backwards, the chosen file is logged again as
+     * the newest version. The two rows name the same file on disk, so nothing
+     * is copied and nothing already uploaded is lost — which is also why
+     * individual versions must never have their files deleted on their own.
+     *
+     * The caller still writes the returned path onto its own record.
+     */
+    public function restoreFileVersion(FileVersion $version, ?string $note = null): FileVersion
+    {
+        return $this->recordFileVersion(
+            $version->filepath,
+            $version->filename,
+            $version->collection,
+            $version->mime_type,
+            $version->size,
+            $note ?: "Restored from {$version->label}",
+        );
+    }
+
+    /**
      * Drop the whole history and its files. Only for deleting the owning
      * record — replacing a file must leave the old versions readable.
      */
     public function purgeFileVersions(): void
     {
-        foreach ($this->fileVersions()->get() as $version) {
-            Storage::disk('public')->delete($version->filepath);
+        // unique(): a restored version shares its file with the one it brought
+        // back, so the same path can appear on more than one row.
+        foreach ($this->fileVersions()->pluck('filepath')->unique() as $path) {
+            Storage::disk('public')->delete($path);
         }
 
         $this->fileVersions()->delete();

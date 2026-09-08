@@ -74,8 +74,9 @@ class ProjectRfq extends Model
 
     /**
      * The offers made against this RFQ, in the order they were raised. A
-     * vendor may put up several; exactly one carries `is_final`, and that is
-     * the one the project awards and issues the NTP from.
+     * vendor may put up several; at most one carries `is_final`, and that is
+     * the one the project awards and issues the NTP from. A freshly dispatched
+     * RFQ has none until the supplier or the team puts one up.
      */
     public function quotations(): HasMany
     {
@@ -91,6 +92,10 @@ class ProjectRfq extends Model
     /**
      * Copy the final quotation's terms onto this row. Line items need no
      * copying — `items()` already reads through the final flag.
+     *
+     * Settling on an offer is also what carries the row off Pending: there is
+     * no separate step for accepting one, so an RFQ that has a final quotation
+     * has, by that fact, been answered. A row further along is left alone.
      */
     public function syncFromFinalQuotation(): void
     {
@@ -100,9 +105,12 @@ class ProjectRfq extends Model
             return;
         }
 
-        $this->update(collect(self::MIRRORED)
-            ->mapWithKeys(fn (string $field) => [$field => $final->{$field}])
-            ->all());
+        $this->update([
+            ...collect(self::MIRRORED)
+                ->mapWithKeys(fn (string $field) => [$field => $final->{$field}])
+                ->all(),
+            ...($this->status === 'pending' ? ['status' => 'submitted'] : []),
+        ]);
     }
 
     /** Where the supplier fills in their quotation — the link the RFQ email carries. */

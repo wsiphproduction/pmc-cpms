@@ -1,5 +1,6 @@
 import { router } from '@inertiajs/react';
 import { useRef, useState } from 'react';
+import { useConfirm } from './useConfirm';
 
 /**
  * One upload of a file slot. `is_current` marks the version the record points
@@ -51,14 +52,42 @@ export function VersionBadge({ versions, tone = '#2563eb' }: { versions?: FileVe
  * The upload history for one file, with every earlier version still openable.
  * Collapsed by default — a file that has only ever been uploaded once has no
  * history worth taking up room for.
+ *
+ * Pass `restoreUrl` to let an earlier version be put back in front. It is left
+ * off wherever the history is only being shown, so a read-only view stays one.
  */
-export function FileHistory({ versions, tone = '#2563eb' }: { versions?: FileVersion[]; tone?: string }) {
+export function FileHistory({ versions, tone = '#2563eb', restoreUrl }: {
+    versions?: FileVersion[];
+    tone?: string;
+    /** Builds the endpoint that makes one version current, by its id. */
+    restoreUrl?: (versionId: number) => string;
+}) {
     const [open, setOpen] = useState(false);
+    const [restoring, setRestoring] = useState<number | null>(null);
+    const { confirm, dialog } = useConfirm();
+
+    const restore = (v: FileVersion) => {
+        if (!restoreUrl || restoring !== null) return;
+
+        confirm(
+            `Make ${v.label} (${v.filename}) the current file? It is kept as a new version, so nothing already uploaded is lost.`,
+            () => {
+                setRestoring(v.id);
+                router.post(restoreUrl(v.id), {}, {
+                    preserveScroll: true,
+                    onFinish: () => setRestoring(null),
+                });
+            },
+            { title: 'Make This Version Current', confirmLabel: 'Make Current', variant: 'warning' },
+        );
+    };
 
     if (!versions || versions.length < 2) return null;
 
     return (
         <div style={{ marginTop: '4px' }}>
+            {dialog}
+
             <button
                 type="button"
                 onClick={() => setOpen(o => !o)}
@@ -94,8 +123,23 @@ export function FileHistory({ versions, tone = '#2563eb' }: { versions?: FileVer
                                 {v.uploaded_by ? ` by ${v.uploaded_by}` : ''}
                                 {v.size ? ` · ${fmtSize(v.size)}` : ''}
                             </span>
-                            {v.is_current && (
+                            {v.is_current ? (
                                 <span style={{ color: tone, fontWeight: 800, fontSize: '10px' }}>current</span>
+                            ) : restoreUrl && (
+                                <button
+                                    type="button"
+                                    disabled={restoring !== null}
+                                    onClick={() => restore(v)}
+                                    title={`Make ${v.label} the current file again`}
+                                    style={{
+                                        background: 'none', border: 'none', padding: 0,
+                                        cursor: restoring !== null ? 'wait' : 'pointer',
+                                        color: tone, fontWeight: 800, fontSize: '10px',
+                                        textDecoration: 'underline', whiteSpace: 'nowrap',
+                                    }}
+                                >
+                                    {restoring === v.id ? 'setting…' : 'make current'}
+                                </button>
                             )}
                         </div>
                     ))}

@@ -1,6 +1,6 @@
 import { router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
-import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, SubTag, inputStyle } from './Common';
+import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, SubTag, inputStyle, money } from './Common';
 import { SendConfirmModal } from './SendConfirmModal';
 import { useConfirm } from '@/components/useConfirm';
 
@@ -20,7 +20,7 @@ interface QuotationRow {
     status: 'draft' | 'submitted' | 'received';
     /** 'supplier' when filled in through the portal, 'staff' when typed here. */
     origin: 'staff' | 'supplier';
-    /** False while the supplier still has it as an unsent draft. */
+    /** Whether it can be made final — true only once marked received. */
     selectable: boolean;
     submitted_at: string | null;
     received_at: string | null;
@@ -333,6 +333,130 @@ function RfqViewModal({ row, quotation, project, onClose, canEdit = true }: { ro
     );
 }
 
+// ── Quotation Detail (read-only) ───────────────────────────────────────────
+// What the supplier actually offered, laid out to be read rather than edited.
+// The form beside it is for changing an offer; this is for checking one over
+// before it is marked received or made final.
+function QuotationDetailModal({ row, quotation, project, onClose }: {
+    row: RfqRow;
+    quotation: QuotationRow;
+    project: HubProject;
+    onClose: () => void;
+}) {
+    const items = quotation.items ?? [];
+    const grandTotal = items.reduce((sum, i) => sum + Number(i.total_cost ?? 0), 0);
+    const amount = (n: number | null | undefined) => (n != null
+        ? Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : '—');
+
+    const th: React.CSSProperties = { padding: '8px 10px', textAlign: 'left', fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', background: '#f1f5f9', borderBottom: '1px solid #e5e7eb' };
+    const td: React.CSSProperties = { padding: '7px 10px', fontSize: '12.5px', color: '#1e293b', borderBottom: '1px solid #f1f5f9' };
+
+    const facts: [string, React.ReactNode][] = [
+        ['Service Contractor', row.contractor],
+        ['Date Sent',          row.sent],
+        ['Project Number',     project.project_no],
+        ['Project Title',      project.title],
+        ['Project Owner',      project.project_manager],
+        ['Date Needed',        quotation.due_raw ? quotation.due : '—'],
+        ['Project Duration',   quotation.duration_days ? `${quotation.duration_days} calendar day${quotation.duration_days === 1 ? '' : 's'}` : '—'],
+        ['Submitted',          quotation.submitted_at ?? 'Not sent yet'],
+        ['Received',           quotation.received_at ?? 'Not yet acknowledged'],
+    ];
+
+    // Free text reads better as blocks than squeezed into the fact grid.
+    const prose: [string, string | null][] = [
+        ['Scope of Work',        quotation.scope_of_work],
+        ['Terms and Conditions', quotation.terms],
+        ['Inclusions',           quotation.inclusions],
+        ['Exclusions',           quotation.exclusions],
+    ];
+
+    return (
+        <Modal title={`${quotation.name} — ${row.contractor}`} onClose={onClose} size="900px"
+            footer={<button type="button" onClick={onClose} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#0f172a', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Close</button>}
+        >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px', flexWrap: 'wrap' }}>
+                {quotation.is_final ? <Badge tone="green">Final quotation</Badge> : <Badge tone="slate">Not final</Badge>}
+                {quotation.origin === 'supplier'
+                    ? <Badge tone={QUOTE_STATUS[quotation.status].tone}>{QUOTE_STATUS[quotation.status].label}</Badge>
+                    : <Badge tone="slate">Entered by the project team</Badge>}
+            </div>
+
+            <ModalSection>I. Project Specifications</ModalSection>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '22px' }}>
+                {facts.map(([label, value]) => (
+                    <div key={label}>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>{label}</div>
+                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{value}</div>
+                    </div>
+                ))}
+                <div style={{ gridColumn: '1/-1' }}>
+                    <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '3px' }}>Job Site / Location</div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b' }}>{project.site}</div>
+                </div>
+            </div>
+
+            <ModalSection>II. Itemized Quotation</ModalSection>
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '6px', overflow: 'hidden', overflowX: 'auto', marginBottom: '22px' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '560px' }}>
+                    <thead>
+                        <tr>{['Seq', 'Deliverables or Activities', 'Qty', 'Unit', 'Unit Cost', 'Total Cost'].map(h => <th key={h} style={th}>{h}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                        {items.length === 0 && (
+                            <tr><td colSpan={6} style={{ ...td, textAlign: 'center', color: '#94a3b8', padding: '20px 0' }}>No line items on this quotation.</td></tr>
+                        )}
+                        {items.map((item, i) => (
+                            <tr key={i}>
+                                <td style={{ ...td, textAlign: 'center', color: '#94a3b8', width: '36px' }}>{i + 1}</td>
+                                <td style={td}>{item.description ?? '—'}</td>
+                                <td style={{ ...td, textAlign: 'right', width: '70px' }}>{item.qty ?? '—'}</td>
+                                <td style={{ ...td, width: '80px' }}>{item.unit || '—'}</td>
+                                <td style={{ ...td, textAlign: 'right', width: '110px' }}>{amount(item.unit_cost)}</td>
+                                <td style={{ ...td, textAlign: 'right', width: '120px', fontWeight: 700, background: '#f8fafc', color: (item.total_cost ?? 0) > 0 ? '#2563eb' : '#94a3b8' }}>
+                                    {amount(item.total_cost)}
+                                </td>
+                            </tr>
+                        ))}
+                        <tr style={{ background: '#f8fafc' }}>
+                            <td colSpan={5} style={{ ...td, textAlign: 'right', fontWeight: 800, borderBottom: 'none' }}>Grand Total</td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 900, color: '#2563eb', background: '#fefce8', borderBottom: 'none' }}>{money(grandTotal)}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <ModalSection>III. Scope, Terms and Provisions</ModalSection>
+            <div style={{ display: 'grid', gap: '14px', marginBottom: '22px' }}>
+                {prose.map(([label, value]) => (
+                    <div key={label}>
+                        <div style={{ fontSize: '10px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>{label}</div>
+                        <div style={{
+                            fontSize: '12.5px', lineHeight: 1.6, whiteSpace: 'pre-wrap',
+                            color: value ? '#334155' : '#94a3b8',
+                            background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '7px', padding: '10px 12px',
+                        }}>
+                            {value || 'Not stated.'}
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <ModalSection>IV. Quotation File Attachment</ModalSection>
+            {quotation.quotation_file ? (
+                <a href={quotation.quotation_file} target="_blank" rel="noreferrer"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 15px', borderRadius: '7px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#2563eb', fontSize: '12.5px', fontWeight: 700, textDecoration: 'none' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Open attached file
+                </a>
+            ) : (
+                <div style={{ fontSize: '12.5px', color: '#94a3b8' }}>No file attached to this quotation.</div>
+            )}
+        </Modal>
+    );
+}
+
 const QUOTE_STATUS: Record<QuotationRow['status'], { tone: 'slate' | 'blue' | 'green'; label: string }> = {
     draft:     { tone: 'slate', label: 'Supplier draft' },
     submitted: { tone: 'blue',  label: 'Submitted' },
@@ -354,10 +478,14 @@ function QuotationsModal({ row, project, canEdit, onClose, onEdit }: {
     const [label, setLabel]     = useState('');
     const [copyFrom, setCopyFrom] = useState<string>('');
     const [busy, setBusy]       = useState(false);
+    const [detailId, setDetailId] = useState<number | null>(null);
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
     const quotations = row.quotations ?? [];
     const peso = (n: number) => `PhP ${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    // Read from the live list, so the panel follows an Inertia reload rather
+    // than holding on to the row it was opened with.
+    const detail = quotations.find(q => q.id === detailId) ?? null;
 
     const handleAdd = () => {
         setBusy(true);
@@ -416,6 +544,16 @@ function QuotationsModal({ row, project, canEdit, onClose, onEdit }: {
         >
             {confirmDialog}
 
+            {detail && (
+                <QuotationDetailModal
+                    key={detail.id}
+                    row={row}
+                    quotation={detail}
+                    project={project}
+                    onClose={() => setDetailId(null)}
+                />
+            )}
+
             <div style={{ padding: '10px 14px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', marginBottom: '18px', fontSize: '12.5px', color: '#1e40af', lineHeight: 1.6 }}>
                 {row.contractor} fills these in through the link in their RFQ email. Mark one <strong>Received</strong> to close it for further edits, then set it <strong>Final</strong> — that is the offer the RFQ table shows and the one an NTP is issued from.
             </div>
@@ -423,7 +561,8 @@ function QuotationsModal({ row, project, canEdit, onClose, onEdit }: {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {quotations.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '22px 0', color: '#94a3b8', fontSize: '13px' }}>
-                        No quotations recorded yet.
+                        Nothing yet — this fills up when {row.contractor} sends a quotation
+                        through their RFQ link, or when you add one below.
                     </div>
                 )}
 
@@ -463,20 +602,25 @@ function QuotationsModal({ row, project, canEdit, onClose, onEdit }: {
                         </div>
 
                         <div style={{ display: 'flex', gap: '6px', marginTop: '11px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            {smallBtn(canEdit ? 'Edit quotation' : 'View quotation', () => onEdit(q), 'blue')}
+                            {smallBtn('View details', () => setDetailId(q.id), 'plain')}
+                            {canEdit && smallBtn('Edit quotation', () => onEdit(q), 'blue')}
                             {canEdit && q.status === 'submitted' && smallBtn('Mark received', () => handleReceive(q), 'green')}
                             {q.quotation_file && (
                                 <a href={q.quotation_file} target="_blank" rel="noreferrer"
                                     style={{ padding: '5px 11px', borderRadius: '6px', background: '#fff', border: '1px solid #e2e8f0', color: '#475569', fontSize: '11.5px', fontWeight: 700, textDecoration: 'none', whiteSpace: 'nowrap' }}>
-                                    Attached file
+                                    View attached file
                                 </a>
                             )}
+                            {/* An offer is only awardable once it has been marked
+                                received — that is what closes it to the supplier. */}
                             {canEdit && !q.is_final && (q.selectable
                                 ? smallBtn('Set as final', () => handleSetFinal(q), 'green')
                                 : <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600 }}>
-                                    Awaiting the supplier to send it
+                                    {q.status === 'submitted'
+                                        ? 'Mark it received to make it final'
+                                        : 'Awaiting the supplier to send it'}
                                 </span>)}
-                            {canEdit && quotations.length > 1 && smallBtn('Delete', () => handleDelete(q), 'red')}
+                            {canEdit && smallBtn('Delete', () => handleDelete(q), 'red')}
                         </div>
                     </div>
                 ))}
@@ -984,41 +1128,21 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                 {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
             </div>
         );
-        if (row.status === 'Pending') {
-        const rfqTotal = (row.items ?? []).reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
-        const canReceive = rfqTotal > 0;
-        return (
+        // Pending means nothing has been settled on yet. There is no "accept"
+        // here: the row moves on by itself once a quotation is marked received
+        // and set as final, which is the same decision said once instead of twice.
+        if (row.status === 'Pending') return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}
                 <ActionBtns print onPrint={() => handlePrint(row)} />
                 {quotationsBtn(row)}
                 {canEdit && resendBtn(row)}
                 {historyBtn(row)}
-                {canEdit && (
-                    <>
-                        <button
-                            type="button"
-                            disabled={!canReceive}
-                            title={canReceive ? 'Accept the submitted quotation' : 'Add an itemized quotation with a total cost before accepting'}
-                            onClick={() => canReceive && handleStatus(row, 'submitted', 'Accepted')}
-                            style={{ padding: '5px 10px', borderRadius: '6px', border: `1px solid ${canReceive ? '#bbf7d0' : '#e5e7eb'}`, background: canReceive ? '#f0fdf4' : '#f8fafc', color: canReceive ? '#15803d' : '#cbd5e1', fontSize: '11px', fontWeight: 700, cursor: canReceive ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap' }}
-                        >
-                            ✓ Accept
-                        </button>
-                        <button
-                            type="button"
-                            title="Mark as Expired"
-                            onClick={() => handleStatus(row, 'expired', 'Expired')}
-                            style={{ padding: '5px 10px', borderRadius: '6px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: '11px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                        >
-                            Expired
-                        </button>
-                        <ActionBtns del onDelete={() => handleDelete(row)} />
-                    </>
-                )}
+                {canEdit && <ActionBtns del onDelete={() => handleDelete(row)} />}
             </div>
         );
-        }
+        // Expired. Nothing marks an RFQ expired any more, but rows marked that
+        // way before still need a way back, so the re-activate button stays.
         return (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                 {viewOrEditBtns(row)}

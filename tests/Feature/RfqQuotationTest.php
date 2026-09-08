@@ -71,9 +71,40 @@ beforeEach(function () {
     $this->rfq = ProjectRfq::where('project_id', $this->project->id)->firstOrFail();
 });
 
-it('opens every rfq with a single final quotation', function () {
-    expect($this->rfq->quotations()->count())->toBe(1)
-        ->and($this->rfq->finalQuotation()->first()->is_final)->toBeTrue();
+it('opens every rfq with no quotations against it', function () {
+    // Nothing is offered until someone offers it: the supplier through the
+    // portal link, or the team adding their own from the hub.
+    expect($this->rfq->quotations()->count())->toBe(0)
+        ->and($this->rfq->finalQuotation()->first())->toBeNull();
+});
+
+it('carries the rfq row off pending when a quotation is made final', function () {
+    // There is no separate "accept" step: settling on an offer is what moves
+    // the row along, and it is only settled once, at the quotation.
+    expect($this->rfq->status)->toBe('pending');
+
+    $this->actingAs($this->approver)
+        ->patch(route('hub.rfq.update', [$this->project, $this->rfq]), quotationForm())
+        ->assertRedirect();
+
+    // Editing the row raises the first quotation and makes it final in one go.
+    expect($this->rfq->fresh()->status)->toBe('submitted');
+});
+
+it('leaves an rfq that is already awarded where it is', function () {
+    $this->rfq->forceFill(['status' => 'awarded'])->save();
+
+    $this->actingAs($this->approver)
+        ->post(route('hub.rfq.quotations.store', [$this->project, $this->rfq]))
+        ->assertRedirect();
+
+    $quotation = $this->rfq->quotations()->firstOrFail();
+
+    $this->actingAs($this->approver)
+        ->patch(route('hub.rfq.quotations.final', [$this->project, $this->rfq, $quotation]))
+        ->assertRedirect();
+
+    expect($this->rfq->fresh()->status)->toBe('awarded');
 });
 
 it('links the supplier portal from the dispatch email', function () {
@@ -84,11 +115,12 @@ it('links the supplier portal from the dispatch email', function () {
 });
 
 it('mirrors whichever quotation is final onto the rfq row', function () {
-    $first = $this->rfq->finalQuotation()->first();
-
+    // Editing the RFQ row itself raises the first quotation and makes it final.
     $this->actingAs($this->approver)
-        ->patch(route('hub.rfq.quotations.update', [$this->project, $this->rfq, $first]), quotationForm())
+        ->patch(route('hub.rfq.update', [$this->project, $this->rfq]), quotationForm())
         ->assertRedirect();
+
+    $first = $this->rfq->finalQuotation()->firstOrFail();
 
     expect($this->rfq->fresh()->scope_of_work)->toBe('Structural works')
         ->and((float) $this->rfq->fresh()->items->sum('total_cost'))->toBe(2000.0);
@@ -127,11 +159,11 @@ it('mirrors whichever quotation is final onto the rfq row', function () {
 });
 
 it('hands the final flag on when the final quotation is deleted', function () {
-    $first = $this->rfq->finalQuotation()->first();
-
     $this->actingAs($this->approver)
-        ->patch(route('hub.rfq.quotations.update', [$this->project, $this->rfq, $first]), quotationForm())
+        ->patch(route('hub.rfq.update', [$this->project, $this->rfq]), quotationForm())
         ->assertRedirect();
+
+    $first = $this->rfq->finalQuotation()->firstOrFail();
 
     $this->actingAs($this->approver)
         ->post(route('hub.rfq.quotations.store', [$this->project, $this->rfq]), ['copy_from' => $first->id])
@@ -148,14 +180,21 @@ it('hands the final flag on when the final quotation is deleted', function () {
         ->and(ProjectRfqItem::where('project_rfq_quotation_id', $first->id)->count())->toBe(0);
 });
 
-it('refuses to delete the only quotation an rfq has', function () {
-    $only = $this->rfq->finalQuotation()->first();
+it('lets the only quotation an rfq has be deleted', function () {
+    // An empty RFQ is what a freshly dispatched one looks like, so deleting the
+    // last offer is no longer a state worth refusing.
+    $this->actingAs($this->approver)
+        ->patch(route('hub.rfq.update', [$this->project, $this->rfq]), quotationForm())
+        ->assertRedirect();
+
+    $only = $this->rfq->finalQuotation()->firstOrFail();
 
     $this->actingAs($this->approver)
         ->delete(route('hub.rfq.quotations.destroy', [$this->project, $this->rfq, $only]))
-        ->assertSessionHas('error');
+        ->assertSessionHas('success');
 
-    expect($this->rfq->quotations()->count())->toBe(1);
+    expect($this->rfq->quotations()->count())->toBe(0)
+        ->and(ProjectRfqItem::where('project_rfq_quotation_id', $only->id)->count())->toBe(0);
 });
 
 it('re-sends the rfq email to a corrected address', function () {

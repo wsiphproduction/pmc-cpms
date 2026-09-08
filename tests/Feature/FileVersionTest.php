@@ -252,3 +252,152 @@ it('will not replace a document belonging to another project', function () {
             'file' => UploadedFile::fake()->create('sneaky.pdf', 10, 'application/pdf'),
         ])->assertForbidden();
 });
+
+// ── Choosing an earlier version as the current file ──────────────────────
+
+/** Uploads a QPP document and replaces it twice, leaving it on v3. */
+function qppDocOnV3(User $engineer, Project $project): ProjectQualityDoc
+{
+    test()->actingAs($engineer)->post(route('hub.qpp.store', $project->id), [
+        'label'    => 'Concrete ITP',
+        'doc_type' => 'Inspection & Test Plan (ITP)',
+        'file'     => UploadedFile::fake()->create('itp-v1.pdf', 20, 'application/pdf'),
+    ])->assertRedirect();
+
+    $doc = ProjectQualityDoc::firstOrFail();
+
+    foreach (['itp-v2.pdf', 'itp-v3.pdf'] as $name) {
+        test()->actingAs($engineer)
+            ->post(route('files.replace', [$project->id, 'qpp', $doc->id]), [
+                'file' => UploadedFile::fake()->create($name, 22, 'application/pdf'),
+            ])->assertRedirect();
+    }
+
+    return $doc->refresh();
+}
+
+it('makes an earlier version current again without losing the newer one', function () {
+    Storage::fake('public');
+
+    $engineer = makeVersionEngineer();
+    $project  = makeVersionProject($engineer);
+    $doc      = qppDocOnV3($engineer, $project);
+
+    $v1 = $doc->versionsOf()->firstWhere('version', 1);
+    $v3 = $doc->versionsOf()->firstWhere('version', 3);
+
+    $this->actingAs($engineer)
+        ->post(route('files.restore', [$project->id, 'qpp', $doc->id, $v1->id]))
+        ->assertRedirect();
+
+    $doc->refresh();
+    $doc->unsetRelation('fileVersions');
+
+    // The log only ever grows: v1's file comes back as v4, so what each upload
+    // was and when it happened is still on the record.
+    expect($doc->versionsOf())->toHaveCount(4)
+        ->and($doc->latestFileVersion()->version)->toBe(4)
+        ->and($doc->latestFileVersion()->filepath)->toBe($v1->filepath)
+        ->and($doc->latestFileVersion()->note)->toBe('Restored from v1')
+        ->and($doc->file_path)->toBe($v1->filepath)
+        ->and($doc->filename)->toBe('itp-v1.pdf');
+
+    // Nothing was thrown away — the version it stepped back from still opens.
+    Storage::disk('public')->assertExists($v3->filepath);
+});
+
+it('refuses to restore the version that is already current', function () {
+    Storage::fake('public');
+
+    $engineer = makeVersionEngineer();
+    $project  = makeVersionProject($engineer);
+    $doc      = qppDocOnV3($engineer, $project);
+
+    $current = $doc->latestFileVersion();
+
+    $this->actingAs($engineer)
+        ->post(route('files.restore', [$project->id, 'qpp', $doc->id, $current->id]))
+        ->assertSessionHas('error');
+
+    expect($doc->fresh()->versionsOf())->toHaveCount(3);
+});
+
+it('will not restore a version that belongs to another record', function () {
+    Storage::fake('public');
+
+    $engineer = makeVersionEngineer();
+    $project  = makeVersionProject($engineer);
+    $doc      = qppDocOnV3($engineer, $project);
+
+    $this->actingAs($engineer)->post(route('hub.qpp.store', $project->id), [
+        'label'    => 'Method Statement',
+        'doc_type' => 'Method Statement',
+        'file'     => UploadedFile::fake()->create('ms-v1.pdf', 20, 'application/pdf'),
+    ])->assertRedirect();
+
+    $other = ProjectQualityDoc::where('id', '!=', $doc->id)->firstOrFail();
+
+    // The other document's version, addressed through this document.
+    $this->actingAs($engineer)
+        ->post(route('files.restore', [$project->id, 'qpp', $doc->id, $other->latestFileVersion()->id]))
+        ->assertForbidden();
+
+    expect($doc->fresh()->versionsOf())->toHaveCount(3);
+});
+
+it('restores an earlier version of a request attachment', function () {
+    Storage::fake('public');
+
+    $requester = User::factory()->create();
+
+    $this->actingAs($requester)->post(route('requests.store'), [
+        'title'         => 'Rollback Request',
+        'job_type'      => 'civil',
+        'description'   => 'Needs a drawing.',
+        'job_location'  => 'Site A',
+        'date_needed'   => now()->addDays(14)->toDateString(),
+        'attachments'   => [UploadedFile::fake()->create('plan-v1.pdf', 30, 'application/pdf')],
+    ])->assertRedirect();
+
+    $projectRequest = ProjectRequest::firstOrFail();
+    $attachment     = Attachment::firstOrFail();
+
+    $this->actingAs($requester)
+        ->post(route('requests.attachments.replace', [$projectRequest->id, $attachment->id]), [
+            'file' => UploadedFile::fake()->create('plan-v2.pdf', 35, 'application/pdf'),
+        ])->assertRedirect();
+
+    $v1 = $attachment->fresh()->versionsOf()->firstWhere('version', 1);
+
+    $this->actingAs($requester)
+        ->post(route('requests.attachments.restore', [$projectRequest->id, $attachment->id, $v1->id]))
+        ->assertRedirect();
+
+    $attachment->refresh();
+    $attachment->unsetRelation('fileVersions');
+
+    expect($attachment->versionsOf())->toHaveCount(3)
+        ->and($attachment->filename)->toBe('plan-v1.pdf')
+        ->and($attachment->filepath)->toBe($v1->filepath);
+});
+
+it('keeps a restored file on disk while the record still points at it', function () {
+    Storage::fake('public');
+
+    $engineer = makeVersionEngineer();
+    $project  = makeVersionProject($engineer);
+    $doc      = qppDocOnV3($engineer, $project);
+
+    $v1 = $doc->versionsOf()->firstWhere('version', 1);
+
+    $this->actingAs($engineer)
+        ->post(route('files.restore', [$project->id, 'qpp', $doc->id, $v1->id]))
+        ->assertRedirect();
+
+    // v1 and v4 name the same file; purging must not leave the record's own
+    // history half-deleted, nor blow up deleting the same path twice.
+    $doc->fresh()->purgeFileVersions();
+
+    Storage::disk('public')->assertMissing($v1->filepath);
+    expect(FileVersion::where('versionable_id', $doc->id)->count())->toBe(0);
+});

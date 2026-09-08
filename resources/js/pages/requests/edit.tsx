@@ -145,7 +145,10 @@ function ExistingAttachmentRow({ att, requestId, onDelete }: { att: ExistingAtta
                     <VersionBadge versions={att.versions} />
                 </div>
                 {att.description && <span style={{ fontSize: '11px', color: '#9ca3af' }}>{att.description}</span>}
-                <FileHistory versions={att.versions} />
+                <FileHistory
+                    versions={att.versions}
+                    restoreUrl={v => route('requests.attachments.restore', [requestId, att.id, v])}
+                />
             </div>
             {/* Uploading here keeps the attachment and adds a version to it —
                 unlike Remove, which drops the file and its whole history. */}

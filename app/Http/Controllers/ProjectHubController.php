@@ -60,20 +60,9 @@ class ProjectHubController extends Controller
             'created_by'      => auth()->id(),
         ]);
 
-        // Every RFQ starts with one (empty) quotation so the vendor's first
-        // offer has somewhere to land; further ones are added from the hub.
-        $rfq->quotations()->create([
-            'seq'         => 1,
-            'label'       => 'Original quotation',
-            'due_date'    => $data['due_date'] ?? null,
-            'is_final'    => true,
-            'origin'      => ProjectRfqQuotation::ORIGIN_STAFF,
-            'status'      => ProjectRfqQuotation::STATUS_RECEIVED,
-            'received_at' => now(),
-            'received_by' => auth()->id(),
-            'created_by'  => auth()->id(),
-        ]);
-
+        // No placeholder quotation: an RFQ starts empty and fills up with the
+        // offers actually made against it — the supplier's, through the portal
+        // link in the email, or the team's own, added from the hub.
         $this->mailRfq($rfq, $project, $data);
 
         AuditTrail::log("Dispatched RFQ to {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'create', 'rfq_id' => $rfq->id]);
@@ -248,7 +237,7 @@ class ProjectHubController extends Controller
         $this->guardRfqEditable($rfq, $project);
 
         if (! $quotation->isSelectable()) {
-            return back()->with('error', "{$quotation->displayName()} is still a draft the supplier has not sent — it cannot be made final.");
+            return back()->with('error', "{$quotation->displayName()} has to be marked received before it can be made final.");
         }
 
         $previous = $rfq->finalQuotation()->first();
@@ -259,6 +248,7 @@ class ProjectHubController extends Controller
         DB::transaction(function () use ($rfq, $quotation) {
             $rfq->quotations()->update(['is_final' => false]);
             $quotation->update(['is_final' => true]);
+            // Also carries the row off Pending, if it was still there.
             $rfq->refresh()->syncFromFinalQuotation();
         });
 
@@ -313,10 +303,6 @@ class ProjectHubController extends Controller
         $this->guardQuotation($rfq, $project, $quotation);
         $this->guardRfqEditable($rfq, $project);
 
-        if ($rfq->quotations()->count() <= 1) {
-            return back()->with('error', 'An RFQ must keep at least one quotation.');
-        }
-
         $name    = $quotation->displayName();
         $wasFinal = $quotation->is_final;
 
@@ -329,15 +315,16 @@ class ProjectHubController extends Controller
             $quotation->items()->delete();
             $quotation->delete();
 
-            // Fall back to the latest offer the team actually holds. An unsent
-            // supplier draft is not one, and promoting it would blank the RFQ's
-            // mirrored scope and terms — better to leave no final at all until
-            // someone picks a real one.
+            // Fall back to the latest offer the team has acknowledged — the same
+            // bar setFinalRfqQuotation holds anyone to. One still open to the
+            // supplier is not it, and promoting it would pin the RFQ to an offer
+            // that can still change; better to leave no final at all until
+            // someone marks one received and picks it.
             if ($wasFinal) {
                 // reorder(), because the relation already sorts by seq ascending
                 // and SQL Server rejects the column appearing twice.
                 $rfq->quotations()
-                    ->whereIn('status', [ProjectRfqQuotation::STATUS_SUBMITTED, ProjectRfqQuotation::STATUS_RECEIVED])
+                    ->where('status', ProjectRfqQuotation::STATUS_RECEIVED)
                     ->reorder('seq', 'desc')
                     ->first()
                     ?->update(['is_final' => true]);

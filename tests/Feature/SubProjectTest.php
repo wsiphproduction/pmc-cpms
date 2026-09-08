@@ -107,6 +107,24 @@ it('opens the sub-project form from a parent alone, with no ntp', function () {
             ->where('next_project_no', $this->project->project_no . '-01'));
 });
 
+it('opens the sub-project form with the title already written', function () {
+    // Nobody should have to retype the parent's title to raise a sub-project.
+    $this->actingAs($this->engineer)
+        ->get(route('projects.create', ['parent' => $this->project->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('project.title', 'Root Project — Sub-Project 01'));
+
+    // The second one carries the number it will actually be given.
+    makeChildOf($this->project, $this->engineer);
+
+    $this->actingAs($this->engineer)
+        ->get(route('projects.create', ['parent' => $this->project->id]))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page
+            ->where('project.title', 'Root Project — Sub-Project 02'));
+});
+
 it('creates a sub-project without an ntp', function () {
     $this->actingAs($this->engineer)
         ->post(route('projects.store'), subProjectPayload($this->engineer, [

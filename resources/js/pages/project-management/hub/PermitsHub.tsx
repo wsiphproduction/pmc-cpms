@@ -126,7 +126,10 @@ export default function PermitsHub({ project, permits, canEdit = true }: { proje
                                             <ReplaceFileButton url={route('files.replace', [project.id, 'permit-file', f.id])} />
                                         )}
                                     </div>
-                                    <FileHistory versions={f.versions} />
+                                    <FileHistory
+                                        versions={f.versions}
+                                        restoreUrl={canEdit && !permit.sub_project_id ? v => route('files.restore', [project.id, 'permit-file', f.id, v]) : undefined}
+                                    />
                                 </div>
                             ))}
                         </div>

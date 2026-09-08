@@ -59,6 +59,10 @@ Route::middleware(['auth'])->group(function () {
     Route::post('requests/{projectRequest}/attachments/{attachment}/replace', [ProjectRequestController::class, 'replaceAttachment'])
         ->name('requests.attachments.replace');
 
+    // Putting one of that attachment's earlier versions back in front.
+    Route::post('requests/{projectRequest}/attachments/{attachment}/versions/{version}/restore', [ProjectRequestController::class, 'restoreAttachmentVersion'])
+        ->name('requests.attachments.restore');
+
     Route::get('requests/{projectRequest}/comments',  [CommentController::class, 'index'])->name('comments.index');
     Route::post('requests/{projectRequest}/comments', [CommentController::class, 'store'])->name('comments.store');
     Route::delete('comments/{comment}',               [CommentController::class, 'destroy'])->name('comments.destroy');
@@ -113,6 +117,11 @@ Route::middleware(['auth'])->group(function () {
     Route::post('projects/{project}/files/{slot}/{id}/replace', [FileVersionController::class, 'replace'])
         ->middleware('can:update,project')
         ->name('files.replace');
+
+    // Putting one of that file's earlier versions back in front.
+    Route::post('projects/{project}/files/{slot}/{id}/versions/{version}/restore', [FileVersionController::class, 'restore'])
+        ->middleware('can:update,project')
+        ->name('files.restore');
 
     // Hub CRUD routes
     Route::prefix('projects/{project}/hub')->middleware('can:update,project')->group(function () {

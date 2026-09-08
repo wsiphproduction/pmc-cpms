@@ -94,7 +94,11 @@ export default function QppHub({ project, qpps, canEdit = true }: { project: Hub
                                 <ReplaceFileButton url={route('files.replace', [project.id, 'qpp', doc.id])} tone="#0ea5e9" />
                             )}
                         </div>
-                        <FileHistory versions={doc.versions} tone="#0ea5e9" />
+                        <FileHistory
+                            versions={doc.versions}
+                            tone="#0ea5e9"
+                            restoreUrl={canEdit && !doc.sub_project_id ? v => route('files.restore', [project.id, 'qpp', doc.id, v]) : undefined}
+                        />
                     </div>,
                     <Badge tone="blue">{doc.doc_type}</Badge>,
                     <span style={{ fontSize: '12px', color: '#94a3b8' }}>{doc.created}</span>,

@@ -815,48 +815,6 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 </div>
             </div>
 
-            {/* Sub-Projects — instances spawned from this project's issued NTPs. */}
-            {!is_dept_view && project.sub_projects.length > 0 && (
-                <div className="print-hide" style={{ marginBottom: '32px' }}>
-                    <h5 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c2410c" strokeWidth="2"><path d="M3 3v18h18"/><path d="M7 16l4-4 3 3 5-5"/></svg>
-                        Sub-Projects
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#c2410c', background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '999px', padding: '2px 9px' }}>{project.sub_projects.length}</span>
-                    </h5>
-                    <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                            <thead>
-                                <tr style={{ background: '#f8fafc' }}>
-                                    {['Project #', 'Title', 'Completion', 'Status', ''].map((h, i, arr) => (
-                                        <th key={h} style={{ padding: '10px 16px', textAlign: i === arr.length - 1 ? 'center' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {project.sub_projects.map(sp => (
-                                    <tr key={sp.id} style={{ borderBottom: '1px solid #f8fafc' }}>
-                                        <td style={{ padding: '12px 16px', fontWeight: 600, color: '#c2410c', fontSize: '11.5px', whiteSpace: 'nowrap' }}>{sp.project_no}</td>
-                                        <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0f172a', fontSize: '12.5px' }}>{sp.title}</td>
-                                        <td style={{ padding: '12px 16px', color: '#334155', fontWeight: 700, fontSize: '12px' }}>{sp.completion_percent}%</td>
-                                        <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px' }}>{sp.status}</td>
-                                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => router.visit(route('projects.show', sp.id))}
-                                                style={{ padding: '5px 12px', borderRadius: '6px', border: '1px solid #fed7aa', background: '#fff7ed', color: '#c2410c', cursor: 'pointer', fontSize: '12px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '5px' }}
-                                            >
-                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                                Open
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
             {/* Department users get read-only RFQ and NTP panels, tabbed into one
                 card; the full operations hub is hidden. Both live on the parent —
                 a sub-project has no procurement of its own — so on a sub-project

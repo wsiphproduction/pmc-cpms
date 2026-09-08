@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Attachment;
 use App\Models\CostCode;
+use App\Models\FileVersion;
 use App\Models\JobLocation;
 use App\Models\JobType;
 use App\Models\Notification;
@@ -389,6 +390,50 @@ class ProjectRequestController extends Controller
         );
 
         return back()->with('success', "Attachment updated to {$version->label}.");
+    }
+
+    /**
+     * Put an earlier version of an attachment back in front. It is logged again
+     * as the newest version rather than rewinding the history, so what was
+     * uploaded and when stays on the record.
+     */
+    public function restoreAttachmentVersion(
+        ProjectRequest $projectRequest,
+        Attachment $attachment,
+        FileVersion $version,
+    ): RedirectResponse {
+        $this->authorize('update', $projectRequest);
+
+        abort_unless(
+            (int) $attachment->reference_id === (int) $projectRequest->id
+                && $attachment->reference_type === ProjectRequest::class,
+            403,
+        );
+
+        // And the version has to belong to that attachment.
+        abort_unless(
+            $version->versionable_type === Attachment::class
+                && (int) $version->versionable_id === (int) $attachment->id,
+            403,
+        );
+
+        if ($version->version === (int) $attachment->fileVersions()->where('collection', $version->collection)->max('version')) {
+            return back()->with('error', "{$version->label} is already the current file.");
+        }
+
+        $restored = $attachment->restoreFileVersion($version);
+
+        $attachment->update([
+            'filename' => $restored->filename,
+            'filepath' => $restored->filepath,
+        ]);
+
+        $this->notifyApprovers(
+            "An attachment on Project Request #{$projectRequest->request_no} was rolled back to {$version->label}",
+            $projectRequest
+        );
+
+        return back()->with('success', "{$version->label} is now the current file, kept as {$restored->label}.");
     }
 
     private function notifyApprovers(string $message, ProjectRequest $projectRequest): void

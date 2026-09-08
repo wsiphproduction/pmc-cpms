@@ -274,7 +274,10 @@ export default function IocHub({ project, iocs, costCodes = [], canEdit = true }
                                     <ReplaceFileButton url={route('files.replace', [project.id, 'ioc', item.id])} />
                                 )}
                             </div>
-                            <FileHistory versions={item.versions} />
+                            <FileHistory
+                                versions={item.versions}
+                                restoreUrl={canEdit ? v => route('files.restore', [project.id, 'ioc', item.id, v]) : undefined}
+                            />
                         </div>
                         : <span style={{ color: '#94a3b8' }}>—</span>,
                     <ActionBtns view edit={canEdit && !item.sub_project_id} del={canEdit && !item.sub_project_id} open={!!item.sub_project_id}

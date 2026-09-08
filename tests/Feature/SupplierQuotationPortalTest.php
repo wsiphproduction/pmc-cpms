@@ -47,7 +47,6 @@ function supplierForm(array $overrides = []): array
 {
     return array_merge([
         'scope_of_work'    => 'Supply and install perimeter fencing',
-        'due_date'         => '2026-12-01',
         'duration_days'    => 45,
         'terms_conditions' => '50% down payment',
         'inclusions'       => 'Labor and materials',
@@ -119,7 +118,6 @@ it('carries every field of the quotation form through to the record', function (
 
     expect($quotation->label)->toBe('Best and final')
         ->and($quotation->scope_of_work)->toBe('Supply and install perimeter fencing')
-        ->and(optional($quotation->due_date)->format('Y-m-d'))->toBe('2026-12-01')
         ->and((int) $quotation->duration_days)->toBe(45)
         ->and($quotation->terms_conditions)->toBe('50% down payment')
         ->and($quotation->inclusions)->toBe('Labor and materials')
@@ -131,6 +129,21 @@ it('carries every field of the quotation form through to the record', function (
         ->and($item->unit)->toBe('lot')
         ->and((float) $item->unit_cost)->toBe(5000.0)
         ->and((float) $item->total_cost)->toBe(10000.0);
+});
+
+it('takes the date needed from the rfq rather than the supplier', function () {
+    // The supplier's form no longer asks for it — the project team sets it once
+    // on the RFQ and every quotation against that RFQ answers to the same date.
+    $this->rfq->forceFill(['due_date' => '2026-12-01'])->save();
+
+    $this->post(route('supplier-quote.store', $this->rfq->portal_token), [
+        ...supplierForm(),
+        'send' => 1,
+    ])->assertRedirect();
+
+    $quotation = $this->rfq->quotations()->where('origin', ProjectRfqQuotation::ORIGIN_SUPPLIER)->firstOrFail();
+
+    expect(optional($quotation->due_date)->format('Y-m-d'))->toBe('2026-12-01');
 });
 
 it('will not let a quotation be sent without a scope of work', function () {
@@ -224,11 +237,31 @@ it('lets the supplier keep editing until the team marks it received', function (
 });
 
 it('keeps the project team\'s own quotations out of the supplier portal', function () {
-    // The placeholder created with the RFQ is staff-owned and must stay internal.
+    // A quotation the team typed in themselves is staff-owned and stays internal.
+    $this->actingAs($this->engineer)
+        ->post(route('hub.rfq.quotations.store', [$this->project, $this->rfq]), ['label' => 'Team estimate'])
+        ->assertRedirect();
+    $this->app['auth']->logout();
+
     $this->get(route('supplier-quote.show', $this->rfq->portal_token))
         ->assertInertia(fn ($page) => $page->has('quotations', 0));
 
     expect($this->rfq->quotations()->count())->toBe(1);
+});
+
+it('refuses to make a submitted quotation final before it is received', function () {
+    $this->post(route('supplier-quote.store', $this->rfq->portal_token), [
+        ...supplierForm(),
+        'send' => 1,
+    ])->assertRedirect();
+
+    $quotation = $this->rfq->quotations()->where('origin', ProjectRfqQuotation::ORIGIN_SUPPLIER)->firstOrFail();
+
+    $this->actingAs($this->engineer)
+        ->patch(route('hub.rfq.quotations.final', [$this->project, $this->rfq, $quotation]))
+        ->assertSessionHas('error');
+
+    expect($quotation->fresh()->is_final)->toBeFalse();
 });
 
 it('refuses to make an unsent draft the final quotation', function () {
@@ -245,13 +278,19 @@ it('refuses to make an unsent draft the final quotation', function () {
     expect($draft->fresh()->is_final)->toBeFalse();
 });
 
-it('lets the team award a submitted quotation and mirrors it onto the rfq', function () {
+it('lets the team award a received quotation and mirrors it onto the rfq', function () {
     $this->post(route('supplier-quote.store', $this->rfq->portal_token), [
         ...supplierForm(),
         'send' => 1,
     ])->assertRedirect();
 
     $quotation = $this->rfq->quotations()->where('origin', ProjectRfqQuotation::ORIGIN_SUPPLIER)->firstOrFail();
+
+    // Acknowledging it is what closes it to the supplier, and only then is it
+    // an offer the project can be pinned to.
+    $this->actingAs($this->engineer)
+        ->patch(route('hub.rfq.quotations.received', [$this->project, $this->rfq, $quotation]))
+        ->assertRedirect();
 
     $this->actingAs($this->engineer)
         ->patch(route('hub.rfq.quotations.final', [$this->project, $this->rfq, $quotation]))

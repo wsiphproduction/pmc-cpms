@@ -8,8 +8,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * One quotation offered against an RFQ. A vendor may submit several (an
- * original, a revision, a best-and-final); exactly one is flagged `is_final`
+ * original, a revision, a best-and-final); at most one is flagged `is_final`
  * and that is the offer the project awards, prints and issues the NTP from.
+ * An RFQ with nothing offered against it yet has none.
  */
 class ProjectRfqQuotation extends Model
 {
@@ -63,12 +64,13 @@ class ProjectRfqQuotation extends Model
     }
 
     /**
-     * Only an offer the project team actually holds can be awarded — a draft
-     * the supplier has not sent yet is not on the table.
+     * Only an offer the project team has acknowledged can be awarded. Marking
+     * it received is what closes it to further edits by the supplier, so
+     * awarding one before that would pin the RFQ to an offer still in motion.
      */
     public function isSelectable(): bool
     {
-        return in_array($this->status, [self::STATUS_SUBMITTED, self::STATUS_RECEIVED], true);
+        return $this->status === self::STATUS_RECEIVED;
     }
 
     public function rfq(): BelongsTo

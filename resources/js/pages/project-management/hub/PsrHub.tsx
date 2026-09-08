@@ -397,7 +397,10 @@ export default function PsrHub({ project, reports, ntps = [], checklist = [], is
                                     <ReplaceFileButton url={route('files.replace', [project.id, 'psr', r.id])} />
                                 )}
                             </div>
-                            <FileHistory versions={r.versions} />
+                            <FileHistory
+                                versions={r.versions}
+                                restoreUrl={canEdit && !r.sub_project_id ? v => route('files.restore', [project.id, 'psr', r.id, v]) : undefined}
+                            />
                         </div>
                         : <span style={{ color: '#94a3b8' }}>—</span>,
                     r.sub_project_id ? (

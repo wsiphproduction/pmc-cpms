@@ -114,7 +114,9 @@ class SupplierQuotationController extends Controller
             // form opens it pre-filled with the RFQ's scope, but it is theirs to
             // amend — their offer may cover more or less than what was asked.
             'scope_of_work'    => $data['scope_of_work'] ?? null,
-            'due_date'         => $data['due_date'] ?? null,
+            // Not on the supplier's form: it falls back to whatever the
+            // quotation already holds, then to the date the RFQ asked for.
+            'due_date'         => $data['due_date'] ?? $quotation->due_date ?? $rfq->due_date,
             'duration_days'    => $data['duration_days'] ?? null,
             'terms_conditions' => $data['terms_conditions'] ?? null,
             'inclusions'       => $data['inclusions'] ?? null,
@@ -220,7 +222,10 @@ class SupplierQuotationController extends Controller
         $rules = [
             'label'               => ['nullable', 'string', 'max:255'],
             'scope_of_work'       => $required('string'),
-            'due_date'            => $required('date'),
+            // The supplier is not asked for this — the date the work is needed
+            // by is the project team's to set on the RFQ. Kept nullable so an
+            // older payload that still carries one is not rejected.
+            'due_date'            => ['nullable', 'date'],
             'duration_days'       => $required('integer', 'min:1'),
             'terms_conditions'    => $required('string'),
             'inclusions'          => $required('string'),

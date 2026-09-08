@@ -52,9 +52,10 @@ beforeEach(function () {
 
     $this->rfq = ProjectRfq::where('project_id', $this->project->id)->firstOrFail();
 
-    $quotation = $this->rfq->finalQuotation()->firstOrFail();
+    // An RFQ is dispatched with nothing offered against it; editing the row
+    // raises the first quotation and makes it the final one.
     $this->actingAs($this->engineer)
-        ->patch(route('hub.rfq.quotations.update', [$this->project, $this->rfq, $quotation]), [
+        ->patch(route('hub.rfq.update', [$this->project, $this->rfq]), [
             'scope_of_work'    => 'Detailed Estimate',
             'due_date'         => '2026-12-01',
             'duration_days'    => 30,

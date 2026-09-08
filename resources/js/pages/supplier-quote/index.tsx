@@ -139,20 +139,18 @@ function ItemRows({ rows, readOnly, onChange }: {
 }
 
 // ── Quotation form ─────────────────────────────────────────────────────────
-function QuotationForm({ quotation, token, formRows, defaultScope, defaultDue, onCancel }: {
+function QuotationForm({ quotation, token, formRows, defaultScope, onCancel }: {
     quotation: Quotation | null;
     token: string;
     formRows: number;
     /** A new quotation opens pre-filled from what the RFQ asked for. */
     defaultScope: string;
-    defaultDue: string;
     onCancel: () => void;
 }) {
     const readOnly = quotation ? !quotation.editable : false;
 
     const [label, setLabel]           = useState(quotation?.label ?? '');
     const [scope, setScope]           = useState(quotation?.scope_of_work ?? defaultScope);
-    const [due, setDue]               = useState(quotation?.due_raw ?? defaultDue);
     const [duration, setDuration]     = useState(quotation?.duration_days?.toString() ?? '');
     const [terms, setTerms]           = useState(quotation?.terms ?? '');
     const [inclusions, setInclusions] = useState(quotation?.inclusions ?? '');
@@ -195,7 +193,6 @@ function QuotationForm({ quotation, token, formRows, defaultScope, defaultDue, o
         if (send) {
             if (!scope.trim())                                    { setError('Please describe the scope of work your quotation covers.'); return; }
             if (!filled.some(r => Number(r.total_cost ?? 0) > 0)) { setError('Add at least one line item with a total cost before sending.'); return; }
-            if (!due)                                             { setError('Please give the date the work is needed by.'); return; }
             if (!duration || Number(duration) <= 0)               { setError('Please give the project duration in calendar days.'); return; }
             if (!terms.trim())                                    { setError('Please fill in your terms and conditions.'); return; }
             if (!inclusions.trim())                               { setError('Please fill in what your quotation includes.'); return; }
@@ -208,7 +205,6 @@ function QuotationForm({ quotation, token, formRows, defaultScope, defaultDue, o
         const payload: Record<string, any> = {
             label:            label.trim() || null,
             scope_of_work:    scope || null,
-            due_date:         due || null,
             duration_days:    duration || null,
             terms_conditions: terms || null,
             inclusions:       inclusions || null,
@@ -260,10 +256,6 @@ function QuotationForm({ quotation, token, formRows, defaultScope, defaultDue, o
                 <label>
                     <Label>Reference / Label (optional)</Label>
                     <input value={label} readOnly={readOnly} onChange={e => setLabel(e.target.value)} placeholder="e.g. Revised offer" style={input} />
-                </label>
-                <label>
-                    <Label>Date needed *</Label>
-                    <input type="date" value={due} readOnly={readOnly} onChange={e => setDue(e.target.value)} style={input} />
                 </label>
                 <label>
                     <Label>Project duration (calendar days) *</Label>
@@ -460,7 +452,6 @@ export default function SupplierQuotePortal() {
                             token={rfq.token}
                             formRows={formRows}
                             defaultScope={rfq.scope_of_work ?? ''}
-                            defaultDue={rfq.due_raw ?? ''}
                             onCancel={() => setOpen(null)}
                         />
                     ) : (
