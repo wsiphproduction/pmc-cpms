@@ -104,7 +104,7 @@ it('renders the rfq form with its figures', function () {
         ->toContain('☐ Conceptual Design');
 });
 
-it('renders the ntp form with unsigned signature blocks before approval', function () {
+it('stamps only the prepared-by block before anyone has approved', function () {
     $html = view('print.ntp', [
         'project'      => $this->project,
         'ntp'          => $this->ntp->load('rfq.items', 'creator', 'approvals.user'),
@@ -117,8 +117,11 @@ it('renders the ntp form with unsigned signature blocks before approval', functi
         ->toContain($this->ntp->ntp_no)
         ->toContain('Acme Builders')
         ->toContain('Php 2,000.00')
-        // Nothing signed yet, so nothing is stamped.
-        ->not->toContain('APPROVED');
+        // Preparing the NTP is the engineer's own sign-off, so that block is
+        // stamped from the start; every approval step is still blank.
+        ->toContain('APPROVED');
+
+    expect(substr_count($html, 'class="stamp"'))->toBe(1);
 });
 
 it('stamps the ntp form for each step that has been signed', function () {
@@ -144,7 +147,8 @@ it('stamps the ntp form for each step that has been signed', function () {
         // The step still awaiting a decision is not stamped.
         ->toContain('P. Manager');
 
-    expect(substr_count($html, 'class="stamp"'))->toBe(2);
+    // Prepared by, plus the two signed steps.
+    expect(substr_count($html, 'class="stamp"'))->toBe(3);
 });
 
 it('renders both completion documents', function () {
@@ -169,6 +173,28 @@ it('renders both completion documents', function () {
     expect($summary)->toContain('PMD-PRJ-FRM-12')
         ->toContain('PROJECT COMPLETION SUMMARY')
         ->toContain('No documentation photos attached.');
+});
+
+it('signs the completion documents with whoever holds each office', function () {
+    foreach ([
+        User::ROLE_PMD_ASST_MANAGER  => 'Asst. Holder',
+        User::ROLE_PMD_DEPT_MANAGER  => 'Dept. Holder',
+        User::ROLE_DIVISION_MANAGER  => 'Division Holder',
+    ] as $role => $name) {
+        Role::firstOrCreate(['name' => $role]);
+        User::factory()->create(['name' => $name])->assignRole($role);
+    }
+    // A configured placeholder loses to the person actually in the seat.
+    App\Models\Setting::set('signatory_pmd_manager', 'Configured Placeholder');
+
+    $html = $this->actingAs($this->engineer)
+        ->get(route('print.completion-summary', $this->project))
+        ->assertOk()->getContent();
+
+    expect($html)->toContain('Asst. Holder')
+        ->toContain('Dept. Holder')
+        ->toContain('Division Holder')
+        ->not->toContain('Configured Placeholder');
 });
 
 it('refuses a print to someone who cannot view the project', function () {

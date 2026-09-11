@@ -182,9 +182,10 @@ class ApprovalController extends Controller
                     'status'   => $step->status,
                     'remarks'  => $step->remarks,
                     'acted_at' => $step->acted_at?->format('M d, Y h:i A'),
-                    'link'     => $record instanceof ProjectNtp
-                        ? ($record->project_id ? route('projects.hub.ntp', $record->project_id, absolute: false) : null)
-                        : ($record ? route('requests.show', $record->id, absolute: false) : null),
+                    // The page builds the href with Ziggy so it carries the same base
+                    // URL as every other link — a server-side relative route drops
+                    // the app's path prefix and 404s on a sub-path deployment.
+                    'link_id'  => $record instanceof ProjectNtp ? $record->project_id : $record?->id,
                 ];
             })->values()->all();
     }

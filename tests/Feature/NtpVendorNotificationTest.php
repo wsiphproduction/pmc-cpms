@@ -191,3 +191,55 @@ it('rejects a malformed vendor address', function () {
 
     Mail::assertNotSent(NtpIssuedToVendor::class);
 });
+
+it('links the vendor to the approved form and says when the link expires', function () {
+    approveWholeChain($this);
+
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ntp.send', [$this->project, $this->ntp]), [
+            'recipient_email' => 'vendor@example.com',
+        ])->assertRedirect();
+
+    Mail::assertSent(NtpIssuedToVendor::class, function (NtpIssuedToVendor $mail) {
+        $body = $mail->render();
+
+        return str_contains($body, 'View Approved NTP')
+            && str_contains($body, e($mail->documentUrl))
+            && str_contains($body, 'valid for 5 days')
+            && str_contains($mail->documentUrl, 'signature=')
+            && $mail->documentExpiresAt->isSameDay(now()->addDays(5));
+    });
+});
+
+it('opens the approved form from the mailed link without signing in', function () {
+    approveWholeChain($this);
+
+    $mail = new NtpIssuedToVendor($this->ntp->fresh(), $this->project);
+
+    $this->get($mail->documentUrl)
+        ->assertOk()
+        ->assertSee('NOTICE TO PROCEED')
+        ->assertSee($this->ntp->ntp_no)
+        ->assertSee('APPROVED');
+});
+
+it('refuses the vendor link once it has expired or been tampered with', function () {
+    approveWholeChain($this);
+
+    $mail = new NtpIssuedToVendor($this->ntp->fresh(), $this->project);
+
+    $this->get($mail->documentUrl . 'x')->assertForbidden();
+
+    $this->travel(6)->days();
+    $this->get($mail->documentUrl)->assertForbidden();
+});
+
+it('never shows an unissued ntp through the vendor link', function () {
+    // Only the department has signed — the form would be half-stamped.
+    $this->actingAs($this->requestor)
+        ->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+
+    $mail = new NtpIssuedToVendor($this->ntp->fresh(), $this->project);
+
+    $this->get($mail->documentUrl)->assertNotFound();
+});

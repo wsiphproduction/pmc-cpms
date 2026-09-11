@@ -165,6 +165,6 @@ class UserController extends Controller
 
     private function singletonHolder(string $role): ?string
     {
-        return User::whereHas('roles', fn ($q) => $q->where('name', $role))->value('name');
+        return User::holderOf($role);
     }
 }

@@ -202,8 +202,8 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (opex && capex && !costcode) {
-            setCostcodeError('Cost code is required when both OPEX and CAPEX are selected.');
+        if (opex && !costcode) {
+            setCostcodeError('Cost code is required when OPEX is selected.');
             return;
         }
         setCostcodeError('');
@@ -317,7 +317,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                 <SectionTitle>Financials &amp; Budgeting</SectionTitle>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
-                        <FormLabel required={opex && capex}>Cost Code</FormLabel>
+                        <FormLabel required={opex}>Cost Code</FormLabel>
                         <select value={costcode} onChange={e => { setCostcode(e.target.value); setCostcodeError(''); }} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer', borderColor: costcodeError ? '#dc2626' : undefined }}>
                             <option value="">Select Cost Code…</option>
                             {!hasOption(costCodes, costcode) && <option value={costcode}>{costcode}</option>}

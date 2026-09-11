@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\ProjectNtp;
 use App\Models\ProjectRfq;
 use App\Models\Setting;
+use App\Models\User;
 use App\Support\PdfRenderer;
 use Illuminate\Http\Response;
 
@@ -40,6 +41,25 @@ class PrintController extends Controller
     {
         abort_unless((int) $ntp->project_id === (int) $project->id, 404);
 
+        return $this->ntpForm($project, $ntp);
+    }
+
+    /**
+     * The issued NTP, opened from the link in the vendor's email.
+     *
+     * The route's signature is what admits the contractor, and it expires on
+     * its own (see NtpIssuedToVendor). Only an issued NTP is ever mailed, so
+     * anything else is treated as not found rather than shown half-signed.
+     */
+    public function vendorNtp(ProjectNtp $ntp): Response
+    {
+        abort_unless($ntp->status === 'issued', 404);
+
+        return $this->ntpForm($ntp->project, $ntp);
+    }
+
+    private function ntpForm(Project $project, ProjectNtp $ntp): Response
+    {
         $ntp->load('rfq.items', 'creator', 'approvals.user');
 
         return $this->pdf->stream('print.ntp', [
@@ -72,17 +92,21 @@ class PrintController extends Controller
 
     /**
      * The names printed under each signature block. `prepared_by` is the
-     * engineer who registered the project; the rest are configured offices.
+     * engineer who registered the project; the PMD and division offices are
+     * whoever holds that role in the system, falling back to the configured
+     * name while the seat is vacant; the rest are configured offices only.
      *
      * @return array<string, string>
      */
     private function signatories(Project $project): array
     {
+        $office = fn (string $role, string $setting) => User::holderOf($role) ?? (string) Setting::get($setting, '');
+
         return [
             'prepared_by'           => $project->creator?->name ?? '',
-            'pmd_assistant_manager' => (string) Setting::get('signatory_pmd_assistant_manager', ''),
-            'pmd_manager'           => (string) Setting::get('signatory_pmd_manager', ''),
-            'ecs_division_manager'  => (string) Setting::get('signatory_ecs_division_manager', ''),
+            'pmd_assistant_manager' => $office(User::ROLE_PMD_ASST_MANAGER, 'signatory_pmd_assistant_manager'),
+            'pmd_manager'           => $office(User::ROLE_PMD_DEPT_MANAGER, 'signatory_pmd_manager'),
+            'ecs_division_manager'  => $office(User::ROLE_DIVISION_MANAGER, 'signatory_ecs_division_manager'),
             'operations_director'   => (string) Setting::get('signatory_operations_director', ''),
         ];
     }

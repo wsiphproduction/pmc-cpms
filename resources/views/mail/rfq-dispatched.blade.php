@@ -64,7 +64,6 @@
                                                 ['Project Number',  $project->project_no],
                                                 ['Project Title',   $project->title],
                                                 ['Job Site',        $project->site ?? '—'],
-                                                ['Project Owner',   $project->project_manager_name ?? '—'],
                                                 ['Date Sent',       optional($rfq->sent_date)->format('F d, Y') ?? date('F d, Y')],
                                                 ['Due Date',        optional($rfq->due_date)->format('F d, Y') ?? 'To be advised'],
                                             ];

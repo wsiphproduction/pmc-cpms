@@ -475,18 +475,20 @@ class ProjectController extends Controller
             ->whereIn('id', $ids)->withCount($relation)->get()->sum("{$relation}_count");
 
         return [
-            'rfq'     => $countAcross('rfqs'),
-            'ntp'     => $countAcross('ntps'),
-            'permits' => $countAcross('permits'),
-            'vof'     => $countAcross('variationOrders'),
-            'qpp'     => $countAcross('qualityDocs'),
-            'mtr'     => $countAcross('mtrDocs'),
-            'rfp'     => $countAcross('billings'),
-            'ioc'     => $countAcross('iocItems'),
-            'acr'     => $countAcross('iocItems'),
-            'psr'     => $countAcross('weeklyReports'),
-            'at'      => AuditTrail::where('reference_type', Project::class)->whereIn('reference_id', $ids)->count(),
-            'todo'    => $countAcross('tasks'),
+            'rfq'         => $countAcross('rfqs'),
+            'ntp'         => $countAcross('ntps'),
+            // Direct children only — that's what the Sub-Projects list shows.
+            'subprojects' => $project->children->count(),
+            'permits'     => $countAcross('permits'),
+            'vof'         => $countAcross('variationOrders'),
+            'qpp'         => $countAcross('qualityDocs'),
+            'mtr'         => $countAcross('mtrDocs'),
+            'rfp'         => $countAcross('billings'),
+            'ioc'         => $countAcross('iocItems'),
+            'acr'         => $countAcross('iocItems'),
+            'psr'         => $countAcross('weeklyReports'),
+            'at'          => AuditTrail::where('reference_type', Project::class)->whereIn('reference_id', $ids)->count(),
+            'todo'        => $countAcross('tasks'),
         ];
     }
 

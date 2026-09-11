@@ -30,7 +30,8 @@ interface HistoryRow {
     status: string;
     remarks: string | null;
     acted_at: string | null;
-    link: string | null;
+    /** Project id for an NTP, request id for a request; null when the record is gone. */
+    link_id: number | null;
 }
 
 interface Props {
@@ -265,8 +266,8 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
                                         <tr key={row.id} style={{ borderTop: '1px solid #f1f5f9' }}>
                                             <td style={{ padding: '11px 14px', color: '#64748b' }}>{row.type}</td>
                                             <td style={{ padding: '11px 14px', color: '#1e293b', fontWeight: 600 }}>
-                                                {row.link
-                                                    ? <Link href={row.link} style={{ color: '#2563eb', textDecoration: 'none' }}>{row.label}</Link>
+                                                {row.link_id
+                                                    ? <Link href={route(row.type === 'NTP' ? 'projects.hub.ntp' : 'requests.show', row.link_id)} style={{ color: '#2563eb', textDecoration: 'none' }}>{row.label}</Link>
                                                     : row.label}
                                             </td>
                                             <td style={{ padding: '11px 14px' }}>

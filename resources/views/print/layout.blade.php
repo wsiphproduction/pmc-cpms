@@ -20,7 +20,9 @@
     <style>
 
     * { box-sizing: border-box; }
-    body { font-family: 'Times New Roman', Georgia, serif; margin: 34px 40px; color: #000; font-size: 13px; }
+    /* One face across every PMD form. Calibri is on every office machine that
+       prints these; the fallbacks keep the look on Mac and Linux. */
+    body { font-family: Calibri, 'Segoe UI', Arial, Helvetica, sans-serif; margin: 34px 40px; color: #000; font-size: 13px; }
 
     /* Header banner: crest | corporate block | crest | document control */
     .hdr { display: grid; grid-template-columns: 66px 1fr 58px 208px; border: 1.5px solid #000; }

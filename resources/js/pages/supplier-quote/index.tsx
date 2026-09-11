@@ -329,11 +329,11 @@ function QuotationForm({ quotation, token, formRows, defaultScope, onCancel }: {
                     <>
                         <button type="button" onClick={() => submit(false)} disabled={busy}
                             style={{ padding: '10px 22px', borderRadius: '8px', border: '1.5px solid #2563eb', background: '#fff', color: '#2563eb', fontSize: '13px', fontWeight: 800, cursor: busy ? 'wait' : 'pointer' }}>
-                            {busy ? 'Working…' : 'Save'}
+                            {busy ? 'Working…' : 'Save as Draft'}
                         </button>
                         <button type="button" onClick={() => submit(true)} disabled={busy}
                             style={{ padding: '10px 24px', borderRadius: '8px', border: 'none', background: '#059669', color: '#fff', fontSize: '13px', fontWeight: 800, cursor: busy ? 'wait' : 'pointer' }}>
-                            {busy ? 'Working…' : 'Save & Send'}
+                            {busy ? 'Working…' : 'Submit Quotation'}
                         </button>
                     </>
                 )}

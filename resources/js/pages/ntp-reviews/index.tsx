@@ -13,7 +13,11 @@ type TabKey = 'all' | NtpStatus;
 export default function NtpReviewsIndex({ ntps }: Props) {
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
     const [rejectNtp, setRejectNtp] = useState<NtpReview | null>(null);
-    const [tab, setTab] = useState<TabKey>('all');
+    // Land on the queue that needs the reviewer's attention; fall back to All
+    // when nothing is waiting so the page never opens onto an empty tab.
+    const [tab, setTab] = useState<TabKey>(() =>
+        ntps.some(n => n.status === 'pending_review') ? 'pending_review' : 'all',
+    );
 
     const counts = {
         all: ntps.length,

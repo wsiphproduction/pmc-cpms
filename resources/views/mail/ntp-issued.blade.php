@@ -118,6 +118,27 @@
                 </tr>
                 @endif
 
+                {{-- Approved form --}}
+                <tr>
+                    <td style="padding:0 36px 24px;" align="center">
+                        <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
+                            <tr>
+                                <td align="center" style="background:#059669;border-radius:8px;">
+                                    <a href="{{ $documentUrl }}" target="_blank"
+                                       style="display:inline-block;padding:13px 28px;font-size:14px;font-weight:800;color:#ffffff;text-decoration:none;letter-spacing:0.2px;">
+                                        View Approved NTP
+                                    </a>
+                                </td>
+                            </tr>
+                        </table>
+                        <p style="margin:12px 0 0;font-size:12px;color:#64748b;line-height:1.6;">
+                            Opens the signed Notice to Proceed, ready to print or save as PDF.
+                            This link is valid for {{ $linkValidDays }} days only, until
+                            <strong style="color:#1e293b;">{{ $documentExpiresAt->format('F d, Y h:i A') }}</strong>.
+                        </p>
+                    </td>
+                </tr>
+
                 {{-- Instructions --}}
                 <tr>
                     <td style="padding:0 36px 28px;">

@@ -97,9 +97,12 @@
     <div class="note">Note: Please attach a copy of the original quotation from the service contractor as a reference.</div>
 
     <div class="sig tight">
+        {{-- Creating the NTP is the engineer's sign-off, so their block is
+             stamped from the moment the record exists. --}}
         @include('print.partials.signature', [
             'role' => 'Prepared by:', 'title' => 'Project Management Engineer',
-            'name' => $ntp->creator->name ?? ($signatories['prepared_by'] ?? ''), 'approval' => null,
+            'name' => $ntp->creator->name ?? ($signatories['prepared_by'] ?? ''),
+            'approval' => ['actor' => $ntp->creator->name ?? null, 'date' => $ntp->created_at?->format('M d, Y h:i A')],
         ])
         @include('print.partials.signature', [
             'role' => 'Reviewed by:', 'title' => 'PMD Assistant Manager',

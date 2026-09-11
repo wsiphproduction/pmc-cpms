@@ -206,17 +206,17 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
         setFundingError('');
         setForm(p => {
             const next = { ...p, [field]: value };
-            return next.opex && next.capex ? next : { ...next, costcode: '' };
+            return next.opex ? next : { ...next, costcode: '' };
         });
     };
 
-    const requiresCostCode = form.opex && form.capex;
+    const requiresCostCode = form.opex;
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
         if (requiresCostCode && !form.costcode) {
-            setErrors(p => ({ ...p, costcode: 'Cost code is required when both OPEX and CAPEX are selected.' }));
+            setErrors(p => ({ ...p, costcode: 'Cost code is required when OPEX is selected.' }));
             return;
         }
         setErrors({});

@@ -38,6 +38,14 @@ Route::prefix('quote/{token}')->group(function () {
     Route::patch('{quotation}',            [SupplierQuotationController::class, 'update'])->name('supplier-quote.update');
 });
 
+// The approved NTP as the contractor sees it. The vendor has no account, so
+// the link mailed to them is a signed URL that expires on its own; the
+// signature covers the path only, so it still verifies behind a proxy or a
+// sub-path deployment where the host the app sees differs from the public one.
+Route::get('ntp/{ntp}/document', [PrintController::class, 'vendorNtp'])
+    ->middleware('signed:relative')
+    ->name('ntp.vendor-document');
+
 Route::middleware(['auth'])->group(function () {
 
     Route::get('dashboard', DashboardController::class)->name('dashboard');

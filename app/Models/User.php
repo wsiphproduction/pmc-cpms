@@ -81,6 +81,17 @@ class User extends Authenticatable
         return self::ROLE_LABELS[$role] ?? ucwords(str_replace('_', ' ', $role));
     }
 
+    /**
+     * The name of whoever holds a role — the longest-standing holder when the
+     * role is not a singleton — or null while nobody does.
+     */
+    public static function holderOf(string $role): ?string
+    {
+        return self::whereHas('roles', fn ($q) => $q->where('name', $role))
+            ->oldest('id')
+            ->value('name');
+    }
+
     /** A user holds exactly one role in this system. */
     public function primaryRole(): ?string
     {
