@@ -27,6 +27,7 @@ class User extends Authenticatable
     public const ROLE_PMD_ASST_MANAGER = 'pmd_asst_manager';
     public const ROLE_PMD_DEPT_MANAGER = 'pmd_dept_manager';
     public const ROLE_DIVISION_MANAGER = 'division_manager';
+    public const ROLE_DIVISION_MANAGER_USER = 'division_manager_user';
     public const ROLE_ADMIN = 'admin';
 
     public const ROLE_LABELS = [
@@ -36,6 +37,7 @@ class User extends Authenticatable
         self::ROLE_PMD_ASST_MANAGER => 'PMD Assistant Manager',
         self::ROLE_PMD_DEPT_MANAGER => 'PMD Department Manager',
         self::ROLE_DIVISION_MANAGER => 'Division Manager',
+        self::ROLE_DIVISION_MANAGER_USER => 'Division Manager User',
         self::ROLE_ADMIN => 'Admin',
     ];
 
@@ -126,6 +128,7 @@ class User extends Authenticatable
         'email',
         'password',
         'department',
+        'division',
     ];
 
     /**

@@ -20,6 +20,7 @@ use App\Models\ProjectVariationOrder;
 use App\Models\ProjectTask;
 use App\Models\ProjectWeeklyReport;
 use App\Models\Setting;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Support\PsrTemplateWriter;
@@ -550,9 +551,10 @@ class ProjectHubController extends Controller
 
         $ntpNo = $this->nextNtpNo();
 
-        // Submitted for review — NOT issued yet. The RFQ is not awarded and the
-        // budget is not recalculated until the whole chain has signed: the
-        // department user first, then PMD and the Division Manager.
+        // Submitted for approval — NOT issued yet. The RFQ is not awarded and
+        // the budget is not recalculated until the whole chain has signed: PMD
+        // and the Division Manager first, then the department user and the
+        // manager user of its division.
         $ntp = $project->ntps()->create([
             ...$data,
             'ntp_no'      => $ntpNo,
@@ -562,23 +564,23 @@ class ProjectHubController extends Controller
 
         $ntp->startApprovalChain();
 
-        AuditTrail::log("NTP {$ntpNo} submitted for department review ({$data['contractor_name']})", $project, array_filter(['module' => 'NTP', 'type' => 'create', 'rfq_id' => $data['project_rfq_id'] ?? null]));
+        AuditTrail::log("NTP {$ntpNo} submitted for approval ({$data['contractor_name']})", $project, array_filter(['module' => 'NTP', 'type' => 'create', 'rfq_id' => $data['project_rfq_id'] ?? null]));
 
-        // Notify the project's department side that an NTP awaits review: its
-        // requester, or the owning department when there is no request.
+        // The chain opens with the PMD Assistant Manager, who acts from the
+        // approvals portal.
         Notification::notify(
-            $project->departmentAudience(),
-            "NTP {$ntpNo} for {$data['contractor_name']} is awaiting your review on project {$project->project_no}.",
-            route('ntp-reviews.index', absolute: false)
+            User::whereHas('roles', fn ($q) => $q->where('name', User::ROLE_PMD_ASST_MANAGER))->pluck('id'),
+            "NTP {$ntpNo} for {$data['contractor_name']} is awaiting your approval on project {$project->project_no}.",
+            route('approvals.index', absolute: false)
         );
 
-        return back()->with('success', "NTP {$ntpNo} submitted for department review.");
+        return back()->with('success', "NTP {$ntpNo} submitted for approval.");
     }
 
     /**
      * Send the issued NTP to the contractor.
      *
-     * Only once the chain is complete: until the Division Manager has signed
+     * Only once the chain is complete: until the last reviewer has signed
      * there is no notice to give, and telling a vendor to proceed on an
      * unapproved NTP is the one mistake this must not allow.
      */

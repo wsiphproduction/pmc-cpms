@@ -73,6 +73,9 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     const ntpReviewsCount = props.ntp_reviews_count ?? 0;
     const approvalsCount = props.approvals_count ?? 0;
     const isRequestor = role === 'requestor';
+    // Tied to one division rather than one department; otherwise sees the
+    // same portal a department user does.
+    const isDivisionUser = role === 'division_manager_user';
     const isAdmin = role === 'admin';
     // The PMD/division sign-off roles: their portal is For Approval, Requests
     // and Projects — they review the work rather than execute it, so the
@@ -129,8 +132,8 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 </svg>
             ),
         }] : []),
-        // Department users review NTPs submitted by engineers.
-        ...(isRequestor ? [{
+        // Department users and division manager users sign NTPs from here.
+        ...(isRequestor || isDivisionUser ? [{
             label: 'NTP Reviews',
             href: route('ntp-reviews.index'),
             badge: ntpReviewsCount,
@@ -152,7 +155,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 </svg>
             ),
         }] : []),
-        ...(isRequestor || isApprovalRole ? [] : [{
+        ...(isRequestor || isDivisionUser || isApprovalRole ? [] : [{
             label: 'Master Data',
             href: route('master.index'),
             icon: (

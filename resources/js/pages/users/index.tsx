@@ -8,6 +8,7 @@ interface UserRow {
     name: string;
     email: string;
     department: string | null;
+    division: string | null;
     role: string | null;
     created_at: string;
 }
@@ -31,6 +32,8 @@ interface Props {
     trashedUsers: TrashedUserRow[];
     roles: string[];
     departments: DepartmentOption[];
+    // Divisions a "Division Manager User" can be attached to; same shape.
+    divisions: DepartmentOption[];
     // Roles limited to one holder → the name of whoever holds each one now.
     singletonRoles: Record<string, string | null>;
 }
@@ -53,6 +56,7 @@ const ROLE_LABELS: Record<string, string> = {
     pmd_asst_manager:  'PMD Assistant Manager',
     pmd_dept_manager:  'PMD Department Manager',
     division_manager:  'Division Manager',
+    division_manager_user: 'Division Manager User',
     requestor:         'Department User',
 };
 
@@ -67,6 +71,7 @@ function RoleBadge({ role }: { role: string | null }) {
         pmd_asst_manager:  { bg: '#cffafe', color: '#155e75' },
         pmd_dept_manager:  { bg: '#e0e7ff', color: '#3730a3' },
         division_manager:  { bg: '#fce7f3', color: '#9d174d' },
+        division_manager_user: { bg: '#ffe4e6', color: '#9f1239' },
         requestor:         { bg: '#fef9c3', color: '#854d0e' },
     };
     const s = map[role ?? ''] ?? { bg: '#f3f4f6', color: '#374151' };
@@ -142,11 +147,12 @@ const fieldStyle: React.CSSProperties = { marginBottom: '14px' };
 // Searchable department picker (select2-style): type to filter; options show
 // "name — description" while the selected box shows the name only. The stored
 // value only updates when an option is picked, so it stays a valid department.
-function DepartmentSelect({ value, options, onChange, required }: {
+function DepartmentSelect({ value, options, onChange, required, placeholder = 'Select department…' }: {
     value: string;
     options: DepartmentOption[];
     onChange: (value: string) => void;
     required?: boolean;
+    placeholder?: string;
 }) {
     const [open, setOpen] = useState(false);
     const [query, setQuery] = useState('');
@@ -174,7 +180,7 @@ function DepartmentSelect({ value, options, onChange, required }: {
         <div ref={wrapRef} style={{ position: 'relative' }}>
             <input
                 value={open ? query : displayText}
-                placeholder="Select department…"
+                placeholder={placeholder}
                 role="combobox"
                 aria-expanded={open}
                 autoComplete="off"
@@ -221,7 +227,7 @@ function DepartmentSelect({ value, options, onChange, required }: {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function UsersIndex({ users, trashedUsers, roles, departments, singletonRoles }: Props) {
+export default function UsersIndex({ users, trashedUsers, roles, departments, divisions = [], singletonRoles }: Props) {
     const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string> }>();
     const flash  = props.flash;
     const errors = props.errors ?? {};
@@ -236,8 +242,8 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, si
     const [filterRole, setFilterRole] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
-    const [addForm,  setAddForm]  = useState({ name: '', email: '', password: '', role: roles[0] ?? '', department: '' });
-    const [editForm, setEditForm] = useState({ name: '', email: '', role: '', department: '' });
+    const [addForm,  setAddForm]  = useState({ name: '', email: '', password: '', role: roles[0] ?? '', department: '', division: '' });
+    const [editForm, setEditForm] = useState({ name: '', email: '', role: '', department: '', division: '' });
     const [resetPw,  setResetPw]  = useState({ password: '', password_confirmation: '' });
 
     const filtered = users.filter(u => {
@@ -256,12 +262,12 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, si
         setSubmitting(true);
         router.post(route('users.store'), addForm, {
             onFinish:  () => setSubmitting(false),
-            onSuccess: () => { setShowAdd(false); setAddForm({ name: '', email: '', password: '', role: roles[0] ?? '', department: '' }); },
+            onSuccess: () => { setShowAdd(false); setAddForm({ name: '', email: '', password: '', role: roles[0] ?? '', department: '', division: '' }); },
         });
     };
 
     const openEdit = (u: UserRow) => {
-        setEditForm({ name: u.name, email: u.email, role: u.role ?? roles[0] ?? '', department: u.department ?? '' });
+        setEditForm({ name: u.name, email: u.email, role: u.role ?? roles[0] ?? '', department: u.department ?? '', division: u.division ?? '' });
         setEditUser(u);
     };
 
@@ -447,7 +453,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, si
                         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                             <thead>
                                 <tr style={{ background: '#f8fafc' }}>
-                                    {['Name', 'Email', 'Role', 'Department', 'Created At', 'Actions'].map((h, i, arr) => (
+                                    {['Name', 'Email', 'Role', 'Department / Division', 'Created At', 'Actions'].map((h, i, arr) => (
                                         <th key={h} style={{
                                             padding: '10px 16px', textAlign: i === arr.length - 1 ? 'right' : 'left',
                                             fontSize: '10.5px', fontWeight: 700, color: '#9ca3af',
@@ -491,7 +497,9 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, si
                                         </td>
                                         <td style={{ padding: '12px 16px', color: '#6b7280' }}>{u.email}</td>
                                         <td style={{ padding: '12px 16px' }}><RoleBadge role={u.role} /></td>
-                                        <td style={{ padding: '12px 16px', color: u.department ? '#374151' : '#d1d5db' }}>{u.department ?? '—'}</td>
+                                        <td style={{ padding: '12px 16px', color: (u.department || u.division) ? '#374151' : '#d1d5db' }}>
+                                            {u.department ?? (u.division ? <>{u.division} <span style={{ color: '#94a3b8', fontSize: '11px' }}>(division)</span></> : '—')}
+                                        </td>
                                         <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{formatDate(u.created_at)}</td>
                                         <td style={{ padding: '12px 16px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
@@ -642,6 +650,19 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, si
                                 {errors.department && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.department}</p>}
                             </div>
                         )}
+                        {addForm.role === 'division_manager_user' && (
+                            <div style={fieldStyle}>
+                                <label style={labelStyle}>Division</label>
+                                <DepartmentSelect
+                                    value={addForm.division}
+                                    options={divisions}
+                                    onChange={v => setAddForm(f => ({ ...f, division: v }))}
+                                    placeholder="Select division…"
+                                    required
+                                />
+                                {errors.division && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.division}</p>}
+                            </div>
+                        )}
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
                             <button type="button" style={btnSecondary} onClick={() => setShowAdd(false)}>Cancel</button>
                             <button type="submit" style={{ ...btnPrimary, opacity: submitting ? 0.7 : 1 }} disabled={submitting}>
@@ -690,6 +711,19 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, si
                                     required
                                 />
                                 {errors.department && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.department}</p>}
+                            </div>
+                        )}
+                        {editForm.role === 'division_manager_user' && (
+                            <div style={fieldStyle}>
+                                <label style={labelStyle}>Division</label>
+                                <DepartmentSelect
+                                    value={editForm.division}
+                                    options={divisions}
+                                    onChange={v => setEditForm(f => ({ ...f, division: v }))}
+                                    placeholder="Select division…"
+                                    required
+                                />
+                                {errors.division && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.division}</p>}
                             </div>
                         )}
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>

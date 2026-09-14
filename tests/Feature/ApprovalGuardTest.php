@@ -117,6 +117,12 @@ it('keeps the department step to the owning department\'s requestors', function 
     ]);
     $ntp->startApprovalChain();
 
+    // Sign the PMD steps so the chain reaches the department.
+    foreach ([User::ROLE_PMD_ASST_MANAGER, User::ROLE_PMD_DEPT_MANAGER, User::ROLE_DIVISION_MANAGER] as $role) {
+        $ntp->recordApproval(makeUserWithRoleForGuard($role));
+    }
+    expect($ntp->currentApprovalRole())->toBe(User::ROLE_REQUESTOR);
+
     // Carries the right department but is not a department user.
     $imposter = makeUserWithRoleForGuard(User::ROLE_PMD_ASST_MANAGER, ['department' => 'Engineering']);
     expect($ntp->awaitingApprovalFrom($imposter))->toBeFalse();

@@ -129,8 +129,7 @@ it('stamps the ntp form for each step that has been signed', function () {
     Role::firstOrCreate(['name' => User::ROLE_PMD_ASST_MANAGER]);
     $reviewer->assignRole(User::ROLE_PMD_ASST_MANAGER);
 
-    // Settle the department step, then the PMD Assistant Manager's.
-    $this->ntp->approvals()->where('sequence', 1)->update(['status' => 'approved', 'acted_at' => now()]);
+    // The PMD Assistant Manager opens the chain; nobody after them has signed.
     (new App\Support\ApprovalFlow)->approveNtp($this->ntp->fresh(), $reviewer);
 
     $html = view('print.ntp', [
@@ -147,8 +146,8 @@ it('stamps the ntp form for each step that has been signed', function () {
         // The step still awaiting a decision is not stamped.
         ->toContain('P. Manager');
 
-    // Prepared by, plus the two signed steps.
-    expect(substr_count($html, 'class="stamp"'))->toBe(3);
+    // Prepared by, plus the one signed step.
+    expect(substr_count($html, 'class="stamp"'))->toBe(2);
 });
 
 it('renders both completion documents', function () {

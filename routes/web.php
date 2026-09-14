@@ -261,6 +261,11 @@ Route::middleware(['auth'])->group(function () {
         Route::put('master/departments/{department}',    [MasterDataController::class, 'updateDepartment'])->name('master.departments.update');
         Route::delete('master/departments/{department}', [MasterDataController::class, 'destroyDepartment'])->name('master.departments.destroy');
 
+        // Divisions
+        Route::post('master/divisions',              [MasterDataController::class, 'storeDivision'])->name('master.divisions.store');
+        Route::put('master/divisions/{division}',    [MasterDataController::class, 'updateDivision'])->name('master.divisions.update');
+        Route::delete('master/divisions/{division}', [MasterDataController::class, 'destroyDivision'])->name('master.divisions.destroy');
+
         // Categories
         Route::post('master/categories',              [MasterDataController::class, 'storeCategory'])->name('master.categories.store');
         Route::put('master/categories/{category}',    [MasterDataController::class, 'updateCategory'])->name('master.categories.update');

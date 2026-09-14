@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Department;
+use App\Models\Division;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -21,6 +22,7 @@ class UserController extends Controller
                 'name'       => $user->name,
                 'email'      => $user->email,
                 'department' => $user->department,
+                'division'   => $user->division,
                 'role'       => $user->roles->first()?->name,
                 'created_at' => $user->created_at,
             ]),
@@ -44,6 +46,11 @@ class UserController extends Controller
                 'label'        => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,
                 'displayLabel' => (string) $row->name,
             ]),
+            'divisions' => Division::where('is_active', true)->orderBy('name')->get(['name', 'description'])->map(fn (Division $row) => [
+                'value'        => (string) $row->name,
+                'label'        => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,
+                'displayLabel' => (string) $row->name,
+            ]),
         ]);
     }
 
@@ -55,6 +62,7 @@ class UserController extends Controller
             'password'   => ['required', Password::min(8)],
             'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule()],
             'department' => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_REQUESTOR), 'nullable', 'string', 'max:191'],
+            'division'   => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_DIVISION_MANAGER_USER), 'nullable', 'string', 'max:191', 'exists:divisions,name'],
         ]);
 
         $user = User::create([
@@ -62,6 +70,7 @@ class UserController extends Controller
             'email'      => $data['email'],
             'password'   => Hash::make($data['password']),
             'department' => $data['role'] === User::ROLE_REQUESTOR ? ($data['department'] ?? null) : null,
+            'division'   => $data['role'] === User::ROLE_DIVISION_MANAGER_USER ? ($data['division'] ?? null) : null,
         ]);
 
         $user->assignRole($data['role']);
@@ -76,12 +85,14 @@ class UserController extends Controller
             'email'      => 'required|email|max:255|unique:users,email,' . $user->id,
             'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule($user)],
             'department' => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_REQUESTOR), 'nullable', 'string', 'max:191'],
+            'division'   => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_DIVISION_MANAGER_USER), 'nullable', 'string', 'max:191', 'exists:divisions,name'],
         ]);
 
         $user->update([
             'name'       => $data['name'],
             'email'      => $data['email'],
             'department' => $data['role'] === User::ROLE_REQUESTOR ? ($data['department'] ?? null) : null,
+            'division'   => $data['role'] === User::ROLE_DIVISION_MANAGER_USER ? ($data['division'] ?? null) : null,
         ]);
 
         $user->syncRoles([$data['role']]);

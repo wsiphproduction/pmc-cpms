@@ -18,7 +18,10 @@ use Inertia\Response;
  * It shows only what is actually sitting in the signed-in role's queue — the
  * step the chain is currently waiting on — plus a record of what that role has
  * already settled. Requests stop at the PMD Department Manager; NTPs carry on
- * to the Division Manager, so a Division Manager sees no request queue.
+ * to the Division Manager, so a Division Manager sees no request queue. After
+ * the Division Manager an NTP leaves this portal for the project's own
+ * reviewers (department user, then division manager user), who sign from the
+ * NTP Reviews page.
  */
 class ApprovalController extends Controller
 {

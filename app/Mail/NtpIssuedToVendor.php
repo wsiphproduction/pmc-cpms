@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\URL;
 
 /**
  * Tells the contractor their Notice to Proceed has been fully approved and
- * issued — sent by hand from the NTP hub once the Division Manager has signed,
+ * issued — sent by hand from the NTP hub once the whole chain has signed,
  * so the project team controls exactly when the vendor is told.
  */
 class NtpIssuedToVendor extends Mailable

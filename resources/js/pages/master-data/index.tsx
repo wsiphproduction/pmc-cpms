@@ -9,7 +9,8 @@ interface MasterItem {
     sequence_no?: number | null;
     description?: string | null;
     created_at?: string;
-    // Cost-code detail columns (populated by the GL-code CSV import).
+    // Cost-code detail columns (populated by the GL-code CSV import). A
+    // department also carries `division`: the name of its parent division.
     division?: string | null;
     cost_center?: string | null;
     activity?: string | null;
@@ -52,6 +53,7 @@ interface Props {
     priorities?:   MasterItem[];
     statuses?:     MasterItem[];
     departments?:  MasterItem[];
+    divisions?:    MasterItem[];
     categories?:   MasterItem[];
     serviceTypes?: MasterItem[];
     workForces?:   MasterItem[];
@@ -70,6 +72,7 @@ type TabKey =
     | 'priorities'
     | 'statuses'
     | 'departments'
+    | 'divisions'
     | 'categories'
     | 'service_types'
     | 'work_forces'
@@ -173,6 +176,16 @@ const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode; addLabel:
         ),
     },
     {
+        key: 'divisions',
+        label: 'Divisions',
+        addLabel: 'Add Division',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01"/><path d="M9 12v.01"/><path d="M9 15v.01"/><path d="M9 18v.01"/>
+            </svg>
+        ),
+    },
+    {
         key: 'categories',
         label: 'Categories',
         addLabel: 'Add Category',
@@ -258,6 +271,7 @@ const ROUTE_MAP: Record<TabKey, string> = {
     priorities:    'master.priorities',
     statuses:      'master.statuses',
     departments:   'master.departments',
+    divisions:     'master.divisions',
     categories:    'master.categories',
     service_types: 'master.service-types',
     work_forces:   'master.work-forces',
@@ -267,18 +281,22 @@ const ROUTE_MAP: Record<TabKey, string> = {
 
 // ── Modal ──────────────────────────────────────────────────────────────────
 function RecordModal({
-    tab, item, onClose,
+    tab, item, divisions = [], onClose,
 }: {
     tab: TabKey;
     item: MasterItem | null;
+    /** Active divisions a department can be filed under. */
+    divisions?: MasterItem[];
     onClose: () => void;
 }) {
     const isEdit = !!item;
     const [name,        setName]        = useState(item?.name ?? '');
     const [sequenceNo,  setSequenceNo]  = useState(item?.sequence_no?.toString() ?? '');
     const [description, setDescription] = useState(item?.description ?? '');
+    const [division,    setDivision]    = useState(item?.division ?? '');
     const [submitting,  setSubmitting]  = useState(false);
-    const isPriority = tab === 'priorities';
+    const isPriority   = tab === 'priorities';
+    const isDepartment = tab === 'departments';
 
     const handleSubmit = () => {
         if (!name.trim()) return;
@@ -288,6 +306,7 @@ function RecordModal({
             name: name.trim(),
             description: description.trim() || null,
             ...(isPriority ? { sequence_no: sequenceNo.trim() ? Number(sequenceNo) : null } : {}),
+            ...(isDepartment ? { division: division || null } : {}),
         };
 
         if (isEdit) {
@@ -356,6 +375,32 @@ function RecordModal({
                                 onFocus={e => (e.target.style.borderColor = '#2563eb')}
                                 onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
                             />
+                        </div>
+                    )}
+                    {isDepartment && (
+                        <div style={{ marginBottom: '14px' }}>
+                            <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                                Division <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none' }}>(optional)</span>
+                            </label>
+                            <select
+                                value={division}
+                                onChange={e => setDivision(e.target.value)}
+                                style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1.5px solid #e2e8f0', fontSize: '13px', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s', color: division ? '#0f172a' : '#94a3b8', background: '#fff' }}
+                                onFocus={e => (e.target.style.borderColor = '#2563eb')}
+                                onBlur={e => (e.target.style.borderColor = '#e2e8f0')}
+                            >
+                                <option value="">— No division —</option>
+                                {/* Keep a division that has since been deactivated selectable while editing. */}
+                                {division && !divisions.some(d => d.name === division) && (
+                                    <option value={division}>{division} (inactive)</option>
+                                )}
+                                {divisions.map(d => (
+                                    <option key={d.id} value={d.name}>{d.name}</option>
+                                ))}
+                            </select>
+                            {divisions.length === 0 && (
+                                <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '5px' }}>No active divisions yet — add them under the Divisions list.</div>
+                            )}
                         </div>
                     )}
                     <div>
@@ -475,13 +520,16 @@ function TabTable({
     onToggle: (item: MasterItem) => void;
 }) {
     const config = TAB_CONFIG.find(t => t.key === tab)!;
-    const isPriority = tab === 'priorities';
-    const isCostCode = tab === 'cost_codes';
+    const isPriority   = tab === 'priorities';
+    const isCostCode   = tab === 'cost_codes';
+    const isDepartment = tab === 'departments';
     const headers = isPriority
         ? ['#', 'Sequence', 'Name / Label', 'Description', 'Created At', 'Actions']
         : isCostCode
             ? ['#', 'GL Code', 'Division', 'Cost Center', 'Activity', 'Expense Description', 'Class', 'Status', 'Active', 'Actions']
-            : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
+            : isDepartment
+                ? ['#', 'Name / Label', 'Division', 'Description', 'Created At', 'Actions']
+                : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
 
     const [page, setPage] = useState(1);
     const totalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
@@ -599,6 +647,11 @@ function TabTable({
                                             </td>
                                         )}
                                         <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a' }}>{item.name}</td>
+                                        {isDepartment && (
+                                            <td style={{ padding: '12px 20px', color: '#475569', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
+                                                {item.division || <span style={{ color: '#e2e8f0' }}>—</span>}
+                                            </td>
+                                        )}
                                         <td style={{ padding: '12px 20px', color: '#94a3b8', fontSize: '12.5px' }}>
                                             {item.description ?? <span style={{ color: '#e2e8f0' }}>—</span>}
                                         </td>
@@ -1010,6 +1063,7 @@ export default function MasterData({
     priorities    = [],
     statuses      = [],
     departments   = [],
+    divisions     = [],
     categories    = [],
     serviceTypes  = [],
     workForces    = [],
@@ -1055,6 +1109,7 @@ export default function MasterData({
         priorities,
         statuses,
         departments,
+        divisions,
         categories,
         service_types: serviceTypes,
         work_forces:   workForces,
@@ -1112,6 +1167,7 @@ export default function MasterData({
                 <RecordModal
                     tab={modalTab}
                     item={editTarget}
+                    divisions={divisions.filter(d => d.is_active !== false)}
                     onClose={() => setShowModal(false)}
                 />
             )}
@@ -1139,53 +1195,53 @@ export default function MasterData({
                 </span>
             </div>
 
-            {/* Card */}
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+            {/* Card — stacked menu on the left, table on the right */}
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', display: 'flex', alignItems: 'stretch' }}>
 
-                {/* Tabs — scrollable row */}
-                <div style={{ overflowX: 'auto', borderBottom: '1px solid #f1f5f9' }}>
-                    <div style={{ display: 'flex', padding: '0 4px', gap: '2px', minWidth: 'max-content' }}>
-                        {TAB_CONFIG.map(tab => {
-                            const isActive = activeTab === tab.key;
-                            const count = tab.key === 'suppliers' ? suppliers.length : dataMap[tab.key].length;
-                            return (
-                                <button
-                                    key={tab.key}
-                                    onClick={() => selectTab(tab.key)}
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: isActive ? 700 : 500, color: isActive ? '#2563eb' : '#64748b', borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent', transition: 'all 0.15s', fontFamily: 'inherit', marginBottom: '-1px', whiteSpace: 'nowrap' }}
-                                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = '#334155'; }}
-                                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = '#64748b'; }}
-                                >
-                                    <span style={{ color: isActive ? '#2563eb' : '#94a3b8', display: 'flex' }}>{tab.icon}</span>
-                                    {tab.label}
-                                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '20px', height: '20px', borderRadius: '99px', background: isActive ? '#eff6ff' : '#f1f5f9', color: isActive ? '#2563eb' : '#94a3b8', fontSize: '10.5px', fontWeight: 700, padding: '0 5px' }}>
-                                        {count}
-                                    </span>
-                                </button>
-                            );
-                        })}
-                    </div>
+                {/* Sidebar menu */}
+                <nav style={{ width: '220px', flexShrink: 0, borderRight: '1px solid #f1f5f9', background: '#fafbfc', padding: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                    {TAB_CONFIG.map(tab => {
+                        const isActive = activeTab === tab.key;
+                        const count = tab.key === 'suppliers' ? suppliers.length : dataMap[tab.key].length;
+                        return (
+                            <button
+                                key={tab.key}
+                                onClick={() => selectTab(tab.key)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '9px', width: '100%', padding: '9px 10px', border: 'none', borderRadius: '8px', background: isActive ? '#eff6ff' : 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: isActive ? 700 : 500, color: isActive ? '#2563eb' : '#475569', textAlign: 'left', transition: 'all 0.15s', fontFamily: 'inherit', whiteSpace: 'nowrap' }}
+                                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = '#f1f5f9'; e.currentTarget.style.color = '#0f172a'; } }}
+                                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#475569'; } }}
+                            >
+                                <span style={{ color: isActive ? '#2563eb' : '#94a3b8', display: 'flex', flexShrink: 0 }}>{tab.icon}</span>
+                                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.label}</span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '20px', height: '20px', borderRadius: '99px', background: isActive ? '#dbeafe' : '#e2e8f0', color: isActive ? '#2563eb' : '#64748b', fontSize: '10.5px', fontWeight: 700, padding: '0 5px', flexShrink: 0 }}>
+                                    {count}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </nav>
+
+                {/* Table pane */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                    {activeTab === 'suppliers' ? (
+                        <SupplierTable
+                            suppliers={suppliers}
+                            importedCount={importedSupplierCount}
+                            onAdd={() => { setEditSupplier(null); setShowSupplierModal(true); }}
+                            onEdit={s => { setEditSupplier(s); setShowSupplierModal(true); }}
+                            onToggle={s => toggleActive('suppliers', s.id)}
+                        />
+                    ) : (
+                        <TabTable
+                            key={activeTab}
+                            tab={activeTab}
+                            items={dataMap[activeTab]}
+                            onAdd={() => openAdd(activeTab)}
+                            onEdit={item => openEdit(activeTab, item)}
+                            onToggle={item => toggleActive(ROUTE_MAP[activeTab].replace('master.', ''), item.id)}
+                        />
+                    )}
                 </div>
-
-                {/* Tab content */}
-                {activeTab === 'suppliers' ? (
-                    <SupplierTable
-                        suppliers={suppliers}
-                        importedCount={importedSupplierCount}
-                        onAdd={() => { setEditSupplier(null); setShowSupplierModal(true); }}
-                        onEdit={s => { setEditSupplier(s); setShowSupplierModal(true); }}
-                        onToggle={s => toggleActive('suppliers', s.id)}
-                    />
-                ) : (
-                    <TabTable
-                        key={activeTab}
-                        tab={activeTab}
-                        items={dataMap[activeTab]}
-                        onAdd={() => openAdd(activeTab)}
-                        onEdit={item => openEdit(activeTab, item)}
-                        onToggle={item => toggleActive(ROUTE_MAP[activeTab].replace('master.', ''), item.id)}
-                    />
-                )}
             </div>
         </AuthenticatedLayout>
     );

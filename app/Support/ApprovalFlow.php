@@ -104,8 +104,9 @@ class ApprovalFlow
     }
 
     /**
-     * Record a signature on an NTP. The last one issues it — awarding the RFQ
-     * and stamping the issue date.
+     * Record a signature on an NTP. The last one — the division manager user
+     * over the project's department — issues it, awarding the RFQ and
+     * stamping the issue date.
      */
     public function approveNtp(ProjectNtp $ntp, User $user, ?string $remarks = null): bool
     {
@@ -257,9 +258,30 @@ class ApprovalFlow
 
     private function notifyNextApprover(ProjectRequest|ProjectNtp $record, string $message, string $link): void
     {
-        if ($role = $record->currentApprovalRole()) {
-            $this->notifyRoles([$role], $message, $link);
+        $role = $record->currentApprovalRole();
+
+        if ($role === null) {
+            return;
         }
+
+        // An NTP's review steps are held per project, so only the people
+        // behind that project's department (or its division) are called on —
+        // and from their own review page, not the PMD portal.
+        if ($record instanceof ProjectNtp && in_array($role, ProjectNtp::REVIEW_ROLES, true)) {
+            $project = $record->project;
+
+            Notification::notify(
+                $role === User::ROLE_DIVISION_MANAGER_USER
+                    ? $project->divisionAudience()
+                    : $project->departmentAudience(),
+                $message,
+                route('ntp-reviews.index', absolute: false)
+            );
+
+            return;
+        }
+
+        $this->notifyRoles([$role], $message, $link);
     }
 
     /** @param  array<int, string>  $roles */

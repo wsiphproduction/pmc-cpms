@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\CostCode;
 use App\Models\Department;
+use App\Models\Division;
 use App\Models\JobLocation;
 use App\Models\JobType;
 use App\Models\MasterClass;
@@ -34,7 +35,8 @@ class MasterDataController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'sequence_no', 'description', 'is_active', 'created_at']),
             'statuses'     => MasterStatus::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
-            'departments'  => Department::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
+            'departments'  => Department::latest()->get(['id', 'name', 'description', 'division', 'is_active', 'created_at']),
+            'divisions'    => Division::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'categories'   => Category::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'serviceTypes' => ServiceType::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'workForces'   => WorkForce::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
@@ -64,6 +66,7 @@ class MasterDataController extends Controller
         'priorities'    => Priority::class,
         'statuses'      => MasterStatus::class,
         'departments'   => Department::class,
+        'divisions'     => Division::class,
         'categories'    => Category::class,
         'service-types' => ServiceType::class,
         'work-forces'   => WorkForce::class,
@@ -699,7 +702,7 @@ class MasterDataController extends Controller
     // Departments
     public function storeDepartment(Request $request)
     {
-        $data = $this->validateMasterData($request, 'departments');
+        $data = $this->validateDepartment($request);
 
         Department::create($data);
 
@@ -708,7 +711,7 @@ class MasterDataController extends Controller
 
     public function updateDepartment(Request $request, Department $department)
     {
-        $data = $this->validateMasterData($request, 'departments', $department->id);
+        $data = $this->validateDepartment($request, $department->id);
 
         $department->update($data);
 
@@ -722,7 +725,43 @@ class MasterDataController extends Controller
         return redirect()->back()->with('success', 'Department deleted.');
     }
 
-    // Categories
+    // A department may be filed under a division; the value is the division's
+    // name, matching how users are linked to their department.
+    private function validateDepartment(Request $request, ?int $ignoreId = null): array
+    {
+        return $request->validate([
+            'name'        => 'required|string|max:255|unique:departments,name' . ($ignoreId ? ',' . $ignoreId : ''),
+            'description' => 'nullable|string|max:500',
+            'division'    => 'nullable|string|max:191|exists:divisions,name',
+        ]);
+    }
+
+    // Divisions
+    public function storeDivision(Request $request)
+    {
+        $data = $this->validateMasterData($request, 'divisions');
+
+        Division::create($data);
+
+        return redirect()->back()->with('success', 'Division added.');
+    }
+
+    public function updateDivision(Request $request, Division $division)
+    {
+        $data = $this->validateMasterData($request, 'divisions', $division->id);
+
+        $division->update($data);
+
+        return redirect()->back()->with('success', 'Division updated.');
+    }
+
+    public function destroyDivision(Division $division)
+    {
+        $division->delete();
+
+        return redirect()->back()->with('success', 'Division deleted.');
+    }
+
     public function storeCategory(Request $request)
     {
         $data = $this->validateMasterData($request, 'categories');

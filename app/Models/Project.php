@@ -448,6 +448,70 @@ class Project extends Model
     }
 
     /**
+     * Projects owned by a department in the user's division. Like
+     * `forDepartmentUser`, a sub-project inherits its owner from up the tree.
+     */
+    public function scopeForDivisionUser(Builder $query, ?User $user, int $levels = self::MAX_DEPTH): Builder
+    {
+        if ($user === null || blank($user->division)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        $departments = Department::where('division', $user->division)->pluck('name');
+
+        return $query->where(function (Builder $q) use ($user, $departments, $levels) {
+            $q->whereIn('dept_owner', $departments);
+
+            if ($levels > 1) {
+                $q->orWhereHas('parent', fn (Builder $p) => $p->forDivisionUser($user, $levels - 1));
+            }
+        });
+    }
+
+    /**
+     * Whether the project's owning department sits in the user's division.
+     * The department carries its division by name on the master list.
+     */
+    public function belongsToDivisionOf(User $user): bool
+    {
+        $division = $this->owningDivision();
+
+        return filled($division) && filled($user->division)
+            && strcasecmp((string) $division, (string) $user->division) === 0;
+    }
+
+    /** The division of the department that owns this project, if it has one. */
+    public function owningDivision(): ?string
+    {
+        $owner = $this->dept_owner ?: $this->rootAncestor()->dept_owner;
+
+        if (blank($owner)) {
+            return null;
+        }
+
+        return Department::where('name', $owner)->value('division');
+    }
+
+    /**
+     * The division manager users over this project's department — the ones
+     * waiting on the last NTP signature.
+     */
+    public function divisionAudience(): Collection
+    {
+        $division = $this->owningDivision();
+
+        if (blank($division)) {
+            return collect();
+        }
+
+        return User::whereHas('roles', fn (Builder $q) => $q->where('name', User::ROLE_DIVISION_MANAGER_USER))
+            ->where('division', $division)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values();
+    }
+
+    /**
      * The ids of everyone in the department that owns this project — who to
      * tell when there is no single requester waiting on it.
      */

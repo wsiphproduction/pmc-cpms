@@ -1,6 +1,8 @@
 <?php
 
 use App\Mail\NtpIssuedToVendor;
+use App\Models\Department;
+use App\Models\Division;
 use App\Models\Project;
 use App\Models\ProjectNtp;
 use App\Models\ProjectRfq;
@@ -9,6 +11,7 @@ use Illuminate\Support\Facades\Mail;
 use Spatie\Permission\Models\Role;
 
 const NTP_DEPARTMENT = 'Engineering';
+const NTP_DIVISION   = 'Technical Services';
 
 function makeUserWithRole(string $role, array $attributes = []): User
 {
@@ -46,11 +49,16 @@ function makeProjectForNtp(User $engineer): Project
 beforeEach(function () {
     Mail::fake();
 
-    $this->engineer   = makeUserWithRole(User::ROLE_ENGINEER);
-    $this->requestor  = makeUserWithRole(User::ROLE_REQUESTOR, ['department' => NTP_DEPARTMENT]);
-    $this->pmdAsst    = makeUserWithRole(User::ROLE_PMD_ASST_MANAGER);
-    $this->pmdManager = makeUserWithRole(User::ROLE_PMD_DEPT_MANAGER);
-    $this->division   = makeUserWithRole(User::ROLE_DIVISION_MANAGER);
+    // The department sits in a division, whose manager user gives the last signature.
+    Division::create(['name' => NTP_DIVISION]);
+    Department::create(['name' => NTP_DEPARTMENT, 'division' => NTP_DIVISION]);
+
+    $this->engineer     = makeUserWithRole(User::ROLE_ENGINEER);
+    $this->requestor    = makeUserWithRole(User::ROLE_REQUESTOR, ['department' => NTP_DEPARTMENT]);
+    $this->pmdAsst      = makeUserWithRole(User::ROLE_PMD_ASST_MANAGER);
+    $this->pmdManager   = makeUserWithRole(User::ROLE_PMD_DEPT_MANAGER);
+    $this->division     = makeUserWithRole(User::ROLE_DIVISION_MANAGER);
+    $this->divisionUser = makeUserWithRole(User::ROLE_DIVISION_MANAGER_USER, ['division' => NTP_DIVISION]);
 
     $this->project = makeProjectForNtp($this->engineer);
 
@@ -72,23 +80,28 @@ beforeEach(function () {
     $this->ntp = ProjectNtp::where('project_id', $this->project->id)->firstOrFail();
 });
 
-/** Walk the whole chain: department, then the three PMD offices. */
-function approveWholeChain($test): void
+/** The three PMD offices sign from the approvals portal. */
+function approvePmdSteps($test): void
 {
-    $test->actingAs($test->requestor)
-        ->patch(route('ntp-reviews.approve', $test->ntp))->assertRedirect();
-
     foreach ([$test->pmdAsst, $test->pmdManager, $test->division] as $approver) {
         $test->actingAs($approver)
             ->patch(route('approvals.ntps.approve', $test->ntp))->assertRedirect();
     }
 }
 
-it('signs the ntp in order: department, pmd assistant, pmd manager, division manager', function () {
-    expect($this->ntp->currentApprovalRole())->toBe(User::ROLE_REQUESTOR);
+/** Walk the whole chain: the PMD offices, then the department and its division. */
+function approveWholeChain($test): void
+{
+    approvePmdSteps($test);
 
-    $this->actingAs($this->requestor)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
-    expect($this->ntp->fresh()->currentApprovalRole())->toBe(User::ROLE_PMD_ASST_MANAGER);
+    foreach ([$test->requestor, $test->divisionUser] as $reviewer) {
+        $test->actingAs($reviewer)
+            ->patch(route('ntp-reviews.approve', $test->ntp))->assertRedirect();
+    }
+}
+
+it('signs the ntp in order: pmd assistant, pmd manager, division manager, department, division manager user', function () {
+    expect($this->ntp->currentApprovalRole())->toBe(User::ROLE_PMD_ASST_MANAGER);
 
     $this->actingAs($this->pmdAsst)->patch(route('approvals.ntps.approve', $this->ntp))->assertRedirect();
     expect($this->ntp->fresh()->currentApprovalRole())->toBe(User::ROLE_PMD_DEPT_MANAGER);
@@ -97,6 +110,14 @@ it('signs the ntp in order: department, pmd assistant, pmd manager, division man
     expect($this->ntp->fresh()->currentApprovalRole())->toBe(User::ROLE_DIVISION_MANAGER);
 
     $this->actingAs($this->division)->patch(route('approvals.ntps.approve', $this->ntp))->assertRedirect();
+    expect($this->ntp->fresh()->currentApprovalRole())->toBe(User::ROLE_REQUESTOR)
+        ->and($this->ntp->fresh()->status)->toBe('pending_review');
+
+    $this->actingAs($this->requestor)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+    expect($this->ntp->fresh()->currentApprovalRole())->toBe(User::ROLE_DIVISION_MANAGER_USER)
+        ->and($this->ntp->fresh()->status)->toBe('pending_review');
+
+    $this->actingAs($this->divisionUser)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
 
     $ntp = $this->ntp->fresh();
     expect($ntp->currentApprovalRole())->toBeNull()
@@ -105,7 +126,12 @@ it('signs the ntp in order: department, pmd assistant, pmd manager, division man
 });
 
 it('refuses an approver who is not the one being waited on', function () {
-    // The Division Manager cannot jump ahead of the department step.
+    // The department cannot jump ahead of PMD.
+    $this->actingAs($this->requestor)
+        ->patch(route('ntp-reviews.approve', $this->ntp))
+        ->assertForbidden();
+
+    // Nor can the Division Manager skip the Assistant Manager.
     $this->actingAs($this->division)
         ->patch(route('approvals.ntps.approve', $this->ntp))
         ->assertForbidden();
@@ -113,18 +139,61 @@ it('refuses an approver who is not the one being waited on', function () {
     expect($this->ntp->fresh()->status)->toBe('pending_review');
 });
 
+it('keeps the final step to the manager user of the department\'s own division', function () {
+    approvePmdSteps($this);
+    $this->actingAs($this->requestor)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+
+    // Same role, different division: not the one being waited on.
+    $otherDivision = makeUserWithRole(User::ROLE_DIVISION_MANAGER_USER, ['division' => 'Mining']);
+    $this->actingAs($otherDivision)
+        ->patch(route('ntp-reviews.approve', $this->ntp))
+        ->assertForbidden();
+
+    // And the Division Manager office, which already signed, cannot sign for it.
+    $this->actingAs($this->division)
+        ->patch(route('approvals.ntps.approve', $this->ntp))
+        ->assertForbidden();
+
+    expect($this->ntp->fresh()->status)->toBe('pending_review');
+
+    $this->actingAs($this->divisionUser)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+    expect($this->ntp->fresh()->status)->toBe('issued');
+});
+
+it('lists the ntp on the division manager user\'s review page once it is their turn', function () {
+    $listed = fn () => collect($this->actingAs($this->divisionUser)
+        ->get(route('ntp-reviews.index'))
+        ->assertOk()
+        ->inertiaPage()['props']['ntps']);
+
+    // Visible throughout, but not actionable until the department has signed.
+    expect($listed()->pluck('id'))->toContain($this->ntp->id)
+        ->and($listed()->firstWhere('id', $this->ntp->id)['can_act'])->toBeFalse();
+
+    approvePmdSteps($this);
+    $this->actingAs($this->requestor)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+
+    expect($listed()->firstWhere('id', $this->ntp->id)['can_act'])->toBeTrue();
+
+    // A division manager user elsewhere never sees it.
+    $outsider = makeUserWithRole(User::ROLE_DIVISION_MANAGER_USER, ['division' => 'Mining']);
+    $others = collect($this->actingAs($outsider)->get(route('ntp-reviews.index'))->inertiaPage()['props']['ntps']);
+    expect($others->pluck('id'))->not->toContain($this->ntp->id);
+});
+
 it('records who signed each step, for the printed form to stamp', function () {
     approveWholeChain($this);
 
     $timeline = collect($this->ntp->fresh()->approvalTimeline())->keyBy('role');
 
-    expect($timeline)->toHaveCount(4);
+    expect($timeline)->toHaveCount(5);
 
     foreach ([
-        User::ROLE_REQUESTOR        => $this->requestor,
-        User::ROLE_PMD_ASST_MANAGER => $this->pmdAsst,
-        User::ROLE_PMD_DEPT_MANAGER => $this->pmdManager,
-        User::ROLE_DIVISION_MANAGER => $this->division,
+        User::ROLE_PMD_ASST_MANAGER      => $this->pmdAsst,
+        User::ROLE_PMD_DEPT_MANAGER      => $this->pmdManager,
+        User::ROLE_DIVISION_MANAGER      => $this->division,
+        User::ROLE_REQUESTOR             => $this->requestor,
+        User::ROLE_DIVISION_MANAGER_USER => $this->divisionUser,
     ] as $role => $signer) {
         expect($timeline[$role]['status'])->toBe('approved')
             ->and($timeline[$role]['actor'])->toBe($signer->name)
@@ -235,9 +304,9 @@ it('refuses the vendor link once it has expired or been tampered with', function
 });
 
 it('never shows an unissued ntp through the vendor link', function () {
-    // Only the department has signed — the form would be half-stamped.
-    $this->actingAs($this->requestor)
-        ->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+    // Only the PMD Assistant Manager has signed — the form would be half-stamped.
+    $this->actingAs($this->pmdAsst)
+        ->patch(route('approvals.ntps.approve', $this->ntp))->assertRedirect();
 
     $mail = new NtpIssuedToVendor($this->ntp->fresh(), $this->project);
 

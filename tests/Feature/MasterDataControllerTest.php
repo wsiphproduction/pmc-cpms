@@ -3,6 +3,7 @@
 use App\Models\Category;
 use App\Models\CostCode;
 use App\Models\Department;
+use App\Models\Division;
 use App\Models\JobLocation;
 use App\Models\JobType;
 use App\Models\MasterClass;
@@ -469,6 +470,7 @@ describe('remaining master data tabs', function () {
         'priorities'    => ['master.priorities', Priority::class, 'priorities', 'Priority added.', 'Priority updated.', 'Priority deleted.'],
         'statuses'      => ['master.statuses', MasterStatus::class, 'statuses', 'Status added.', 'Status updated.', 'Status deleted.'],
         'departments'   => ['master.departments', Department::class, 'departments', 'Department added.', 'Department updated.', 'Department deleted.'],
+        'divisions'     => ['master.divisions', Division::class, 'divisions', 'Division added.', 'Division updated.', 'Division deleted.'],
         'categories'    => ['master.categories', Category::class, 'categories', 'Category added.', 'Category updated.', 'Category deleted.'],
         'service types' => ['master.service-types', ServiceType::class, 'service_types', 'Service type added.', 'Service type updated.', 'Service type deleted.'],
         'work forces'   => ['master.work-forces', WorkForce::class, 'work_forces', 'Work force added.', 'Work force updated.', 'Work force deleted.'],
@@ -490,6 +492,7 @@ describe('remaining master data tabs', function () {
         'priorities'    => ['master.priorities', Priority::class],
         'statuses'      => ['master.statuses', MasterStatus::class],
         'departments'   => ['master.departments', Department::class],
+        'divisions'     => ['master.divisions', Division::class],
         'categories'    => ['master.categories', Category::class],
         'service types' => ['master.service-types', ServiceType::class],
         'work forces'   => ['master.work-forces', WorkForce::class],
@@ -712,4 +715,67 @@ describe('cost code option labels', function () {
                 ->where('costCodes.0.name', 'CC-100')
                 ->where('costCodes.0.label', 'CC-100 — Maintenance Department — Building Repairs'));
     });
+});
+
+// -------------------------------------------------
+// Departments under a division
+// -------------------------------------------------
+
+describe('department divisions', function () {
+
+    it('files a department under a division on add and edit', function () {
+        Division::create(['name' => 'Engineering Division']);
+        Division::create(['name' => 'Operations Division']);
+        $user = makeMasterDataUser();
+
+        $this->actingAs($user)
+            ->post(route('master.departments.store'), masterDataPayload([
+                'name'     => 'Civil Works',
+                'division' => 'Engineering Division',
+            ]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $department = Department::where('name', 'Civil Works')->firstOrFail();
+        expect($department->division)->toBe('Engineering Division');
+
+        $this->actingAs($user)
+            ->put(route('master.departments.update', $department), masterDataPayload([
+                'name'     => 'Civil Works',
+                'division' => 'Operations Division',
+            ]))
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        expect($department->fresh()->division)->toBe('Operations Division');
+    });
+
+    it('lets a department have no division', function () {
+        $this->actingAs(makeMasterDataUser())
+            ->post(route('master.departments.store'), masterDataPayload(['name' => 'Standalone', 'division' => null]))
+            ->assertSessionHasNoErrors();
+
+        expect(Department::where('name', 'Standalone')->value('division'))->toBeNull();
+    });
+
+    it('rejects a division that is not on the master list', function () {
+        $this->actingAs(makeMasterDataUser())
+            ->post(route('master.departments.store'), masterDataPayload(['name' => 'Orphan', 'division' => 'No Such Division']))
+            ->assertSessionHasErrors(['division']);
+    });
+
+    it('sends divisions and each department division to the page', function () {
+        Division::create(['name' => 'Engineering Division']);
+        Department::create(['name' => 'Civil Works', 'division' => 'Engineering Division']);
+
+        $this->actingAs(makeMasterDataUser())
+            ->get(route('master.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('master-data/index')
+                ->has('divisions', 1)
+                ->where('divisions.0.name', 'Engineering Division')
+                ->where('departments.0.division', 'Engineering Division')
+            );
+    });
+
 });

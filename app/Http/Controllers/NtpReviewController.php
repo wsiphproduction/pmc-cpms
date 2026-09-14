@@ -6,16 +6,16 @@ use App\Models\ProjectNtp;
 use App\Models\User;
 use App\Support\ApprovalFlow;
 use App\Support\NtpPresenter;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * The department user's step on an NTP — the first signature in the chain.
- * Everything after it (PMD Assistant Manager, PMD Department Manager, Division
- * Manager) is settled from the approvals portal; both go through ApprovalFlow.
+ * The project-side steps on an NTP: the department user's, and after it the
+ * division manager user's over that department. They come once PMD (Assistant
+ * Manager, Department Manager, Division Manager) has signed from the approvals
+ * portal; both paths go through ApprovalFlow.
  */
 class NtpReviewController extends Controller
 {
@@ -24,7 +24,7 @@ class NtpReviewController extends Controller
     }
 
     /**
-     * List NTPs awaiting the department user's review.
+     * List the NTPs this reviewer follows, whichever step they are on.
      */
     public function index(Request $request): Response
     {
@@ -36,18 +36,17 @@ class NtpReviewController extends Controller
             ->orderByRaw("CASE WHEN status = 'pending_review' THEN 0 ELSE 1 END")
             ->latest();
 
-        // A department user reviews NTPs on the projects they requested and on
+        // A department user follows NTPs on the projects they requested and on
         // the ones their department owns — an engineer can register a project
-        // with no request behind it, and its NTPs still need a reviewer.
+        // with no request behind it, and its NTPs still need a reviewer. A
+        // division manager user follows every department in their division.
         // Admins can see every NTP.
-        if (!$user->hasRole(User::ROLE_ADMIN)) {
-            $query->whereHas('project', fn (Builder $q) => $q->forDepartmentUser($user));
-        }
+        $query->reviewableBy($user);
 
         return Inertia::render('ntp-reviews/index', [
             'ntps' => $query->get()->map(fn (ProjectNtp $ntp) => [
                 ...NtpPresenter::row($ntp),
-                // Only the department's own step is actionable from this page.
+                // Only the reviewer's own step is actionable from this page.
                 'can_act' => $ntp->awaitingApprovalFrom($user) || $user->hasRole(User::ROLE_ADMIN),
             ])->values(),
         ]);
