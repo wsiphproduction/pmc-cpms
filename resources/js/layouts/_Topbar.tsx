@@ -234,8 +234,8 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     };
 
     const navButtonStyle = (active: boolean): React.CSSProperties => ({
-        display: 'inline-flex', alignItems: 'center', gap: '7px',
-        padding: '7px 10px', borderRadius: '7px',
+        display: 'inline-flex', alignItems: 'center', gap: '6px',
+        padding: '7px 8px', borderRadius: '7px',
         fontSize: '13px', fontWeight: active ? 600 : 500,
         color: active ? '#2563eb' : '#374151',
         background: active ? '#eff6ff' : 'transparent',
@@ -289,7 +289,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 {/* Desktop nav */}
                 {!navCollapsed && (
                     <nav ref={navRef} style={{
-                        display: 'flex', alignItems: 'center', gap: '6px',
+                        display: 'flex', alignItems: 'center', gap: '3px',
                         flex: 1, minWidth: 0,
                         // Sits centred in the space left between the brand and the account controls.
                         justifyContent: 'center',
