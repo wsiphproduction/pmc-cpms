@@ -16,7 +16,16 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(RoleSeeder::class);
+        $this->call([
+            RoleSeeder::class,
+            JobTypeSeeder::class,
+            JobLocationSeeder::class,
+            CategorySeeder::class,
+            ServiceTypeSeeder::class,
+            WorkForceSeeder::class,
+            StructureSeeder::class,
+            PrioritySeeder::class,
+        ]);
 
         // A department user needs a department and a division manager user
         // needs a division, the same way the user form requires them.
