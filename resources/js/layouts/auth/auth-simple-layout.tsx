@@ -1,4 +1,4 @@
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 
 interface AuthLayoutProps {
     children: React.ReactNode;
@@ -8,6 +8,8 @@ interface AuthLayoutProps {
 }
 
 export default function AuthSimpleLayout({ children, title, description }: AuthLayoutProps) {
+    const { logo_url } = usePage<{ logo_url: string }>().props;
+
     return (
         <div className="auth-simple-root" style={{
             minHeight: '100vh',
@@ -63,7 +65,7 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             flexShrink: 0,
                         }}>
-                            <img src="/logow.png" alt="Philsaga Mining Corporation" style={{ width: '42px', height: 'auto', display: 'block' }} />
+                            <img src={logo_url} alt="Philsaga Mining Corporation" style={{ width: '42px', height: 'auto', display: 'block' }} />
                         </div>
                         <div>
                             <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', lineHeight: 1.15 }}>Philsaga Mining Corporation</div>

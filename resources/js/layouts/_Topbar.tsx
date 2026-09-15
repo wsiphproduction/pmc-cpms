@@ -11,6 +11,7 @@ interface NotificationRow {
 
 interface PageProps {
     auth: { user: { name: string; email: string; role?: string } };
+    logo_url: string;
     notifications: NotificationRow[];
     unread_notifications_count: number;
     ntp_reviews_count?: number;
@@ -38,7 +39,7 @@ interface TopbarProps {
 
 export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     const { url, props } = usePage<PageProps>();
-    const { auth, notifications, unread_notifications_count } = props;
+    const { auth, logo_url, notifications, unread_notifications_count } = props;
     const [notifOpen, setNotifOpen] = useState(false);
     const [menuOpen, setMenuOpen]   = useState(false);
     const [navOpen, setNavOpen]     = useState<string | null>(null);
@@ -265,7 +266,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     textDecoration: 'none', flexShrink: 0,
                 }}>
                     <img
-                        src="/logow.png"
+                        src={logo_url}
                         alt="Philsaga Mining Corporation"
                         style={{ width: '38px', height: 'auto', display: 'block', flexShrink: 0 }}
                     />
