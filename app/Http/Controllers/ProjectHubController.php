@@ -134,7 +134,7 @@ class ProjectHubController extends Controller
                 ->when(!empty($ccRecipients), fn ($mail) => $mail->cc($ccRecipients))
                 ->send(new RfqDispatched($rfq, $project));
         } catch (\Throwable $e) {
-            \Log::error("RFQ email failed for RFQ #{$rfq->id}: " . $e->getMessage());
+            \Log::error("RFQ email could not be queued for RFQ #{$rfq->id}: " . $e->getMessage());
 
             return false;
         }
@@ -609,7 +609,7 @@ class ProjectHubController extends Controller
                 ->when(!empty($cc), fn ($mail) => $mail->cc($cc))
                 ->send(new NtpIssuedToVendor($ntp, $project));
         } catch (\Throwable $e) {
-            \Log::error("NTP email failed for NTP #{$ntp->id}: " . $e->getMessage());
+            \Log::error("NTP email could not be queued for NTP #{$ntp->id}: " . $e->getMessage());
 
             AuditTrail::log(
                 "NTP {$ntp->ntp_no} send to {$data['recipient_email']} failed",
@@ -617,7 +617,7 @@ class ProjectHubController extends Controller
                 array_filter(['module' => 'NTP', 'type' => 'update', 'rfq_id' => $ntp->project_rfq_id]),
             );
 
-            return back()->with('error', 'The NTP email could not be sent. Please check the mail settings and try again.');
+            return back()->with('error', 'The NTP email could not be queued. Please check the queue settings and try again.');
         }
 
         $ntp->update(['vendor_notified_at' => now()]);

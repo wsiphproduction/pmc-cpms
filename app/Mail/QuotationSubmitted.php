@@ -6,6 +6,7 @@ use App\Models\Project;
 use App\Models\ProjectRfq;
 use App\Models\ProjectRfqQuotation;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -15,7 +16,7 @@ use Illuminate\Queue\SerializesModels;
  * Tells the project team a supplier has sent in a quotation through the portal.
  * Pairs with the in-app notification raised at the same moment.
  */
-class QuotationSubmitted extends Mailable
+class QuotationSubmitted extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 

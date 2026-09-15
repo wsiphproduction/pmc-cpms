@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -15,7 +16,7 @@ use Illuminate\Queue\SerializesModels;
  * email address itself changed, the notice goes to both the old and new
  * addresses.
  */
-class AccountUpdated extends Mailable
+class AccountUpdated extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 

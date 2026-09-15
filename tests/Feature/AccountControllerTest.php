@@ -58,9 +58,9 @@ test('account profile update emails the old and new addresses', function () {
         'email' => 'new@example.com',
     ])->assertSessionHasNoErrors();
 
-    \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\AccountUpdated::class, fn ($mail) => $mail->hasTo('old@example.com'));
-    \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\AccountUpdated::class, fn ($mail) => $mail->hasTo('new@example.com'));
-    \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\AccountUpdated::class, 2);
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\AccountUpdated::class, fn ($mail) => $mail->hasTo('old@example.com'));
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\AccountUpdated::class, fn ($mail) => $mail->hasTo('new@example.com'));
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\AccountUpdated::class, 2);
 });
 
 test('account profile update sends no email when nothing changed', function () {
@@ -72,7 +72,7 @@ test('account profile update sends no email when nothing changed', function () {
         'email' => $user->email,
     ])->assertSessionHasNoErrors();
 
-    \Illuminate\Support\Facades\Mail::assertNothingSent();
+    \Illuminate\Support\Facades\Mail::assertNothingQueued();
 });
 
 test('account password update emails the user', function () {
@@ -85,5 +85,5 @@ test('account password update emails the user', function () {
         'password_confirmation' => 'new-password-123',
     ])->assertSessionHasNoErrors();
 
-    \Illuminate\Support\Facades\Mail::assertSent(\App\Mail\AccountUpdated::class, fn ($mail) => $mail->hasTo($user->email));
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\AccountUpdated::class, fn ($mail) => $mail->hasTo($user->email));
 });

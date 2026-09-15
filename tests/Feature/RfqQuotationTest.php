@@ -108,7 +108,7 @@ it('leaves an rfq that is already awarded where it is', function () {
 });
 
 it('links the supplier portal from the dispatch email', function () {
-    Mail::assertSent(RfqDispatched::class, fn ($mail) => str_contains(
+    Mail::assertQueued(RfqDispatched::class, fn ($mail) => str_contains(
         $mail->render(),
         $this->rfq->portalUrl(),
     ));
@@ -207,8 +207,8 @@ it('re-sends the rfq email to a corrected address', function () {
 
     expect($this->rfq->fresh()->recipient_email)->toBe('newvendor@example.com');
 
-    Mail::assertSent(RfqDispatched::class, 2);
-    Mail::assertSent(RfqDispatched::class, fn ($mail) => $mail->hasTo('newvendor@example.com')
+    Mail::assertQueued(RfqDispatched::class, 2);
+    Mail::assertQueued(RfqDispatched::class, fn ($mail) => $mail->hasTo('newvendor@example.com')
         && $mail->hasCc('purchasing@example.com')
         && $mail->hasCc($this->approver->email));
 });

@@ -198,9 +198,9 @@ class SupplierQuotationController extends Controller
             try {
                 Mail::to($member->email)->send(new QuotationSubmitted($rfq, $project, $quotation, $total));
             } catch (\Throwable $e) {
-                // A mail outage must not lose the supplier's submission — it is
+                // A queue outage must not lose the supplier's submission — it is
                 // already saved, and the in-app notification still stands.
-                Log::error("Quotation submission email failed for quotation #{$quotation->id}: " . $e->getMessage());
+                Log::error("Quotation submission email could not be queued for quotation #{$quotation->id}: " . $e->getMessage());
             }
         }
 

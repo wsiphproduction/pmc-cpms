@@ -5,6 +5,7 @@ namespace App\Mail;
 use App\Models\Project;
 use App\Models\ProjectNtp;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -17,7 +18,7 @@ use Illuminate\Support\Facades\URL;
  * issued — sent by hand from the NTP hub once the whole chain has signed,
  * so the project team controls exactly when the vendor is told.
  */
-class NtpIssuedToVendor extends Mailable
+class NtpIssuedToVendor extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 

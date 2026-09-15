@@ -5,12 +5,13 @@ namespace App\Mail;
 use App\Models\Project;
 use App\Models\ProjectRfq;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
-class RfqDispatched extends Mailable
+class RfqDispatched extends Mailable implements ShouldQueue
 {
     use Queueable, SerializesModels;
 

@@ -72,7 +72,7 @@ class AccountController extends Controller
     }
 
     /**
-     * Email the account holder about what changed. A mail outage must not
+     * Queue an email to the account holder about what changed. A queue outage must not
      * undo the save, which has already happened.
      *
      * @param  array<int, array{0: string, 1: string, 2: string}>  $changes
@@ -90,7 +90,7 @@ class AccountController extends Controller
             try {
                 Mail::to($email)->send(new AccountUpdated($user, $changes, $changedAt));
             } catch (\Throwable $e) {
-                Log::error("Account update email to {$email} failed for user #{$user->id}: " . $e->getMessage());
+                Log::error("Account update email to {$email} could not be queued for user #{$user->id}: " . $e->getMessage());
             }
         }
     }

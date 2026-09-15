@@ -177,8 +177,8 @@ it('notifies the project team once when the creator is also the manager', functi
 
     // Creator and manager are the same engineer, so exactly one of each.
     expect(Notification::where('recipient', $this->engineer->id)->count())->toBe(1);
-    Mail::assertSent(QuotationSubmitted::class, 1);
-    Mail::assertSent(QuotationSubmitted::class, fn ($mail) => $mail->hasTo($this->engineer->email));
+    Mail::assertQueued(QuotationSubmitted::class, 1);
+    Mail::assertQueued(QuotationSubmitted::class, fn ($mail) => $mail->hasTo($this->engineer->email));
 });
 
 it('notifies both when the manager is a different engineer', function () {
@@ -199,7 +199,7 @@ it('notifies both when the manager is a different engineer', function () {
 
     expect(Notification::where('recipient', $this->engineer->id)->count())->toBe(1)
         ->and(Notification::where('recipient', $manager->id)->count())->toBe(1);
-    Mail::assertSent(QuotationSubmitted::class, 2);
+    Mail::assertQueued(QuotationSubmitted::class, 2);
 });
 
 it('lets the supplier keep editing until the team marks it received', function () {

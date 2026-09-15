@@ -53,7 +53,7 @@ it('ccs additional recipients and the sender when dispatching an rfq', function 
         'cc_self' => true,
     ])->assertRedirect();
 
-    Mail::assertSent(RfqDispatched::class, function ($mail) use ($approver) {
+    Mail::assertQueued(RfqDispatched::class, function ($mail) use ($approver) {
         return $mail->hasTo('contractor@example.com')
             && $mail->hasCc('second@example.com')
             && $mail->hasCc('third@example.com')
@@ -72,7 +72,7 @@ it('does not cc the sender when cc_self is not requested', function () {
         'recipient_email' => 'contractor@example.com',
     ])->assertRedirect();
 
-    Mail::assertSent(RfqDispatched::class, function ($mail) use ($approver) {
+    Mail::assertQueued(RfqDispatched::class, function ($mail) use ($approver) {
         return $mail->hasTo('contractor@example.com') && !$mail->hasCc($approver->email);
     });
 });

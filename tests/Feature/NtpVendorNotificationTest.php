@@ -226,7 +226,7 @@ it('sends the issued ntp to the vendor with copies', function () {
 
     expect($this->ntp->fresh()->vendor_notified_at)->not->toBeNull();
 
-    Mail::assertSent(NtpIssuedToVendor::class, fn ($mail) => $mail->hasTo('newvendor@example.com')
+    Mail::assertQueued(NtpIssuedToVendor::class, fn ($mail) => $mail->hasTo('newvendor@example.com')
         && $mail->hasCc('purchasing@example.com')
         && $mail->hasCc($this->engineer->email));
 });
@@ -239,7 +239,7 @@ it('names every signatory and their date in the vendor email', function () {
             'recipient_email' => 'vendor@example.com',
         ])->assertRedirect();
 
-    Mail::assertSent(NtpIssuedToVendor::class, function ($mail) {
+    Mail::assertQueued(NtpIssuedToVendor::class, function ($mail) {
         $body = $mail->render();
 
         return str_contains($body, $this->ntp->ntp_no)
@@ -269,7 +269,7 @@ it('links the vendor to the approved form and says when the link expires', funct
             'recipient_email' => 'vendor@example.com',
         ])->assertRedirect();
 
-    Mail::assertSent(NtpIssuedToVendor::class, function (NtpIssuedToVendor $mail) {
+    Mail::assertQueued(NtpIssuedToVendor::class, function (NtpIssuedToVendor $mail) {
         $body = $mail->render();
 
         return str_contains($body, 'View Approved NTP')
