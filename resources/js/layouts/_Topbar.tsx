@@ -63,6 +63,18 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
         if (!navCollapsed) setMobileNavOpen(false);
     }, [navCollapsed]);
 
+    // The full company name next to the crest needs ~280px, which the
+    // horizontal nav cannot spare on an ordinary laptop screen. Spell it out
+    // only when the nav has folded into its toggle or the screen is wide.
+    const [wideScreen, setWideScreen] = useState(false);
+    useEffect(() => {
+        const sync = () => setWideScreen(window.innerWidth >= 1536);
+        sync();
+        window.addEventListener('resize', sync);
+        return () => window.removeEventListener('resize', sync);
+    }, []);
+    const showFullBrand = !isMobile && (navCollapsed || wideScreen);
+
     const markAllRead = () => router.patch(route('notifications.read-all'), {}, { preserveScroll: true });
 
     const initials = auth?.user?.name
@@ -252,19 +264,25 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     display: 'flex', alignItems: 'center', gap: '9px',
                     textDecoration: 'none', flexShrink: 0,
                 }}>
-                    <div style={{
-                        width: '32px', height: '32px', borderRadius: '8px',
-                        background: '#2563eb', display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', flexShrink: 0,
-                    }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5">
-                            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-                            <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-                        </svg>
-                    </div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#111827', letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
-                        CPMS - PMD
-                    </div>
+                    <img
+                        src="/logow.png"
+                        alt="Philsaga Mining Corporation"
+                        style={{ width: '38px', height: 'auto', display: 'block', flexShrink: 0 }}
+                    />
+                    {showFullBrand ? (
+                        <div style={{ whiteSpace: 'nowrap' }}>
+                            <div style={{ fontSize: '12.5px', fontWeight: 800, color: '#111827', letterSpacing: '-0.2px', lineHeight: 1.15 }}>
+                                Philsaga Mining Corporation
+                            </div>
+                            <div style={{ fontSize: '9.5px', fontWeight: 600, color: '#6b7280', letterSpacing: '0.4px', marginTop: '2px' }}>
+                                CONSTRUCTION PROJECT MANAGEMENT SYSTEM
+                            </div>
+                        </div>
+                    ) : (
+                        <div style={{ fontSize: '13px', fontWeight: 800, color: '#111827', letterSpacing: '-0.2px', whiteSpace: 'nowrap' }}>
+                            CPMS
+                        </div>
+                    )}
                 </Link>
 
                 {/* Desktop nav */}

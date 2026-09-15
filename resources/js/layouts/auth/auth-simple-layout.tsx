@@ -58,22 +58,16 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                 <div style={{ position: 'relative', zIndex: 1 }}>
                     <Link href={route('home')} style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{
-                            width: '40px', height: '40px', borderRadius: '10px',
-                            background: 'rgba(255,255,255,0.15)',
-                            backdropFilter: 'blur(8px)',
-                            border: '1px solid rgba(255,255,255,0.2)',
+                            width: '52px', height: '52px', borderRadius: '12px',
+                            background: '#fff',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            flexShrink: 0,
                         }}>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.2">
-                                <rect x="3" y="3" width="7" height="7"/>
-                                <rect x="14" y="3" width="7" height="7"/>
-                                <rect x="14" y="14" width="7" height="7"/>
-                                <rect x="3" y="14" width="7" height="7"/>
-                            </svg>
+                            <img src="/logow.png" alt="Philsaga Mining Corporation" style={{ width: '42px', height: 'auto', display: 'block' }} />
                         </div>
                         <div>
-                            <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', lineHeight: 1.1 }}>CPMS</div>
-                            <div style={{ fontSize: '10px', color: 'rgba(255,255,255,0.55)', fontWeight: 500, letterSpacing: '1px' }}>PROJECT MGMT</div>
+                            <div style={{ fontSize: '15px', fontWeight: 800, color: '#fff', letterSpacing: '-0.3px', lineHeight: 1.15 }}>Philsaga Mining Corporation</div>
+                            <div style={{ fontSize: '9.5px', color: 'rgba(255,255,255,0.6)', fontWeight: 500, letterSpacing: '0.3px', marginTop: '3px', whiteSpace: 'nowrap' }}>CONSTRUCTION PROJECT MANAGEMENT SYSTEM</div>
                         </div>
                     </Link>
                 </div>
@@ -120,7 +114,7 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
 
                 {/* Footer note */}
                 <div style={{ position: 'relative', zIndex: 1, fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>
-                    © {new Date().getFullYear()} CPMS · All rights reserved
+                    © {new Date().getFullYear()} Philsaga Mining Corporation · All rights reserved
                 </div>
             </div>
 
