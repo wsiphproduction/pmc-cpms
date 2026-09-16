@@ -23,12 +23,29 @@ use Inertia\Inertia;
 class MasterDataController extends Controller
 {
     // ── Index (render the page with all master data) ─────────────────────
-    public function index()
+    public function index(Request $request)
     {
+        // Cost codes run to thousands of rows (the GL list is bulk-imported),
+        // so unlike the other lists they are paged and searched on the server
+        // instead of being shipped whole. The `cc_` prefix keeps their query
+        // string clear of the other tabs.
+        $costCodeSearch = trim((string) $request->input('cc_search', ''));
+
+        $costCodes = CostCode::query()
+            ->when($costCodeSearch !== '', fn ($query) => $query->where(function ($q) use ($costCodeSearch) {
+                foreach (['name', 'description', 'division', 'cost_center', 'activity', 'expense_description'] as $column) {
+                    $q->orWhere($column, 'like', "%{$costCodeSearch}%");
+                }
+            }))
+            ->latest()
+            ->paginate(10, ['id', 'name', 'description', 'division', 'cost_center', 'activity', 'expense_description', 'agu_per_class', 'agu_per_stat', 'is_active', 'created_at'], 'cc_page')
+            ->withQueryString();
+
         return Inertia::render('master-data/index', [
             'jobTypes'     => JobType::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'jobLocations' => JobLocation::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
-            'costCodes'    => CostCode::latest()->get(['id', 'name', 'description', 'division', 'cost_center', 'activity', 'expense_description', 'agu_per_class', 'agu_per_stat', 'is_active', 'created_at']),
+            'costCodes'    => $costCodes,
+            'costCodeSearch' => $costCodeSearch,
             'sites'        => Site::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'classes'      => MasterClass::latest()->get(['id', 'name', 'description', 'is_active', 'created_at']),
             'priorities'   => Priority::orderByRaw('CASE WHEN sequence_no IS NULL THEN 1 ELSE 0 END, sequence_no ASC')

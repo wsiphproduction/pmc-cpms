@@ -73,7 +73,7 @@ describe('index', function () {
                 ->component('master-data/index')
                 ->has('jobTypes', 1)
                 ->has('jobLocations', 1)
-                ->has('costCodes', 1)
+                ->has('costCodes.data', 1)
                 ->has('sites', 1)
                 ->has('classes', 1)
                 ->has('priorities', 1)
@@ -85,7 +85,7 @@ describe('index', function () {
                 ->has('structures', 1)
                 ->where('jobTypes.0.name', 'Civil')
                 ->where('jobLocations.0.name', 'Site A')
-                ->where('costCodes.0.name', 'CC-001')
+                ->where('costCodes.data.0.name', 'CC-001')
                 ->where('sites.0.name', 'Plant 1')
                 ->where('classes.0.name', 'Class A')
                 ->where('priorities.0.name', 'High')
@@ -113,9 +113,56 @@ describe('index', function () {
                 ->where('jobTypes.1.name', 'Plumbing')
                 ->where('jobLocations.0.name', 'Site A')
                 ->where('jobLocations.1.name', 'Site B')
-                ->where('costCodes.0.name', 'CC-100')
-                ->where('costCodes.1.name', 'CC-200')
+                ->where('costCodes.data.0.name', 'CC-100')
+                ->where('costCodes.data.1.name', 'CC-200')
             );
+    });
+
+    it('pages the cost codes ten at a time instead of sending the whole list', function () {
+        foreach (range(1, 25) as $n) {
+            CostCode::create(['name' => sprintf('CC-%03d', $n)]);
+        }
+
+        $this->actingAs(makeMasterDataUser())
+            ->get(route('master.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('costCodes.data', 10)
+                ->where('costCodes.total', 25)
+                ->where('costCodes.last_page', 3)
+                ->where('costCodes.current_page', 1)
+                ->where('costCodeSearch', ''));
+
+        $this->actingAs(makeMasterDataUser())
+            ->get(route('master.index', ['cc_page' => 3]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('costCodes.data', 5)
+                ->where('costCodes.current_page', 3));
+    });
+
+    it('searches cost codes across the GL code and its descriptive columns', function () {
+        CostCode::create(['name' => 'CC-100', 'cost_center' => 'Maintenance', 'expense_description' => 'Repairs']);
+        CostCode::create(['name' => 'CC-200', 'cost_center' => 'Operations', 'description' => 'Fuel']);
+        CostCode::create(['name' => 'CC-300', 'division' => 'Maintenance Division']);
+
+        $search = fn (string $needle) => $this->actingAs(makeMasterDataUser())
+            ->get(route('master.index', ['cc_search' => $needle]));
+
+        $search('CC-2')->assertInertia(fn (Assert $page) => $page
+            ->has('costCodes.data', 1)
+            ->where('costCodes.data.0.name', 'CC-200')
+            ->where('costCodeSearch', 'CC-2'));
+
+        $search('maintenance')->assertInertia(fn (Assert $page) => $page
+            ->has('costCodes.data', 2)
+            ->where('costCodes.total', 2));
+
+        $search('repairs')->assertInertia(fn (Assert $page) => $page
+            ->has('costCodes.data', 1)
+            ->where('costCodes.data.0.name', 'CC-100'));
+
+        $search('nothing-here')->assertInertia(fn (Assert $page) => $page
+            ->has('costCodes.data', 0)
+            ->where('costCodes.total', 0));
     });
 
 });

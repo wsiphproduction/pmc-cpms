@@ -249,6 +249,19 @@ it('lists sub-projects under their parent rather than as rows of their own', fun
             ->where('projects.data.0.sub_projects.0.ntp_no', null));
 });
 
+it('leaves the cost code list off the project index, which never filters by it', function () {
+    $user = makeApproverUser();
+    seedProjectMasterData();
+
+    $this->actingAs($user)
+        ->get(route('projects.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('project-management/index')
+            ->where('sites.0.label', 'Main Plant')
+            ->missing('costCodes'));
+});
+
 it('labels a sub-project by the NTP it was created from', function () {
     $user = makeApproverUser();
 

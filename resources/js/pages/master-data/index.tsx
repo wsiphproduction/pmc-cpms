@@ -44,10 +44,33 @@ interface SupplierMatch {
     mobile_no?: string | null;
 }
 
+/** A server-paged list; the shape Laravel's paginator serialises to. */
+interface Paginated<T> {
+    data: T[];
+    current_page: number;
+    last_page: number;
+    total: number;
+}
+
+/**
+ * Paging and search handled by the server rather than by slicing the full
+ * list in the browser. Used for lists too long to ship whole.
+ */
+interface RemotePaging {
+    page: number;
+    totalPages: number;
+    count: number;
+    onPage: (page: number) => void;
+    search: string;
+    onSearch: (needle: string) => void;
+    loading: boolean;
+}
+
 interface Props {
     jobTypes:      MasterItem[];
     jobLocations:  MasterItem[];
-    costCodes:     MasterItem[];
+    costCodes:     Paginated<MasterItem>;
+    costCodeSearch?: string;
     sites?:        MasterItem[];
     classes?:      MasterItem[];
     priorities?:   MasterItem[];
@@ -511,13 +534,15 @@ function TablePagination({ page, totalPages, count, onPage }: { page: number; to
 
 // ── Tab Table ──────────────────────────────────────────────────────────────
 function TabTable({
-    tab, items, onAdd, onEdit, onToggle,
+    tab, items, onAdd, onEdit, onToggle, remote,
 }: {
     tab: TabKey;
     items: MasterItem[];
     onAdd: () => void;
     onEdit: (item: MasterItem) => void;
     onToggle: (item: MasterItem) => void;
+    /** When set, `items` is already one page and paging/search go through here. */
+    remote?: RemotePaging;
 }) {
     const config = TAB_CONFIG.find(t => t.key === tab)!;
     const isPriority   = tab === 'priorities';
@@ -532,9 +557,25 @@ function TabTable({
                 : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
 
     const [page, setPage] = useState(1);
-    const totalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
-    const safePage = Math.min(page, totalPages);
-    const paginated = items.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+    const localTotalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
+    const localPage = Math.min(page, localTotalPages);
+    const paginated = remote ? items : items.slice((localPage - 1) * PER_PAGE, localPage * PER_PAGE);
+    const paging = remote
+        ? { page: remote.page, totalPages: remote.totalPages, count: remote.count, onPage: remote.onPage }
+        : { page: localPage, totalPages: localTotalPages, count: items.length, onPage: setPage };
+    // Row numbers continue across pages either way.
+    const rowOffset = (paging.page - 1) * PER_PAGE;
+
+    // The search box is local so typing stays responsive; the server is only
+    // asked once the user pauses.
+    const [searchInput, setSearchInput] = useState(remote?.search ?? '');
+    const onSearch = remote?.onSearch;
+    const appliedSearch = remote?.search ?? '';
+    useEffect(() => {
+        if (!onSearch || searchInput.trim() === appliedSearch) return;
+        const timer = setTimeout(() => onSearch(searchInput.trim()), 350);
+        return () => clearTimeout(timer);
+    }, [searchInput, appliedSearch, onSearch]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [importing, setImporting] = useState(false);
@@ -558,9 +599,23 @@ function TabTable({
             {/* Sub-toolbar */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: '13px', color: '#64748b' }}>
-                    <strong style={{ color: '#0f172a' }}>{items.length}</strong> {items.length === 1 ? 'entry' : 'entries'}
+                    <strong style={{ color: '#0f172a' }}>{paging.count}</strong> {paging.count === 1 ? 'entry' : 'entries'}
+                    {remote?.search && <span style={{ color: '#94a3b8' }}> matching “{remote.search}”</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {remote && (
+                        <div style={{ position: 'relative' }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input
+                                type="search"
+                                value={searchInput}
+                                onChange={e => setSearchInput(e.target.value)}
+                                placeholder={`Search ${config.label.toLowerCase()}…`}
+                                aria-label={`Search ${config.label.toLowerCase()}`}
+                                style={{ width: '240px', padding: '7px 10px 7px 30px', borderRadius: '7px', border: '1px solid #e2e8f0', fontSize: '12.5px', color: '#0f172a', outline: 'none', fontFamily: 'inherit', opacity: remote.loading ? 0.7 : 1 }}
+                            />
+                        </div>
+                    )}
                     {isCostCode && (
                         <>
                             <input
@@ -613,7 +668,11 @@ function TabTable({
                                         <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             {config.icon}
                                         </div>
-                                        <span style={{ fontSize: '13px', color: '#94a3b8' }}>No {config.label.toLowerCase()} yet. Add one to get started.</span>
+                                        <span style={{ fontSize: '13px', color: '#94a3b8' }}>
+                                            {remote?.search
+                                                ? `No ${config.label.toLowerCase()} match “${remote.search}”.`
+                                                : `No ${config.label.toLowerCase()} yet. Add one to get started.`}
+                                        </span>
                                     </div>
                                 </td>
                             </tr>
@@ -623,7 +682,7 @@ function TabTable({
                                 onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
                                 onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                             >
-                                <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{(safePage - 1) * PER_PAGE + idx + 1}</td>
+                                <td style={{ padding: '12px 20px', color: '#cbd5e1', fontSize: '11.5px', width: '60px' }}>{rowOffset + idx + 1}</td>
                                 {isCostCode ? (
                                     <>
                                         <td style={{ padding: '12px 20px', fontWeight: 600, color: '#0f172a', whiteSpace: 'nowrap' }}>{item.name}</td>
@@ -674,7 +733,7 @@ function TabTable({
                 </table>
             </div>
 
-            <TablePagination page={safePage} totalPages={totalPages} count={items.length} onPage={setPage} />
+            <TablePagination page={paging.page} totalPages={paging.totalPages} count={paging.count} onPage={paging.onPage} />
         </div>
     );
 }
@@ -1057,7 +1116,8 @@ function CostCodeModal({ costCode, onClose }: { costCode: MasterItem | null; onC
 export default function MasterData({
     jobTypes      = [],
     jobLocations  = [],
-    costCodes     = [],
+    costCodes     = { data: [], current_page: 1, last_page: 1, total: 0 },
+    costCodeSearch = '',
     sites         = [],
     classes       = [],
     priorities    = [],
@@ -1103,7 +1163,7 @@ export default function MasterData({
     const dataMap: Record<Exclude<TabKey, 'suppliers'>, MasterItem[]> = {
         job_types:     jobTypes,
         job_locations: jobLocations,
-        cost_codes:    costCodes,
+        cost_codes:    costCodes.data,
         sites,
         classes,
         priorities,
@@ -1144,7 +1204,42 @@ export default function MasterData({
         router.patch(route('master.toggle', [slug, id]), {}, { preserveScroll: true });
     };
 
-    const totalEntries = Object.values(dataMap).reduce((sum, arr) => sum + arr.length, 0) + suppliers.length;
+    // Cost codes are paged on the server, so only their page is in hand; the
+    // paginator's total stands in for the list length. Filtered pages report
+    // the match count, which is what the tab is showing.
+    const countFor = (tab: TabKey) => {
+        if (tab === 'suppliers') return suppliers.length;
+        if (tab === 'cost_codes') return costCodes.total;
+        return dataMap[tab].length;
+    };
+    const totalEntries = TAB_CONFIG.reduce((sum, tab) => sum + countFor(tab.key), 0);
+
+    // Cost-code paging and search live in the query string, and only that prop
+    // is re-fetched, so the other tabs' data stays put while the user browses.
+    const [costCodesLoading, setCostCodesLoading] = useState(false);
+    const visitCostCodes = (params: { cc_page?: number; cc_search?: string }) => {
+        const query: Record<string, string | number> = {};
+        if (params.cc_search) query.cc_search = params.cc_search;
+        if (params.cc_page && params.cc_page > 1) query.cc_page = params.cc_page;
+        router.get(route('master.index'), query, {
+            only: ['costCodes', 'costCodeSearch'],
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+            onStart: () => setCostCodesLoading(true),
+            onFinish: () => setCostCodesLoading(false),
+        });
+    };
+    const costCodePaging: RemotePaging = {
+        page: costCodes.current_page,
+        totalPages: Math.max(1, costCodes.last_page),
+        count: costCodes.total,
+        onPage: page => visitCostCodes({ cc_page: page, cc_search: costCodeSearch }),
+        search: costCodeSearch,
+        // A new search always starts from the first page.
+        onSearch: needle => visitCostCodes({ cc_search: needle }),
+        loading: costCodesLoading,
+    };
 
     return (
         <AuthenticatedLayout>
@@ -1202,7 +1297,7 @@ export default function MasterData({
                 <nav style={{ width: '220px', flexShrink: 0, borderRight: '1px solid #f1f5f9', background: '#fafbfc', padding: '8px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     {TAB_CONFIG.map(tab => {
                         const isActive = activeTab === tab.key;
-                        const count = tab.key === 'suppliers' ? suppliers.length : dataMap[tab.key].length;
+                        const count = countFor(tab.key);
                         return (
                             <button
                                 key={tab.key}
@@ -1236,6 +1331,7 @@ export default function MasterData({
                             key={activeTab}
                             tab={activeTab}
                             items={dataMap[activeTab]}
+                            remote={activeTab === 'cost_codes' ? costCodePaging : undefined}
                             onAdd={() => openAdd(activeTab)}
                             onEdit={item => openEdit(activeTab, item)}
                             onToggle={item => toggleActive(ROUTE_MAP[activeTab].replace('master.', ''), item.id)}

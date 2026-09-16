@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Models\WorkForce;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -85,7 +86,9 @@ class ProjectController extends Controller
                 'need_mechanical',
             ]),
             'canCreate' => $request->user()->can('create', Project::class),
-            ...$this->masterDataOptions(),
+            // The list's advanced search never filters by cost code, and that
+            // list alone runs to thousands of rows — leave it off this page.
+            ...Arr::except($this->masterDataOptions(), ['costCodes']),
             // Advanced search filters by the denormalized project_manager_name column, not the user id.
             'managers' => User::orderBy('name')->get(['name'])
                 ->map(fn (User $user) => ['value' => (string) $user->name, 'label' => $user->name]),
@@ -1072,7 +1075,7 @@ class ProjectController extends Controller
             'workForces' => WorkForce::where('is_active', true)->orderBy('name')->get(['name'])->map($option),
             // Label carries the department and description; the field itself
             // still stores (and displays) just the code.
-            'costCodes' => CostCode::where('is_active', true)->orderBy('name')->get()->map(fn (CostCode $row) => [
+            'costCodes' => CostCode::where('is_active', true)->orderBy('name')->get(['name', 'cost_center', 'description'])->map(fn (CostCode $row) => [
                 'value' => (string) $row->name,
                 'label' => $row->optionLabel(),
                 'displayLabel' => (string) $row->name,
