@@ -81,7 +81,7 @@ class ProjectRequestController extends Controller
             'title'           => ['required', 'string', 'max:255'],
             'job_type'        => ['required', 'string', 'max:255'],
             'description'     => ['required', 'string'],
-            'job_location'    => ['required', 'string', 'max:255'],
+            'job_location'    => ['required', 'string', 'max:255', $this->otherLocationSpecified()],
             'costcode'        => [Rule::requiredIf(fn () => $request->boolean('opex')), 'nullable', 'string', 'max:255'],
             'opex'            => ['boolean', $this->requiresFundingClassification($request)],
             'capex'           => ['boolean'],
@@ -236,7 +236,7 @@ class ProjectRequestController extends Controller
             'title'           => ['required', 'string', 'max:255'],
             'job_type'        => ['required', 'string', 'max:255'],
             'description'     => ['required', 'string'],
-            'job_location'    => ['required', 'string', 'max:255'],
+            'job_location'    => ['required', 'string', 'max:255', $this->otherLocationSpecified()],
             'costcode'        => [Rule::requiredIf(fn () => $request->boolean('opex')), 'nullable', 'string', 'max:255'],
             'opex'            => ['boolean', $this->requiresFundingClassification($request)],
             'capex'           => ['boolean'],
@@ -450,6 +450,19 @@ class ProjectRequestController extends Controller
         return function (string $attribute, mixed $value, \Closure $fail) use ($request) {
             if (!$request->boolean('opex') && !$request->boolean('capex') && !$request->boolean('for_budgeting')) {
                 $fail('Select at least one funding classification (OPEX, CAPEX, or For Budgeting).');
+            }
+        };
+    }
+
+    /**
+     * "Other" is a catch-all job location; the form appends what the requestor
+     * typed as "Other - <detail>", so reject a bare "Other" with nothing after it.
+     */
+    private function otherLocationSpecified(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) {
+            if (preg_match('/^other(\s*-\s*)?$/i', trim((string) $value))) {
+                $fail('Please specify the job location.');
             }
         };
     }

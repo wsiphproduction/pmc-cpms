@@ -178,6 +178,12 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
         capex: false,
         for_budgeting: false,
     });
+    // "Other" is a catch-all location (quarry, hauling road, community, …), so
+    // the requestor spells out where; it's submitted as "Other - <detail>".
+    const [otherLocation,   setOtherLocation]   = useState('');
+    const isOtherLocation = form.job_location.trim().toLowerCase() === 'other';
+    const resolvedJobLocation = isOtherLocation ? `Other - ${otherLocation.trim()}` : form.job_location;
+
     const [processing,      setProcessing]      = useState(false);
     const [errors,          setErrors]          = useState<Partial<Record<keyof FormData, string>>>({});
     const [attachmentError, setAttachmentError] = useState('');
@@ -243,7 +249,7 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
             title:         form.title,
             job_type:      form.job_type,
             description:   form.description,
-            job_location:  form.job_location,
+            job_location:  resolvedJobLocation,
             costcode:      form.costcode,
             opex:          form.opex ? '1' : '0',
             capex:         form.capex ? '1' : '0',
@@ -290,6 +296,22 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                     <div>
                         <FormLabel required>Job Location</FormLabel>
                         <SearchableSelect value={form.job_location} onChange={value => set('job_location', value)} options={jobLocations} placeholder="Type or select job location..." required listId="job-location-options" />
+                        {isOtherLocation && (
+                            <div style={{ marginTop: '8px', animation: 'fadeIn 0.3s ease' }}>
+                                <input
+                                    type="text"
+                                    value={otherLocation}
+                                    onChange={e => setOtherLocation(e.target.value)}
+                                    onFocus={focus}
+                                    onBlur={blur}
+                                    placeholder="Please specify the job location (e.g. Masabong quarry, hauling road)"
+                                    required
+                                    autoFocus
+                                    style={inputStyle}
+                                />
+                            </div>
+                        )}
+                        {errors.job_location && <p style={{ fontSize: '11.5px', color: '#dc2626', marginTop: '4px' }}>{errors.job_location}</p>}
                     </div>
                 </div>
 

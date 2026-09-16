@@ -86,6 +86,24 @@ it('renders project create with master data options', function () {
         );
 });
 
+it('prefills the site from the request job location, including an "Other" one', function (string $jobLocation) {
+    $user = makeApproverUser();
+    seedProjectMasterData();
+
+    $request = \App\Models\ProjectRequest::factory()->create([
+        'status'       => 'approved',
+        'job_location' => $jobLocation,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('projects.create', ['request_id' => $request->id]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('project-management/create')
+            ->where('project.site', $jobLocation)
+        );
+})->with(['Main Plant', 'Other - Masabong quarry']);
+
 it('stores and shows a project', function () {
     $user = makeApproverUser();
     $manager = User::factory()->create(['name' => 'PM Engineer']);

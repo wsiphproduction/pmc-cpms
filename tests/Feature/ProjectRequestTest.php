@@ -243,6 +243,24 @@ describe('store', function () {
             ->assertSessionHasErrors(['title', 'job_type', 'description', 'job_location']);
     });
 
+    it('rejects the "Other" job location when nothing is specified', function () {
+        $this->actingAs(makeUser())
+            ->post(route('requests.store'), basePayload(['job_location' => 'Other']))
+            ->assertSessionHasErrors(['job_location']);
+
+        $this->actingAs(makeUser())
+            ->post(route('requests.store'), basePayload(['job_location' => 'Other - ']))
+            ->assertSessionHasErrors(['job_location']);
+    });
+
+    it('stores the specified "Other" job location', function () {
+        $this->actingAs(makeUser())
+            ->post(route('requests.store'), basePayload(['job_location' => 'Other - Masabong quarry']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('project_requests', ['job_location' => 'Other - Masabong quarry']);
+    });
+
     it('fails validation when title exceeds max length', function () {
         $this->actingAs(makeUser())
             ->post(route('requests.store'), basePayload([
