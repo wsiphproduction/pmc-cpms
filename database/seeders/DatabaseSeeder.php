@@ -20,6 +20,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             JobTypeSeeder::class,
             JobLocationSeeder::class,
+            SiteSeeder::class,
             CategorySeeder::class,
             ServiceTypeSeeder::class,
             WorkForceSeeder::class,
