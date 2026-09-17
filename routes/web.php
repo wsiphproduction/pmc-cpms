@@ -5,6 +5,7 @@ use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FileVersionController;
+use App\Http\Controllers\ManualController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NtpReviewController;
@@ -58,6 +59,11 @@ Route::middleware(['auth'])->group(function () {
     Route::get('account', [AccountController::class, 'edit'])->name('account.edit');
     Route::patch('account/profile', [AccountController::class, 'updateProfile'])->name('account.update-profile');
     Route::put('account/password', [AccountController::class, 'updatePassword'])->name('account.update-password');
+
+    // ── User Manual ───────────────────────────────────────────────────────
+    // The PDFs themselves are static files under public/manuals; this page is
+    // the reader, and decides which booklets a given role is offered.
+    Route::get('manual', [ManualController::class, 'index'])->name('manual.index');
 
     // ── Project Requests ──────────────────────────────────────────────────
     Route::resource('requests', ProjectRequestController::class)
