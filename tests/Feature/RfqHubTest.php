@@ -61,6 +61,39 @@ it('ccs additional recipients and the sender when dispatching an rfq', function 
     });
 });
 
+it('always copies procurement on a dispatched rfq, without it being in the form', function () {
+    Mail::fake();
+    config(['mail.procurement_cc' => 'procurement@example.com, buyer@example.com']);
+
+    $approver = makeApproverForRfq();
+    $project = makeProjectForRfq($approver);
+
+    $this->actingAs($approver)->post(route('hub.rfq.store', $project), [
+        'contractor_name' => 'ABC Construction',
+        'recipient_email' => 'contractor@example.com',
+    ])->assertRedirect();
+
+    Mail::assertQueued(RfqDispatched::class, fn ($mail) => $mail->hasTo('contractor@example.com')
+        && $mail->hasCc('procurement@example.com')
+        && $mail->hasCc('buyer@example.com'));
+});
+
+it('copies nobody extra when no procurement address is configured', function () {
+    Mail::fake();
+    config(['mail.procurement_cc' => '']);
+
+    $approver = makeApproverForRfq();
+    $project = makeProjectForRfq($approver);
+
+    $this->actingAs($approver)->post(route('hub.rfq.store', $project), [
+        'contractor_name' => 'ABC Construction',
+        'recipient_email' => 'contractor@example.com',
+    ])->assertRedirect();
+
+    Mail::assertQueued(RfqDispatched::class, fn ($mail) => $mail->hasTo('contractor@example.com')
+        && empty($mail->cc));
+});
+
 it('does not cc the sender when cc_self is not requested', function () {
     Mail::fake();
 

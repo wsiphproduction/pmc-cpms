@@ -231,6 +231,20 @@ it('sends the issued ntp to the vendor with copies', function () {
         && $mail->hasCc($this->engineer->email));
 });
 
+it('always copies procurement on the issued ntp', function () {
+    config(['mail.procurement_cc' => 'procurement@example.com']);
+    approveWholeChain($this);
+
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ntp.send', [$this->project, $this->ntp]), [
+            'recipient_email' => 'vendor@example.com',
+        ])->assertRedirect();
+
+    Mail::assertQueued(NtpIssuedToVendor::class, fn ($mail) => $mail->hasTo('vendor@example.com')
+        && $mail->hasCc('procurement@example.com')
+        && ! $mail->hasCc($this->engineer->email));
+});
+
 it('names every signatory and their date in the vendor email', function () {
     approveWholeChain($this);
 

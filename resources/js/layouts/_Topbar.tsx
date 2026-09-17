@@ -245,6 +245,9 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
         setMobileNavOpen(false);
     };
 
+    // Anchors for the guided tour: "nav-requests", "nav-ntp-reviews", …
+    const tourAnchor = (item: NavItem) => `nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`;
+
     const navButtonStyle = (active: boolean): React.CSSProperties => ({
         display: 'inline-flex', alignItems: 'center', gap: '6px',
         padding: '7px 8px', borderRadius: '7px',
@@ -300,7 +303,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
 
                 {/* Desktop nav */}
                 {!navCollapsed && (
-                    <nav ref={navRef} style={{
+                    <nav ref={navRef} data-tour="nav" style={{
                         display: 'flex', alignItems: 'center', gap: '3px',
                         flex: 1, minWidth: 0,
                         // Sits centred in the space left between the brand and the account controls.
@@ -367,6 +370,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                                     <Link
                                         href={item.href}
                                         onClick={closeAll}
+                                        data-tour={tourAnchor(item)}
                                         style={{
                                             ...navButtonStyle(isActive(item.href)),
                                             // Highlight when there are items needing attention.
@@ -409,7 +413,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     </span>
 
                     {/* Notifications */}
-                    <div ref={notifRef} style={{ position: 'relative' }}>
+                    <div ref={notifRef} data-tour="notifications" style={{ position: 'relative' }}>
                         <button
                             type="button"
                             onClick={() => setNotifOpen(prev => !prev)}
@@ -469,7 +473,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     </div>
 
                     {/* Account menu */}
-                    <div ref={menuRef} style={{ position: 'relative' }}>
+                    <div ref={menuRef} data-tour="account-menu" style={{ position: 'relative' }}>
                         <div
                             onClick={() => setMenuOpen(prev => !prev)}
                             style={{
@@ -555,7 +559,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
 
             {/* Collapsed nav panel */}
             {navCollapsed && mobileNavOpen && (
-                <nav style={{
+                <nav data-tour="nav" style={{
                     borderTop: '1px solid #f3f4f6',
                     padding: '8px',
                     maxHeight: 'calc(100vh - 56px)',
@@ -594,6 +598,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                                 <Link
                                     href={item.href}
                                     onClick={closeAll}
+                                    data-tour={tourAnchor(item)}
                                     style={{
                                         display: 'flex', alignItems: 'center', gap: '9px',
                                         padding: '9px 12px', borderRadius: '7px', marginBottom: '1px',

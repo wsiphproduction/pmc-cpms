@@ -1,4 +1,5 @@
 import { ReactNode, useEffect, useState } from 'react';
+import TourProvider from '@/components/tour/TourProvider';
 import Topbar from './_Topbar';
 
 interface Props {
@@ -36,7 +37,8 @@ export default function AuthenticatedLayout({ children }: Props) {
                 minWidth: 0,
                 padding: isMobile ? '18px 14px' : '24px 28px',
             }}>
-                {children}
+                {/* Guided tours for the department-side roles; a no-op for everyone else. */}
+                <TourProvider>{children}</TourProvider>
             </main>
         </div>
     );

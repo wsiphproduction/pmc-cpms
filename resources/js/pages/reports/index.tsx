@@ -66,12 +66,12 @@ export default function ReportsIndex({ summary }: Props) {
                     site checklist answers behind them.
                 </p>
 
-                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '18px' }}>
+                <div data-tour="reports-summary" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginBottom: '18px' }}>
                     <Stat value={summary.projects} label="Projects" />
                     <Stat value={summary.reports} label="Weekly Reports" />
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', maxWidth: '420px', marginBottom: '6px' }}>
+                <div data-tour="reports-period" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', maxWidth: '420px', marginBottom: '6px' }}>
                     <label style={{ display: 'block' }}>
                         <span style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', marginBottom: '5px' }}>
                             Period From (optional)
@@ -106,6 +106,7 @@ export default function ReportsIndex({ summary }: Props) {
                 {rangeInvalid || nothingToExport ? (
                     <span
                         aria-disabled="true"
+                        data-tour="reports-download"
                         style={{
                             display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 20px',
                             borderRadius: '8px', background: '#e2e8f0', color: '#94a3b8',
@@ -117,6 +118,7 @@ export default function ReportsIndex({ summary }: Props) {
                 ) : (
                     <a
                         href={href}
+                        data-tour="reports-download"
                         style={{
                             display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '9px 20px',
                             borderRadius: '8px', background: '#0f172a', color: '#fff',

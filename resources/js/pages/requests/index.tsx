@@ -421,7 +421,7 @@ function DecisionModal({
 function Pagination({ data }: { data: Paginated<unknown> }) {
     if (data.last_page <= 1) return null;
     return (
-        <div style={{ padding: '14px 18px', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div data-tour="requests-pagination" style={{ padding: '14px 18px', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
             <span style={{ fontSize: '12.5px', color: '#9ca3af' }}>
                 Showing <strong style={{ color: '#374151' }}>{data.from}–{data.to}</strong> of <strong style={{ color: '#374151' }}>{data.total}</strong> results
             </span>
@@ -509,7 +509,7 @@ export default function RequestsIndex({ requests, filters, canCreate }: Props) {
 
                 {/* Toolbar */}
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '7px 12px', flex: '1', maxWidth: '320px' }}>
+                    <div data-tour="requests-search" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '7px 12px', flex: '1', maxWidth: '320px' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                         <input type="text" value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && doSearch()} placeholder="Search request, project, title…" style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '13px', color: '#374151', width: '100%', fontFamily: 'inherit' }} />
                         {search && (
@@ -525,12 +525,12 @@ export default function RequestsIndex({ requests, filters, canCreate }: Props) {
                                 Clear filters
                             </button>
                         )}
-                        <button onClick={() => setShowAdvSearch(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: `1px solid ${hasFilters ? '#2563eb' : '#e5e7eb'}`, background: hasFilters ? '#eff6ff' : '#fff', fontSize: '12.5px', fontWeight: 500, color: hasFilters ? '#2563eb' : '#374151', cursor: 'pointer' }}>
+                        <button data-tour="requests-advanced-search" onClick={() => setShowAdvSearch(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: `1px solid ${hasFilters ? '#2563eb' : '#e5e7eb'}`, background: hasFilters ? '#eff6ff' : '#fff', fontSize: '12.5px', fontWeight: 500, color: hasFilters ? '#2563eb' : '#374151', cursor: 'pointer' }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
                             Advanced Search
                         </button>
                         {canCreate && (
-                            <Link href={route('requests.create')} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#2563eb', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
+                            <Link href={route('requests.create')} data-tour="requests-add" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', background: '#2563eb', color: '#fff', textDecoration: 'none', fontSize: '12.5px', fontWeight: 600 }}>
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                 Add Request
                             </Link>
@@ -539,12 +539,12 @@ export default function RequestsIndex({ requests, filters, canCreate }: Props) {
                 </div>
 
                 {/* Table */}
-                <div style={{ overflowX: 'auto' }}>
+                <div data-tour="requests-table" style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
                                 {['Request ID', 'Title', 'Requester', 'Created At', 'Status', 'Project No', 'Actions'].map((h, i, arr) => (
-                                    <th key={h} style={{ padding: '10px 16px', textAlign: i === arr.length - 1 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
+                                    <th key={h} data-tour={h === 'Status' ? 'requests-status' : undefined} style={{ padding: '10px 16px', textAlign: i === arr.length - 1 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
                                         {h}
                                     </th>
                                 ))}
@@ -589,7 +589,8 @@ export default function RequestsIndex({ requests, filters, canCreate }: Props) {
                                         }
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                        {/* Every row carries the anchor; the tour lands on the first. */}
+                                        <div data-tour="requests-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
                                             {req.status === 'approved' && !req.project && req.can.canCreateProject && (
                                                 <IconBtn title="Create Project" color="#2563eb" onClick={() => router.visit(`${route('projects.create')}?request_id=${req.id}`)}>
                                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

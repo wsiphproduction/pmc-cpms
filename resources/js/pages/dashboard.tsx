@@ -90,13 +90,16 @@ interface StatCardProps {
     subColor?: string;
     icon: React.ReactNode;
     onClick?: () => void;
+    /** Anchor for the guided tour. */
+    tour?: string;
 }
 
-function StatCard({ label, value, sub, subColor = '#6b7280', icon, onClick }: StatCardProps) {
+function StatCard({ label, value, sub, subColor = '#6b7280', icon, onClick, tour }: StatCardProps) {
     return (
         <button
             type="button"
             onClick={onClick}
+            data-tour={tour}
             style={{
                 textAlign: 'left', background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px',
                 padding: '18px 20px', position: 'relative', overflow: 'hidden', flex: 1,
@@ -119,9 +122,11 @@ interface QuickLinkProps {
     href?: string;
     icon: React.ReactNode;
     onClick?: () => void;
+    /** Anchor for the guided tour. */
+    tour?: string;
 }
 
-function QuickLink({ label, href, icon, onClick }: QuickLinkProps) {
+function QuickLink({ label, href, icon, onClick, tour }: QuickLinkProps) {
     const sharedStyle: React.CSSProperties = {
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px',
         minHeight: '94px', padding: '18px 12px', borderRadius: '8px', border: '1.5px dashed #cbd5e1',
@@ -136,14 +141,14 @@ function QuickLink({ label, href, icon, onClick }: QuickLinkProps) {
 
     if (href) {
         return (
-            <Link href={href} style={sharedStyle} onMouseEnter={e => hoverIn(e.currentTarget)} onMouseLeave={e => hoverOut(e.currentTarget)}>
+            <Link href={href} data-tour={tour} style={sharedStyle} onMouseEnter={e => hoverIn(e.currentTarget)} onMouseLeave={e => hoverOut(e.currentTarget)}>
                 {content}
             </Link>
         );
     }
 
     return (
-        <button type="button" onClick={onClick} style={sharedStyle} onMouseEnter={e => hoverIn(e.currentTarget)} onMouseLeave={e => hoverOut(e.currentTarget)}>
+        <button type="button" onClick={onClick} data-tour={tour} style={sharedStyle} onMouseEnter={e => hoverIn(e.currentTarget)} onMouseLeave={e => hoverOut(e.currentTarget)}>
             {content}
         </button>
     );
@@ -184,15 +189,17 @@ function requestStatusTone(status: string): 'green' | 'blue' | 'red' | 'amber' |
 }
 
 // ── Generic table widget ─────────────────────────────────────────────────
-function TableCard({ title, viewAllHref, headers, rows, emptyText }: {
+function TableCard({ title, viewAllHref, headers, rows, emptyText, tour }: {
     title: string;
     viewAllHref?: string;
     headers: string[];
     rows: React.ReactNode[][];
     emptyText: string;
+    /** Anchor for the guided tour. */
+    tour?: string;
 }) {
     return (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+        <div data-tour={tour} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             <div style={{ padding: '13px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0f172a' }}>{title}</span>
                 {viewAllHref && <Link href={viewAllHref} style={{ fontSize: '12.5px', fontWeight: 600, color: '#2563eb', textDecoration: 'none' }}>View All</Link>}
@@ -233,7 +240,7 @@ function NotificationsCard({ notifications }: { notifications: NotificationRow[]
     const markAllRead = () => router.patch(route('notifications.read-all'), {}, { preserveScroll: true });
 
     return (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
+        <div data-tour="dash-notifications" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px', overflow: 'hidden' }}>
             <div style={{ padding: '13px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '13.5px', fontWeight: 700, color: '#0f172a' }}>Notifications</span>
                 {notifications.some(n => !n.is_read) && (
@@ -304,17 +311,21 @@ export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: 
 
                 {isDeptUser ? (
                     <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                        <QuickLink href={route('requests.create')} label="New Request" icon={
+                        <QuickLink href={route('requests.create')} label="New Request" tour="dash-new-request" icon={
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                                 <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
                             </svg>
                         } />
-                        <StatCard label="Active Projects" value={formatNumber(stats.active_projects ?? 0)} sub="Your projects" subColor="#16a34a" onClick={() => router.visit(route('projects.index'))}
-                            icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="32" height="32"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>} />
-                        <StatCard label="Message" value={formatNumber(stats.unread_messages ?? 0)} sub="Unread comments" subColor="#ef4444" onClick={() => router.visit(route('requests.index'))}
-                            icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="32" height="32"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>} />
-                        <StatCard label="Requests" value={formatNumber(stats.my_requests ?? 0)} sub="Submitted by you" subColor="#2563eb" onClick={() => router.visit(route('requests.index'))}
-                            icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="32" height="32"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>} />
+                        {/* The three counters share the row's remaining width, as they
+                            did as direct children; the wrapper is the tour's anchor. */}
+                        <div data-tour="dash-stats" style={{ display: 'flex', gap: '12px', flex: 1, minWidth: 0 }}>
+                            <StatCard label="Active Projects" value={formatNumber(stats.active_projects ?? 0)} sub="Your projects" subColor="#16a34a" onClick={() => router.visit(route('projects.index'))}
+                                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="32" height="32"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>} />
+                            <StatCard label="Message" value={formatNumber(stats.unread_messages ?? 0)} sub="Unread comments" subColor="#ef4444" onClick={() => router.visit(route('requests.index'))}
+                                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="32" height="32"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>} />
+                            <StatCard label="Requests" value={formatNumber(stats.my_requests ?? 0)} sub="Submitted by you" subColor="#2563eb" onClick={() => router.visit(route('requests.index'))}
+                                icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="32" height="32"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>} />
+                        </div>
                     </div>
                 ) : (
                     <>
@@ -353,7 +364,7 @@ export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: 
                 )}
 
                 {isDeptUser && ntps_for_review.length > 0 && (
-                    <div style={{ background: '#fff', border: '1px solid #fde68a', borderLeft: '4px solid #f59e0b', borderRadius: '12px', marginBottom: '20px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+                    <div data-tour="dash-ntp-review" style={{ background: '#fff', border: '1px solid #fde68a', borderLeft: '4px solid #f59e0b', borderRadius: '12px', marginBottom: '20px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderBottom: '1px solid #fef3c7', background: '#fffbeb' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '30px', height: '30px', borderRadius: '8px', background: '#fef3c7', color: '#b45309' }}>
@@ -401,6 +412,7 @@ export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: 
 
                     <TableCard
                         title="Projects"
+                        tour="dash-projects"
                         viewAllHref={route('projects.index')}
                         headers={['Project No', 'Title', 'Status', 'Health', 'Progress']}
                         emptyText="No projects yet."
@@ -415,6 +427,7 @@ export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: 
 
                     <TableCard
                         title="Requests"
+                        tour="dash-requests"
                         viewAllHref={route('requests.index')}
                         headers={['Ref #', 'Title', 'Requester', 'Status', 'Date']}
                         emptyText="No requests yet."
@@ -429,6 +442,7 @@ export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: 
 
                     <TableCard
                         title="Audit Trail"
+                        tour="dash-audit"
                         headers={['Date', 'User', 'Module', 'Action']}
                         emptyText="No recent activity."
                         rows={tables.audit_trail.map(a => [

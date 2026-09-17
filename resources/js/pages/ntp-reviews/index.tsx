@@ -72,7 +72,7 @@ export default function NtpReviewsIndex({ ntps }: Props) {
             </div>
 
             {/* Status tabs */}
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '18px', flexWrap: 'wrap' }}>
+            <div data-tour="ntp-tabs" style={{ display: 'flex', gap: '6px', marginBottom: '18px', flexWrap: 'wrap' }}>
                 {tabs.map(t => {
                     const active = tab === t.key;
                     const count = counts[t.key];

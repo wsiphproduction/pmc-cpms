@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\CopiesProcurement;
 use App\Models\Project;
 use App\Models\ProjectRfq;
 use Illuminate\Bus\Queueable;
@@ -13,7 +14,7 @@ use Illuminate\Queue\SerializesModels;
 
 class RfqDispatched extends Mailable implements ShouldQueue
 {
-    use Queueable, SerializesModels;
+    use CopiesProcurement, Queueable, SerializesModels;
 
     public function __construct(
         public readonly ProjectRfq $rfq,
@@ -24,6 +25,7 @@ class RfqDispatched extends Mailable implements ShouldQueue
     {
         return new Envelope(
             subject: "Request for Quotation – {$this->project->project_no} – {$this->project->title}",
+            cc: self::procurementCc(),
         );
     }
 

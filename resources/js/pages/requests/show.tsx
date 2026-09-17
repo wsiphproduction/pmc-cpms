@@ -377,7 +377,7 @@ function FeedbackSection({ feedbacks, onEdit, onDelete }: {
     );
 
     return (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', marginTop: '20px' }}>
+        <div data-tour="request-feedback" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', marginTop: '20px' }}>
             <div style={{ padding: '18px 28px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '7px' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0891b2" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                 <span style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a' }}>Technical Feedback ({feedbacks.length})</span>
@@ -503,7 +503,7 @@ function CommentsSection({ projectRequestId, canComment }: { projectRequestId: n
     };
 
     return (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', marginTop: '20px' }}>
+        <div data-tour="request-comments" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)', marginTop: '20px' }}>
             {confirmDialog}
             <div style={{ padding: '18px 28px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '7px' }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
@@ -651,7 +651,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
                     <span style={{ color: '#0f172a', fontWeight: 700 }}>{projectRequest.request_no ?? `#${projectRequest.id}`}</span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div data-tour="request-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', fontWeight: 500, color: '#374151', cursor: 'pointer' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Print
@@ -687,7 +687,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
 
                 {/* Card header */}
-                <div style={{ background: '#fafbfc', borderBottom: '1px solid #e5e7eb', padding: '20px 28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+                <div data-tour="request-header" style={{ background: '#fafbfc', borderBottom: '1px solid #e5e7eb', padding: '20px 28px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
                     <div>
                         <h2 style={{ fontSize: '18px', fontWeight: 800, color: '#0f172a', margin: '0 0 5px', letterSpacing: '-0.3px' }}>
                             {projectRequest.title}
@@ -704,7 +704,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
 
                 {/* Sign-off chain: engineer → PMD Assistant Manager → PMD Department Manager */}
                 {(projectRequest.approvals?.length ?? 0) > 0 && (
-                    <div style={{ padding: '16px 28px', borderBottom: '1px solid #f3f4f6', background: '#fbfdff' }}>
+                    <div data-tour="request-approval-chain" style={{ padding: '16px 28px', borderBottom: '1px solid #f3f4f6', background: '#fbfdff' }}>
                         <div style={{ fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
                             Approval Chain
                             {projectRequest.awaiting_role_label && (
@@ -722,7 +722,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px' }}>
 
                     {/* Left */}
-                    <div style={{ padding: '28px', borderRight: '1px solid #f3f4f6' }}>
+                    <div data-tour="request-details" style={{ padding: '28px', borderRight: '1px solid #f3f4f6' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 24px' }}>
                             <div>
                                 <InfoLabel>Job Type</InfoLabel>
@@ -771,7 +771,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                     </div>
 
                     {/* Right — attachments */}
-                    <div style={{ padding: '28px' }}>
+                    <div data-tour="request-attachments" style={{ padding: '28px' }}>
                         <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '7px' }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2">
                                 <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
@@ -820,7 +820,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                 {/* Footer */}
                 <div style={{ borderTop: '1px solid #f3f4f6', padding: '16px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafbfc' }}>
                     {projectRequest.can.delete ? (
-                        <button onClick={handleDelete} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 16px', borderRadius: '7px', border: '1px solid #fca5a5', background: '#fff', fontSize: '12.5px', fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>
+                        <button onClick={handleDelete} data-tour="request-cancel" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 16px', borderRadius: '7px', border: '1px solid #fca5a5', background: '#fff', fontSize: '12.5px', fontWeight: 600, color: '#dc2626', cursor: 'pointer' }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
                             Cancel Request
                         </button>

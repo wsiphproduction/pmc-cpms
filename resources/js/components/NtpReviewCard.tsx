@@ -135,7 +135,8 @@ export default function NtpReviewCard({ ntp, canAct, approveLabel, onApprove, on
     ].filter(Boolean).join('  ·  ');
 
     return (
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px 22px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+        // Every card carries the tour anchors; the guided tour lands on the first.
+        <div data-tour="ntp-card" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '18px 22px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
                 {/* Only the heading toggles, so the approve/reject buttons keep
                     their own click target instead of bubbling into the fold. */}
@@ -164,7 +165,7 @@ export default function NtpReviewCard({ ntp, canAct, approveLabel, onApprove, on
                         )}
                     </div>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div data-tour="ntp-card-actions" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                     {pending && canAct ? (
                         <>
                             <button type="button" onClick={() => onApprove(ntp)} style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', background: '#059669', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
@@ -184,7 +185,7 @@ export default function NtpReviewCard({ ntp, canAct, approveLabel, onApprove, on
 
             {/* The sign-off chain, always visible — it is the whole point of the queue. */}
             {ntp.approvals?.length > 0 && (
-                <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
+                <div data-tour="ntp-approval-chain" style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
                     <div style={sectionLabel}>Approval Chain</div>
                     <ApprovalTimeline steps={ntp.approvals} />
                 </div>
@@ -201,7 +202,7 @@ export default function NtpReviewCard({ ntp, canAct, approveLabel, onApprove, on
                         </div>
                     )}
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
+                    <div data-tour="ntp-card-details" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
                         {[
                             ['Contractor', ntp.contractor],
                             ['Approved Cost', peso(ntp.approved_cost)],

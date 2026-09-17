@@ -57,7 +57,7 @@ export default function ManualIndex({ manuals, mine, version, docNo }: Props) {
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(230px, 300px) 1fr', gap: '18px', alignItems: 'start' }}>
 
                 {/* ── The booklets on offer ───────────────────────────────── */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div data-tour="manual-list" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {manuals.map(manual => {
                         const isActive = manual.slug === active;
 
@@ -107,7 +107,7 @@ export default function ManualIndex({ manuals, mine, version, docNo }: Props) {
                 </div>
 
                 {/* ── The reader ──────────────────────────────────────────── */}
-                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
+                <div data-tour="manual-reader" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
                     {!selected?.available ? (
                         <div style={{ padding: '40px 26px', textAlign: 'center' }}>
                             <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', marginBottom: '6px' }}>
@@ -130,7 +130,7 @@ export default function ManualIndex({ manuals, mine, version, docNo }: Props) {
                                     </p>
                                 </div>
 
-                                <div style={{ display: 'flex', gap: '8px' }}>
+                                <div data-tour="manual-actions" style={{ display: 'flex', gap: '8px' }}>
                                     <a
                                         href={selected.url!}
                                         target="_blank"

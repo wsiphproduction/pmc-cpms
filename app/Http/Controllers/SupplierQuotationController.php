@@ -190,16 +190,32 @@ class SupplierQuotationController extends Controller
 
         Notification::notify($team, $message, $link);
 
+        // Procurement is copied on the first member's mail only — one copy of
+        // the news, not one per engineer.
+        $copyProcurement = true;
+
         foreach ($team as $member) {
             if (! filled($member->email)) {
                 continue;
             }
 
             try {
-                Mail::to($member->email)->send(new QuotationSubmitted($rfq, $project, $quotation, $total));
+                Mail::to($member->email)->send(new QuotationSubmitted($rfq, $project, $quotation, $total, $copyProcurement));
+                $copyProcurement = false;
             } catch (\Throwable $e) {
                 // A queue outage must not lose the supplier's submission — it is
                 // already saved, and the in-app notification still stands.
+                Log::error("Quotation submission email could not be queued for quotation #{$quotation->id}: " . $e->getMessage());
+            }
+        }
+
+        // Nobody on the team could be mailed, so procurement hears directly
+        // rather than not at all.
+        $procurement = QuotationSubmitted::procurementCc();
+        if ($copyProcurement && $procurement) {
+            try {
+                Mail::to($procurement)->send(new QuotationSubmitted($rfq, $project, $quotation, $total, false));
+            } catch (\Throwable $e) {
                 Log::error("Quotation submission email could not be queued for quotation #{$quotation->id}: " . $e->getMessage());
             }
         }

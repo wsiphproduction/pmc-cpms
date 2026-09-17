@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\CopiesProcurement;
 use App\Models\Project;
 use App\Models\ProjectNtp;
 use Illuminate\Bus\Queueable;
@@ -20,7 +21,7 @@ use Illuminate\Support\Facades\URL;
  */
 class NtpIssuedToVendor extends Mailable implements ShouldQueue
 {
-    use Queueable, SerializesModels;
+    use CopiesProcurement, Queueable, SerializesModels;
 
     /** How long the vendor's link to the approved form stays open. */
     public const LINK_VALID_DAYS = 5;
@@ -48,6 +49,7 @@ class NtpIssuedToVendor extends Mailable implements ShouldQueue
     {
         return new Envelope(
             subject: "Notice to Proceed {$this->ntp->ntp_no} – {$this->project->project_no} – {$this->project->title}",
+            cc: self::procurementCc(),
         );
     }
 

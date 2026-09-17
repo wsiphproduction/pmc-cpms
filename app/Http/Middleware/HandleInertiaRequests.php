@@ -56,7 +56,11 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user() ? array_merge(
                     $request->user()->toArray(),
-                    ['role' => $request->user()->roles->first()?->name]
+                    [
+                        'role' => $request->user()->roles->first()?->name,
+                        // Null until the first-login guided-tour offer is answered.
+                        'tour_seen_at' => $request->user()->tour_seen_at?->toIso8601String(),
+                    ]
                 ) : null,
             ],
             'notifications' => $request->user()

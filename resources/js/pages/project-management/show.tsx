@@ -514,7 +514,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 <div style={{ fontSize: '13px', color: '#64748b', fontWeight: 500 }}>
                     Projects / View / {isSub && <span style={{ color: SUB_ACCENT, fontWeight: 700 }}>Sub-Project / </span>}<span style={{ color: '#1e293b', fontWeight: 700 }}>{project.project_no}</span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div data-tour="project-actions" style={{ display: 'flex', gap: '8px' }}>
                     <button
                         onClick={() => window.print()}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer', color: '#374151' }}
@@ -536,7 +536,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
 
             {/* Sub-project → parent link */}
             {project.parent && (
-                <div className="print-hide" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 18px', marginBottom: '20px', borderRadius: '10px', background: '#fff7ed', border: '1px solid #fed7aa' }}>
+                <div className="print-hide" data-tour="project-parent-link" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 18px', marginBottom: '20px', borderRadius: '10px', background: '#fff7ed', border: '1px solid #fed7aa' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c2410c" strokeWidth="2" style={{ flexShrink: 0 }}><path d="M9 18l6-6-6-6"/></svg>
                     <div style={{ fontSize: '12.5px', color: '#9a3412' }}>
                         This is a sub-project of{' '}
@@ -569,7 +569,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
 
                 {/* Header */}
                 <div style={{ padding: '24px 30px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <div>
+                    <div data-tour="project-header">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '8px' }}>
                             <h2 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0 }}>{project.title}</h2>
                             <span style={{
@@ -606,7 +606,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                             <span>Encoded By: <strong style={{ color: '#374151' }}>{project.encoded_by}</strong></span>
                         </div>
                     </div>
-                    <div style={{ textAlign: 'right' }}>
+                    <div data-tour="project-status" style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>Current Lifecycle Status</div>
                         {project.can.update ? (
                             <button
@@ -667,7 +667,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 )}
 
                 {/* Analytics Strip */}
-                <div style={{ padding: '24px 30px', borderBottom: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '12px', margin: '20px 30px' }}>
+                <div data-tour="project-analytics" style={{ padding: '24px 30px', borderBottom: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '12px', margin: '20px 30px' }}>
                     {/* Timeline */}
                     <div style={{ padding: '0 24px 0 0', borderRight: '1px solid #e5e7eb', textAlign: 'center' }}>
                         {sectionLabel('Timeline (Days Remaining)')}
@@ -723,7 +723,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 </div>
 
                 {/* Details Grid */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr' }}>
+                <div data-tour="project-details" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr' }}>
                     {/* Left */}
                     <div style={{ padding: '28px', borderRight: '1px solid #e5e7eb', background: 'rgba(248,250,252,0.5)' }}>
                         <InfoField label="Project Number">{project.project_no}</InfoField>
@@ -821,7 +821,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 the card is dropped rather than rendered empty, which would read as
                 "no NTP exists". The banner at the top links back to the parent. */}
             {is_dept_view ? (isSub ? null : (
-                <div className="print-hide" style={{ marginBottom: '32px' }}>
+                <div className="print-hide" data-tour="project-procurement" style={{ marginBottom: '32px' }}>
                     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden' }}>
                         <div role="tablist" aria-label="Procurement records" style={{ display: 'flex', gap: '4px', padding: '0 8px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
                             {DEPT_TABS.map(tab => {

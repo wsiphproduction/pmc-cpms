@@ -282,18 +282,18 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                 <SectionTitle>General Information</SectionTitle>
 
                 {/* Title */}
-                <div style={{ marginBottom: '18px' }}>
+                <div data-tour="request-title" style={{ marginBottom: '18px' }}>
                     <FormLabel required>Project Title</FormLabel>
                     <input type="text" value={form.title} onChange={e => set('title', e.target.value)} onFocus={focus} onBlur={blur} placeholder="Enter project title" required style={inputStyle} />
                     {errors.title && <p style={{ fontSize: '11.5px', color: '#dc2626', marginTop: '4px' }}>{errors.title}</p>}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '18px' }}>
-                    <div>
+                    <div data-tour="request-job-type">
                         <FormLabel required>Job Type</FormLabel>
                         <SearchableSelect value={form.job_type} onChange={value => set('job_type', value)} options={jobTypes} placeholder="Type or select job type..." required listId="job-type-options" />
                     </div>
-                    <div>
+                    <div data-tour="request-job-location">
                         <FormLabel required>Job Location</FormLabel>
                         <SearchableSelect value={form.job_location} onChange={value => set('job_location', value)} options={jobLocations} placeholder="Type or select job location..." required listId="job-location-options" />
                         {isOtherLocation && (
@@ -315,14 +315,14 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                     </div>
                 </div>
 
-                <div style={{ marginBottom: '28px' }}>
+                <div data-tour="request-description" style={{ marginBottom: '28px' }}>
                     <FormLabel required>Project Description</FormLabel>
                     <textarea value={form.description} onChange={e => set('description', e.target.value)} onFocus={focus as never} onBlur={blur as never} rows={4} placeholder="Detailed scope of works…" required style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.6 }} />
                 </div>
 
                 <SectionTitle>Financials &amp; Budgeting</SectionTitle>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
-                    <div>
+                    <div data-tour="request-funding">
                         <FormLabel required>Funding Classification</FormLabel>
                         <div style={{ background: '#f8fafc', border: `1.5px solid ${fundingError ? '#fca5a5' : '#e5e7eb'}`, borderRadius: '8px', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-around', height: 'calc(100% - 22px)' }}>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
@@ -368,7 +368,7 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                         {attachmentError}
                     </p>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                <div data-tour="request-attachments" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px', marginBottom: '32px' }}>
                     <UploadSection
                         label="Picture Attachments" accept="image/*" placeholder="Image description" rows={pictureRows}
                         onAdd={() => addRow(setPictureRows, 'picture')} onRemove={id => removeRow(setPictureRows, id)}
@@ -404,7 +404,7 @@ export default function Create({ jobTypes, jobLocations, costCodes }: Props) {
                         <button type="button" style={{ padding: '9px 22px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '13px', fontWeight: 500, color: '#374151', cursor: 'pointer' }}>
                             Save Draft
                         </button>
-                        <button type="submit" disabled={processing} style={{ padding: '9px 28px', borderRadius: '8px', border: 'none', background: processing ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: processing ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+                        <button type="submit" data-tour="request-submit" disabled={processing} style={{ padding: '9px 28px', borderRadius: '8px', border: 'none', background: processing ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: processing ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
                             {processing ? 'Submitting…' : 'Submit Request'}
                         </button>
                     </div>

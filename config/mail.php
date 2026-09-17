@@ -113,4 +113,19 @@ return [
         'name' => env('MAIL_FROM_NAME', 'Example'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Procurement Copy
+    |--------------------------------------------------------------------------
+    |
+    | Addresses copied on every RFQ and NTP email the system sends — the RFQ
+    | going out to a vendor, a quotation coming back in, and the issued NTP —
+    | so procurement sees the whole exchange without being on each one by
+    | hand. Comma-separated; leave empty to copy nobody. Added server-side
+    | only, so it never appears in the send forms.
+    |
+    */
+
+    'procurement_cc' => env('MAIL_PROCUREMENT_CC', 'jatano@philsagamining.com'),
+
 ];

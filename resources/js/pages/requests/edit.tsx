@@ -285,7 +285,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
 
                 <SectionTitle>General Information</SectionTitle>
 
-                <div style={{ marginBottom: '18px' }}>
+                <div data-tour="request-title" style={{ marginBottom: '18px' }}>
                     <FormLabel required>Project Title</FormLabel>
                     <input type="text" value={title} onChange={e => setTitle(e.target.value)} onFocus={focus} onBlur={blur} required style={inputStyle} />
                 </div>
@@ -315,7 +315,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                 </div>
 
                 <SectionTitle>Financials &amp; Budgeting</SectionTitle>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
+                <div data-tour="request-funding" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
                         <FormLabel required={opex}>Cost Code</FormLabel>
                         <select value={costcode} onChange={e => { setCostcode(e.target.value); setCostcodeError(''); }} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer', borderColor: costcodeError ? '#dc2626' : undefined }}>
@@ -357,7 +357,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                 {projectRequest.attachments.length > 0 && (
                     <>
                         <SectionTitle>Current Attachments</SectionTitle>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '28px' }}>
+                        <div data-tour="request-current-attachments" style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '28px' }}>
                             {projectRequest.attachments.map(att => (
                                 <ExistingAttachmentRow key={att.id} att={att} requestId={projectRequest.id} onDelete={markDeleted} />
                             ))}
@@ -378,7 +378,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                         {attachmentError}
                     </p>
                 )}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px', marginBottom: '32px' }}>
+                <div data-tour="request-attachments" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '20px', marginBottom: '32px' }}>
                     <UploadSection
                         label="Picture Attachments" accept="image/*" placeholder="Image description" rows={pictureRows}
                         onAdd={() => addRow(setPictureRows, 'picture')} onRemove={id => removeRow(setPictureRows, id)}
@@ -410,7 +410,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
                         Back to list
                     </a>
-                    <button type="submit" disabled={processing} style={{ padding: '9px 28px', borderRadius: '8px', border: 'none', background: processing ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: processing ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
+                    <button type="submit" data-tour="request-save" disabled={processing} style={{ padding: '9px 28px', borderRadius: '8px', border: 'none', background: processing ? '#93c5fd' : '#2563eb', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: processing ? 'not-allowed' : 'pointer', transition: 'background 0.15s' }}>
                         {processing ? 'Saving…' : 'Save Changes'}
                     </button>
                 </div>

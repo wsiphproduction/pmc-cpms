@@ -8,6 +8,7 @@ use App\Models\User;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -69,6 +70,22 @@ class AccountController extends Controller
         $this->notifyAccountChange($user, [['Password', '', 'Changed']], [$user->email]);
 
         return to_route('account.edit')->with('success', 'Password updated.');
+    }
+
+    /**
+     * The first-login tour offer has been answered — taken or declined, it is
+     * not shown again. Called from the page in the background, so there is
+     * nothing to redirect to.
+     */
+    public function markTourSeen(Request $request): HttpResponse
+    {
+        $user = $request->user();
+
+        if ($user->tour_seen_at === null) {
+            $user->forceFill(['tour_seen_at' => now()])->save();
+        }
+
+        return response()->noContent();
     }
 
     /**

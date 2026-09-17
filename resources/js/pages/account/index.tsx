@@ -64,7 +64,7 @@ export default function AccountIndex({ mustVerifyEmail, status }: { mustVerifyEm
                 </div>
             )}
 
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', maxWidth: '640px', marginBottom: '20px' }}>
+            <div data-tour="account-details" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', maxWidth: '640px', marginBottom: '20px' }}>
                 <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '18px' }}>
                     Account Details
                 </div>
@@ -115,7 +115,7 @@ export default function AccountIndex({ mustVerifyEmail, status }: { mustVerifyEm
                 </form>
             </div>
 
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', maxWidth: '640px' }}>
+            <div data-tour="account-password" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', maxWidth: '640px' }}>
                 <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '18px' }}>
                     Change Password
                 </div>

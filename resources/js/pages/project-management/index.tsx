@@ -413,7 +413,7 @@ function AdvancedFilterModal({
 function Pagination({ data }: { data: Paginated<unknown> }) {
     if (data.last_page <= 1) return null;
     return (
-        <div style={{ padding: '14px 18px', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div data-tour="projects-pagination" style={{ padding: '14px 18px', borderTop: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
             <span style={{ fontSize: '12.5px', color: '#9ca3af' }}>
                 Showing <strong style={{ color: '#374151' }}>{data.from}–{data.to}</strong> of <strong style={{ color: '#374151' }}>{data.total}</strong> entries
             </span>
@@ -505,7 +505,7 @@ export default function ProjectsIndex({
                 {/* Toolbar */}
                 <div style={{ padding: '14px 18px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, maxWidth: '620px', flexWrap: 'wrap' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '7px 12px', flex: 1 }}>
+                        <div data-tour="projects-search" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#f8fafc', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '7px 12px', flex: 1 }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
                             <input
                                 type="text"
@@ -523,6 +523,7 @@ export default function ProjectsIndex({
                         </div>
                         <button
                             onClick={() => setShowAdvFilter(true)}
+                            data-tour="projects-advanced-filter"
                             style={{
                                 display: 'flex', alignItems: 'center', gap: '6px',
                                 padding: '7px 14px', borderRadius: '7px',
@@ -543,6 +544,7 @@ export default function ProjectsIndex({
                             value={filters.status ?? ''}
                             onChange={e => applyFilters({ status: e.target.value })}
                             title="Filter by status"
+                            data-tour="projects-status-filter"
                             style={{
                                 padding: '7px 10px', borderRadius: '7px',
                                 border: `1px solid ${filters.status ? '#2563eb' : '#e5e7eb'}`,
@@ -559,6 +561,7 @@ export default function ProjectsIndex({
 
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
                         <label
+                            data-tour="projects-show-subs"
                             title={subCount > 0 ? 'List sub-project NTP numbers under their parent' : 'None of the projects on this page have sub-projects'}
                             style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 12px', borderRadius: '7px', border: `1px solid ${showSubs ? '#2563eb' : '#e5e7eb'}`, background: showSubs ? '#eff6ff' : '#fff', fontSize: '12px', fontWeight: 500, color: showSubs ? '#2563eb' : '#374151', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
                             <input
@@ -589,12 +592,12 @@ export default function ProjectsIndex({
                 </div>
 
                 {/* Table */}
-                <div style={{ overflowX: 'auto' }}>
+                <div data-tour="projects-table" style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
                                 {['Project #', 'Project Title', 'Engr', 'Completion (%)', 'Payment Status', 'Dept Owner', 'Target Completion', 'Status', 'Actions'].map((h, i, arr) => (
-                                    <th key={h} style={{
+                                    <th key={h} data-tour={h === 'Completion (%)' ? 'projects-progress' : undefined} style={{
                                         padding: '10px 16px',
                                         textAlign: i === arr.length - 1 ? 'center' : 'left',
                                         fontSize: '10.5px', fontWeight: 700,
@@ -686,7 +689,8 @@ export default function ProjectsIndex({
                                         <StatusBadge status={proj.status} />
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                                        {/* Every row carries the anchor; the tour lands on the first. */}
+                                        <div data-tour="projects-actions" style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
                                             <IconBtn title="View" onClick={() => router.visit(route('projects.show', proj.id))}>
                                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
                                             </IconBtn>

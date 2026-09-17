@@ -202,6 +202,30 @@ it('notifies both when the manager is a different engineer', function () {
     Mail::assertQueued(QuotationSubmitted::class, 2);
 });
 
+it('copies procurement on exactly one of the team mails', function () {
+    config(['mail.procurement_cc' => 'procurement@example.com']);
+
+    $manager = makeEngineerForPortal();
+    $project = makeProjectForPortal($this->engineer, $manager);
+
+    $this->actingAs($this->engineer)->post(route('hub.rfq.store', $project), [
+        'contractor_name' => 'Beta Builders',
+    ])->assertRedirect();
+    $this->app['auth']->logout();
+
+    $rfq = ProjectRfq::where('project_id', $project->id)->firstOrFail();
+
+    $this->post(route('supplier-quote.store', $rfq->portal_token), [
+        ...supplierForm(),
+        'send' => 1,
+    ])->assertRedirect();
+
+    // Two engineers hear about it; procurement is copied once, not twice.
+    Mail::assertQueued(QuotationSubmitted::class, 2);
+    Mail::assertQueued(QuotationSubmitted::class, fn ($mail) => $mail->hasCc('procurement@example.com'));
+    Mail::assertQueued(QuotationSubmitted::class, fn ($mail) => ! $mail->hasCc('procurement@example.com'));
+});
+
 it('lets the supplier keep editing until the team marks it received', function () {
     $this->post(route('supplier-quote.store', $this->rfq->portal_token), [
         ...supplierForm(),
