@@ -158,7 +158,7 @@ export const TOURS: Record<string, Tour> = {
             {
                 target: 'requests-add',
                 title: 'Add Request',
-                body: 'Opens the request form. Attachments are optional; funding classification and a cost code (for OPEX) are required.',
+                body: 'Opens the request form. Attachments are optional; funding classification and a cost code (for OPEX or CAPEX) are required.',
             },
             {
                 target: 'requests-table',
@@ -219,7 +219,7 @@ export const TOURS: Record<string, Tour> = {
             {
                 target: 'request-funding',
                 title: 'Funding classification',
-                body: 'Tick at least one of OPEX, CAPEX or For Budgeting. Ticking OPEX adds a Cost Code field, which is then required.',
+                body: 'Tick at least one of OPEX, CAPEX or For Budgeting. Ticking OPEX or CAPEX adds a Cost Code field, which is then required.',
             },
             {
                 target: 'request-attachments',
@@ -254,7 +254,7 @@ export const TOURS: Record<string, Tour> = {
             {
                 target: 'request-funding',
                 title: 'Funding and cost code',
-                body: 'At least one funding classification stays required, and OPEX still needs a cost code.',
+                body: 'At least one funding classification stays required, and OPEX or CAPEX still needs a cost code.',
             },
             {
                 target: 'request-current-attachments',

@@ -279,6 +279,33 @@ describe('store', function () {
             ->assertSessionHasErrors(['opex']);
     });
 
+    it('requires a cost code when OPEX is checked', function () {
+        $this->actingAs(makeUser())
+            ->post(route('requests.store'), basePayload([
+                'costcode' => '',
+                'opex'     => true,
+            ]))
+            ->assertSessionHasErrors(['costcode']);
+    });
+
+    it('requires a cost code when only CAPEX is checked', function () {
+        $this->actingAs(makeUser())
+            ->post(route('requests.store'), basePayload([
+                'costcode' => '',
+                'capex'    => true,
+            ]))
+            ->assertSessionHasErrors(['costcode']);
+    });
+
+    it('does not require a cost code when only For Budgeting is checked', function () {
+        $this->actingAs(makeUser())
+            ->post(route('requests.store'), basePayload([
+                'costcode'      => '',
+                'for_budgeting' => true,
+            ]))
+            ->assertSessionDoesntHaveErrors(['costcode']);
+    });
+
     it('stores attachments with the request', function () {
         Storage::fake('public');
         $user = makeUser();

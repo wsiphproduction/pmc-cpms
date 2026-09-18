@@ -199,11 +199,13 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
 
     const markDeleted = (id: number) => setDeletedAttachments(p => [...p, id]);
 
+    const requiresCostCode = opex || capex;
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (opex && !costcode) {
-            setCostcodeError('Cost code is required when OPEX is selected.');
+        if (requiresCostCode && !costcode) {
+            setCostcodeError('Cost code is required when OPEX or CAPEX is selected.');
             return;
         }
         setCostcodeError('');
@@ -317,7 +319,7 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                 <SectionTitle>Financials &amp; Budgeting</SectionTitle>
                 <div data-tour="request-funding" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
-                        <FormLabel required={opex}>Cost Code</FormLabel>
+                        <FormLabel required={requiresCostCode}>Cost Code</FormLabel>
                         <select value={costcode} onChange={e => { setCostcode(e.target.value); setCostcodeError(''); }} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer', borderColor: costcodeError ? '#dc2626' : undefined }}>
                             <option value="">Select Cost Code…</option>
                             {!hasOption(costCodes, costcode) && <option value={costcode}>{costcode}</option>}

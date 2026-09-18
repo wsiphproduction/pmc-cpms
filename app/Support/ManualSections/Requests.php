@@ -72,10 +72,10 @@ class Requests
                         ['Description', 'What is needed, where, and why. Say what the problem is, not only the solution you have in mind — the engineer may know a better one. Required.'],
                         ['Job Location', 'Chosen from the list. If nothing fits, choose Other and type the location in the box that appears. Required.'],
                         ['OPEX / CAPEX', 'How the work is funded. One of the two must be ticked.'],
-                        ['Cost Code', 'Required when you tick OPEX. Chosen from the cost codes the administrator maintains.'],
+                        ['Cost Code', 'Required when you tick OPEX or CAPEX. Chosen from the cost codes the administrator maintains.'],
                         ['For Budgeting', 'Tick this when the work has no budget yet and is being raised so it can be budgeted for.'],
                     ]],
-                    ['warn', 'You must classify the funding. A request with neither OPEX nor CAPEX ticked will not save, and OPEX without a cost code will not save either.'],
+                    ['warn', 'You must classify the funding. A request with neither OPEX nor CAPEX ticked will not save, and OPEX or CAPEX without a cost code will not save either.'],
 
                     ['h', 'Attaching files'],
                     ['ol', [
@@ -117,7 +117,7 @@ class Requests
                     ['h', 'Reading the request'],
                     ['ul', [
                         'Start with the description and the attachments. Photographs usually tell you more than the text.',
-                        'Check the funding classification and the cost code — an OPEX request with the wrong cost code will cause trouble later at billing.',
+                        'Check the funding classification and the cost code — a request with the wrong cost code will cause trouble later at billing.',
                         'Check the job location, especially where the requester chose Other and typed it in.',
                         'Look at the audit trail if the request has been round before.',
                     ]],
