@@ -29,6 +29,8 @@ interface HistoryRow {
     label: string;
     status: string;
     remarks: string | null;
+    /** The manager this decision was given for, when made as their OIC. */
+    on_behalf_of: string | null;
     acted_at: string | null;
     /** Project id for an NTP, request id for a request; null when the record is gone. */
     link_id: number | null;
@@ -41,6 +43,10 @@ interface Props {
     ntps: NtpReview[];
     history: HistoryRow[];
     shows_requests: boolean;
+    /** Set while the signed-in user is covering a manager's roster break. */
+    oic_for: { manager: string | null; role_label: string; ends_on: string; notes: string | null } | null;
+    /** Set while the signed-in user is away on a roster break themselves. */
+    on_break: { oic: string | null; ends_on: string } | null;
 }
 
 const sectionLabel: React.CSSProperties = { fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' };
@@ -136,7 +142,7 @@ function RequestCard({ row, onApprove, onReject }: {
 // ── Portal ───────────────────────────────────────────────────────────────────
 type TabKey = 'requests' | 'ntps' | 'history';
 
-export default function ApprovalsIndex({ role, role_label, requests, ntps, history, shows_requests }: Props) {
+export default function ApprovalsIndex({ role, role_label, requests, ntps, history, shows_requests, oic_for, on_break }: Props) {
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
     const [rejectRequest, setRejectRequest] = useState<RequestRow | null>(null);
     const [rejectNtp, setRejectNtp] = useState<NtpReview | null>(null);
@@ -199,10 +205,35 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>For Approval</h1>
                 <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
                     {role
-                        ? <>Items waiting on the <strong style={{ color: '#334155' }}>{role_label}</strong>. Approving passes each one to the next approver; rejecting ends its chain.</>
+                        ? <>Items waiting on the <strong style={{ color: '#334155' }}>{role_label}</strong>{oic_for ? <> and, as OIC, on the <strong style={{ color: '#334155' }}>{oic_for.role_label}</strong></> : null}. Approving passes each one to the next approver; rejecting ends its chain.</>
                         : <>You hold no approval role, so nothing is queued to you. Admins settle steps from the record's own screen.</>}
                 </p>
             </div>
+
+            {oic_for && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+                    <span style={{ fontSize: '20px' }}>🛡️</span>
+                    <div style={{ fontSize: '13px', color: '#1e3a8a' }}>
+                        You are <strong>OIC for {oic_for.manager ?? `the ${oic_for.role_label}`}</strong> until <strong>{oic_for.ends_on}</strong>.
+                        Their {oic_for.role_label} approvals appear in your queue below, and anything you settle is recorded as signed on their behalf.
+                        {oic_for.notes && (
+                            <div style={{ marginTop: '8px', padding: '8px 12px', borderRadius: '8px', background: '#fff', border: '1px solid #bfdbfe', whiteSpace: 'pre-wrap' }}>
+                                <span style={{ fontSize: '10px', fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '2px' }}>Notes from {oic_for.manager ?? 'the manager'}</span>
+                                {oic_for.notes}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {on_break && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+                    <span style={{ fontSize: '20px' }}>🏖️</span>
+                    <div style={{ fontSize: '13px', color: '#065f46' }}>
+                        You are on roster break until <strong>{on_break.ends_on}</strong>. <strong>{on_break.oic ?? 'Your OIC'}</strong> is covering these approvals — you can still sign them yourself.
+                    </div>
+                </div>
+            )}
 
             <div style={{ display: 'flex', gap: '6px', marginBottom: '18px', flexWrap: 'wrap' }}>
                 {tabs.map(t => {
@@ -278,6 +309,9 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
                                                 }}>
                                                     {row.status === 'approved' ? 'Approved' : 'Rejected'}
                                                 </span>
+                                                {row.on_behalf_of && (
+                                                    <span style={{ display: 'block', fontSize: '10.5px', color: '#64748b', marginTop: '4px' }}>as OIC for {row.on_behalf_of}</span>
+                                                )}
                                             </td>
                                             <td style={{ padding: '11px 14px', color: '#64748b' }}>{row.remarks || '—'}</td>
                                             <td style={{ padding: '11px 14px', color: '#64748b', whiteSpace: 'nowrap' }}>{row.acted_at ?? '—'}</td>

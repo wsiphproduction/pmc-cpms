@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\ProjectNtp;
 use App\Models\ProjectRequest;
 use App\Models\ProjectRfq;
+use App\Models\RosterBreak;
 use App\Models\User;
 
 /**
@@ -32,7 +33,7 @@ class ApprovalFlow
 
         $step = $projectRequest->recordApproval($user, $remarks);
         $link = route('requests.show', $projectRequest->id, absolute: false);
-        $label = User::roleLabel($step->role);
+        $label = $step->officeLabel();
 
         if ($projectRequest->approvalChainComplete()) {
             $projectRequest->update(['status' => 'approved', 'status_before_hold' => null]);
@@ -83,7 +84,7 @@ class ApprovalFlow
 
         Notification::notify(
             $projectRequest->requester_id,
-            "Project Request #{$projectRequest->request_no} was rejected by the " . User::roleLabel($step->role) . ".{$reason}",
+            "Project Request #{$projectRequest->request_no} was rejected by the " . $step->officeLabel() . ".{$reason}",
             $link
         );
 
@@ -96,7 +97,7 @@ class ApprovalFlow
 
         Notification::notify(
             $signatories,
-            "Project Request #{$projectRequest->request_no}, which you approved, was rejected by the " . User::roleLabel($step->role) . ".{$reason}",
+            "Project Request #{$projectRequest->request_no}, which you approved, was rejected by the " . $step->officeLabel() . ".{$reason}",
             $link
         );
 
@@ -116,7 +117,7 @@ class ApprovalFlow
 
         $step = $ntp->recordApproval($user, $remarks);
         $project = $ntp->project;
-        $label = User::roleLabel($step->role);
+        $label = $step->officeLabel();
 
         $ntp->update([
             'reviewed_by' => $user->id,
@@ -160,7 +161,7 @@ class ApprovalFlow
         }
 
         $step = $ntp->recordRejection($user, $remarks);
-        $label = User::roleLabel($step->role);
+        $label = $step->officeLabel();
 
         $ntp->update([
             'status'         => 'rejected',
@@ -284,11 +285,18 @@ class ApprovalFlow
         $this->notifyRoles([$role], $message, $link);
     }
 
-    /** @param  array<int, string>  $roles */
+    /**
+     * Everyone holding any of the roles — plus whoever is covering one of
+     * them as OIC today, since the item lands in their queue too.
+     *
+     * @param  array<int, string>  $roles
+     */
     private function notifyRoles(array $roles, string $message, string $link, ?User $except = null): void
     {
         $recipients = User::whereHas('roles', fn ($q) => $q->whereIn('name', $roles))
             ->pluck('id')
+            ->merge(RosterBreak::oicIdsCovering($roles))
+            ->unique()
             ->reject(fn ($id) => $except && (int) $id === $except->id);
 
         Notification::notify($recipients, $message, $link);

@@ -3,6 +3,7 @@
 namespace App\Models\Concerns;
 
 use App\Models\ApprovalStep;
+use App\Models\RosterBreak;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -80,13 +81,14 @@ trait HasApprovalChain
     }
 
     /**
-     * Whether a user may settle a given step. Defaults to simply holding the
-     * step's role; models override this where the holder is narrower than the
-     * role (an NTP's first step belongs to *that project's* department user).
+     * Whether a user may settle a given step. Defaults to acting as the step's
+     * role — holding it, or covering it as OIC during a roster break; models
+     * override this where the holder is narrower than the role (an NTP's
+     * department step belongs to *that project's* department user).
      */
     public function approvalStepAuthorizes(ApprovalStep $step, User $user): bool
     {
-        return $user->hasRole($step->role);
+        return $user->actsAs($step->role);
     }
 
     /** Settle the current step. Returns the step, or null if there was nothing to act on. */
@@ -127,6 +129,25 @@ trait HasApprovalChain
                 ->where('status', '!=', 'approved'));
     }
 
+    /**
+     * Records sitting in the queue of any of the given roles — what an OIC
+     * sees, holding one role and covering another.
+     *
+     * @param  array<int, string>  $roles
+     */
+    public function scopeAwaitingAnyRole(Builder $query, array $roles): Builder
+    {
+        if ($roles === []) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->where(function (Builder $q) use ($roles) {
+            foreach ($roles as $role) {
+                $q->orWhere(fn (Builder $inner) => $inner->awaitingRole($role));
+            }
+        });
+    }
+
     /** Any chain still open — nothing rejected and at least one step pending. */
     public function scopeApprovalPending(Builder $query): Builder
     {
@@ -147,6 +168,9 @@ trait HasApprovalChain
             'status'     => $step->status,
             'is_current' => $current !== null && $current->id === $step->id,
             'actor'      => $step->user?->name,
+            // Set when the signature was given by an OIC standing in for the
+            // office; names the manager they covered.
+            'on_behalf_of' => $step->onBehalfOf?->name,
             'acted_at'   => $step->acted_at?->format('M d, Y h:i A'),
             'remarks'    => $step->remarks,
         ])->values()->all();
@@ -169,6 +193,12 @@ trait HasApprovalChain
         $step->update([
             'status'   => $status,
             'user_id'  => $user->id,
+            // Signed as OIC: remember whose seat this signature stands in for.
+            // Somebody holding the role themselves (or an admin) signs as
+            // themselves and leaves this empty.
+            'on_behalf_of_user_id' => $user->hasRole($step->role)
+                ? null
+                : RosterBreak::coverFor($user, $step->role)?->user_id,
             'acted_at' => now(),
             'remarks'  => $remarks,
         ]);

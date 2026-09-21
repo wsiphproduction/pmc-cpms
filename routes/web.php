@@ -14,6 +14,7 @@ use App\Http\Controllers\ProjectHubController;
 use App\Http\Controllers\PrintController;
 use App\Http\Controllers\ProjectRequestController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\RosterBreakController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SupplierQuotationController;
 use App\Http\Controllers\TechnicalFeedbackController;
@@ -105,6 +106,14 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('approvals/requests/{projectRequest}/reject',  [ApprovalController::class, 'rejectRequest'])->name('approvals.requests.reject');
         Route::patch('approvals/ntps/{ntp}/approve',                [ApprovalController::class, 'approveNtp'])->name('approvals.ntps.approve');
         Route::patch('approvals/ntps/{ntp}/reject',                 [ApprovalController::class, 'rejectNtp'])->name('approvals.ntps.reject');
+    });
+
+    // ── Roster Break (the PMD Dept Manager names an OIC while away) ────────
+    Route::middleware(['role:pmd_dept_manager'])->group(function () {
+        Route::get('roster-break',                  [RosterBreakController::class, 'index'])->name('roster-break.index');
+        Route::post('roster-break',                 [RosterBreakController::class, 'store'])->name('roster-break.store');
+        Route::put('roster-break/{rosterBreak}',    [RosterBreakController::class, 'update'])->name('roster-break.update');
+        Route::delete('roster-break/{rosterBreak}', [RosterBreakController::class, 'destroy'])->name('roster-break.destroy');
     });
 
     // Project Management

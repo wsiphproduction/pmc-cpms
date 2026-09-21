@@ -32,17 +32,34 @@ class ApprovalController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $role = $this->actingRole($user);
+        $roles = $user->actingApprovalRoles();
+        $role = $roles[0] ?? null;
+
+        // The break the user is covering under, or away on, today — the page
+        // banners both so nobody wonders why a queue grew or who is minding it.
+        $duty = $user->activeOicDuty();
+        $away = $user->activeRosterBreak();
 
         return Inertia::render('approvals/index', [
             'role'       => $role,
             'role_label' => User::roleLabel($role),
-            'requests'   => $this->pendingRequests($role),
-            'ntps'       => $this->pendingNtps($role),
+            'requests'   => $this->pendingRequests($roles),
+            'ntps'       => $this->pendingNtps($roles),
             'history'    => $this->history($user),
             // A Division Manager only signs NTPs; hide the request queue entirely
             // rather than showing them a tab that can never hold anything.
-            'shows_requests' => in_array($role, ProjectRequest::APPROVAL_CHAIN, true),
+            'shows_requests' => array_intersect($roles, ProjectRequest::APPROVAL_CHAIN) !== [],
+            'oic_for' => $duty ? [
+                'manager'    => $duty->user?->name,
+                'role_label' => User::roleLabel($duty->role),
+                'ends_on'    => $duty->ends_on->format('M d, Y'),
+                // Whatever the manager left for their OIC when scheduling.
+                'notes'      => $duty->notes,
+            ] : null,
+            'on_break' => $away ? [
+                'oic'     => $away->oic?->name,
+                'ends_on' => $away->ends_on->format('M d, Y'),
+            ] : null,
         ]);
     }
 
@@ -104,24 +121,25 @@ class ApprovalController extends Controller
      */
     public static function pendingCountFor(User $user): int
     {
-        $role = self::resolveActingRole($user);
+        $roles = $user->actingApprovalRoles();
 
-        if ($role === null) {
+        if ($roles === []) {
             return 0;
         }
 
-        return ProjectRequest::awaitingRole($role)->count()
-            + ProjectNtp::awaitingRole($role)->count();
+        return ProjectRequest::awaitingAnyRole($roles)->count()
+            + ProjectNtp::awaitingAnyRole($roles)->count();
     }
 
-    private function pendingRequests(?string $role): array
+    /** @param  array<int, string>  $roles */
+    private function pendingRequests(array $roles): array
     {
-        if ($role === null) {
+        if ($roles === []) {
             return [];
         }
 
-        return ProjectRequest::awaitingRole($role)
-            ->with(['requester', 'approvals.user', 'attachments'])
+        return ProjectRequest::awaitingAnyRole($roles)
+            ->with(['requester', 'approvals.user', 'approvals.onBehalfOf', 'attachments'])
             ->latest()
             ->get()
             ->map(fn (ProjectRequest $projectRequest) => [
@@ -146,18 +164,19 @@ class ApprovalController extends Controller
             ])->values()->all();
     }
 
-    private function pendingNtps(?string $role): array
+    /** @param  array<int, string>  $roles */
+    private function pendingNtps(array $roles): array
     {
-        if ($role === null) {
+        if ($roles === []) {
             return [];
         }
 
-        return ProjectNtp::awaitingRole($role)
+        return ProjectNtp::awaitingAnyRole($roles)
             // The presenter dereferences the project, and deleting a project
             // leaves its NTPs behind — without this one soft-deleted project
             // takes down the whole portal.
             ->whereHas('project')
-            ->with(['project.projectRequest', 'creator', 'reviewer', 'rfq.items', 'approvals.user'])
+            ->with(['project.projectRequest', 'creator', 'reviewer', 'rfq.items', 'approvals.user', 'approvals.onBehalfOf'])
             ->latest()
             ->get()
             ->map(fn (ProjectNtp $ntp) => NtpPresenter::row($ntp))
@@ -168,7 +187,7 @@ class ApprovalController extends Controller
     private function history(User $user): array
     {
         return $user->approvalSteps()
-            ->with('approvable')
+            ->with(['approvable', 'onBehalfOf'])
             ->where('status', '!=', 'pending')
             ->latest('acted_at')
             ->take(30)
@@ -184,6 +203,8 @@ class ApprovalController extends Controller
                         : ($record?->request_no . ' — ' . $record?->title),
                     'status'   => $step->status,
                     'remarks'  => $step->remarks,
+                    // Named when this decision was given as OIC for that manager.
+                    'on_behalf_of' => $step->onBehalfOf?->name,
                     'acted_at' => $step->acted_at?->format('M d, Y h:i A'),
                     // The page builds the href with Ziggy so it carries the same base
                     // URL as every other link — a server-side relative route drops
@@ -193,24 +214,4 @@ class ApprovalController extends Controller
             })->values()->all();
     }
 
-    private function actingRole(User $user): ?string
-    {
-        return self::resolveActingRole($user);
-    }
-
-    /**
-     * The approval role this user acts as. Admins have no queue of their own —
-     * they can settle any step from the record's own screen — so the portal
-     * shows them nothing rather than a role they do not hold.
-     */
-    private static function resolveActingRole(User $user): ?string
-    {
-        foreach (User::APPROVAL_ROLES as $role) {
-            if ($user->hasRole($role)) {
-                return $role;
-            }
-        }
-
-        return null;
-    }
 }

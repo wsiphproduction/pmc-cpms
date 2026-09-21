@@ -97,7 +97,7 @@ class ProjectNtp extends Model
     public function approvalStepAuthorizes(ApprovalStep $step, User $user): bool
     {
         if (! in_array($step->role, self::REVIEW_ROLES, true)) {
-            return $user->hasRole($step->role);
+            return $user->actsAs($step->role);
         }
 
         $project = $this->project;

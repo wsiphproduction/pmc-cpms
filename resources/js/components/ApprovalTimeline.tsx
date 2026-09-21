@@ -5,6 +5,8 @@ export interface ApprovalStep {
     status: 'pending' | 'approved' | 'rejected';
     is_current: boolean;
     actor: string | null;
+    /** The manager the actor signed for, when the step was settled by an OIC. */
+    on_behalf_of?: string | null;
     acted_at: string | null;
     remarks: string | null;
 }
@@ -33,7 +35,7 @@ export default function ApprovalTimeline({ steps, compact = false }: { steps: Ap
                         <div
                             title={[
                                 step.role_label,
-                                step.actor ? `by ${step.actor}` : null,
+                                step.actor ? `by ${step.actor}${step.on_behalf_of ? ` (OIC for ${step.on_behalf_of})` : ''}` : null,
                                 step.acted_at,
                                 step.remarks ? `“${step.remarks}”` : null,
                             ].filter(Boolean).join(' · ')}
@@ -60,11 +62,11 @@ export default function ApprovalTimeline({ steps, compact = false }: { steps: Ap
                                     color: waiting ? '#1d4ed8' : (step.status === 'pending' ? '#94a3b8' : meta.color),
                                     whiteSpace: 'nowrap',
                                 }}>
-                                    {step.role_label}
+                                    {step.role_label}{step.on_behalf_of ? ' (OIC)' : ''}
                                 </span>
                                 {!compact && (step.actor || waiting) && (
                                     <span style={{ display: 'block', fontSize: '10.5px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                                        {waiting ? 'Awaiting decision' : `${step.actor}${step.acted_at ? ` · ${step.acted_at}` : ''}`}
+                                        {waiting ? 'Awaiting decision' : `${step.actor}${step.on_behalf_of ? ` for ${step.on_behalf_of}` : ''}${step.acted_at ? ` · ${step.acted_at}` : ''}`}
                                     </span>
                                 )}
                             </span>
@@ -94,7 +96,7 @@ export function ApprovalRemarks({ steps }: { steps: ApprovalStep[] }) {
                     border: `1px solid ${step.status === 'rejected' ? '#fecaca' : '#e2e8f0'}`,
                 }}>
                     <strong style={{ color: step.status === 'rejected' ? '#b91c1c' : '#334155' }}>
-                        {step.role_label}
+                        {step.role_label}{step.on_behalf_of ? ' (OIC)' : ''}
                     </strong>
                     {step.actor ? ` (${step.actor})` : ''} — {step.remarks}
                 </div>

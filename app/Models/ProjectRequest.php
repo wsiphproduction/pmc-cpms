@@ -98,7 +98,8 @@ class ProjectRequest extends Model
     {
         return $step->role === User::ROLE_ENGINEER
             ? $user->hasRole(User::DELIVERY_ROLES)
-            : $user->hasRole($step->role);
+            // Holding the role, or covering it as OIC during a roster break.
+            : $user->actsAs($step->role);
     }
 
     public function scopeInApproval($query)

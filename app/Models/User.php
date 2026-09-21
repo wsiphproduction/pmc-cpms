@@ -112,6 +112,68 @@ class User extends Authenticatable
         return $this->hasRole(self::APPROVAL_ROLES);
     }
 
+    // ── Roster breaks ─────────────────────────────────────────────────────
+
+    /** Breaks this user has taken or scheduled as the manager going away. */
+    public function rosterBreaks(): HasMany
+    {
+        return $this->hasMany(RosterBreak::class, 'user_id');
+    }
+
+    /** Breaks during which this user covers for somebody else. */
+    public function oicDuties(): HasMany
+    {
+        return $this->hasMany(RosterBreak::class, 'oic_user_id');
+    }
+
+    /** The break this user is away on today, if any. */
+    public function activeRosterBreak(): ?RosterBreak
+    {
+        return $this->rosterBreaks()->activeOn()->with('oic')->first();
+    }
+
+    /** The break under which this user is somebody's OIC today, if any. */
+    public function activeOicDuty(): ?RosterBreak
+    {
+        return $this->oicDuties()->activeOn()->with('user')->first();
+    }
+
+    /**
+     * The roles this user covers as OIC today. Cached per request: the
+     * approval chain asks on every step it authorises.
+     *
+     * @return array<int, string>
+     */
+    public function coveredRoles(): array
+    {
+        return $this->coveredRoles ??= $this->oicDuties()->activeOn()->pluck('role')->unique()->values()->all();
+    }
+
+    /**
+     * Whether this user may act as the given role right now: either they
+     * hold it, or they are the OIC covering it during a roster break. This is
+     * what the approval chains check, so the cover applies wherever the role
+     * is asked for rather than being wired in step by step.
+     */
+    public function actsAs(string $role): bool
+    {
+        return $this->hasRole($role) || in_array($role, $this->coveredRoles(), true);
+    }
+
+    /**
+     * The approval roles this user acts as, in the chains' signing order —
+     * their own first, then any they cover.
+     *
+     * @return array<int, string>
+     */
+    public function actingApprovalRoles(): array
+    {
+        return array_values(array_filter(self::APPROVAL_ROLES, fn (string $role) => $this->actsAs($role)));
+    }
+
+    /** @var array<int, string>|null */
+    private ?array $coveredRoles = null;
+
     /** Approval-chain steps this user has been the one to settle. */
     public function approvalSteps(): HasMany
     {
