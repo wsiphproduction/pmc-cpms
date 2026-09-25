@@ -16,10 +16,9 @@ class CommentController extends Controller
      */
     public function store(Request $request, ProjectRequest $projectRequest): JsonResponse
     {
-        // Only project engineers (approver) and admins may comment.
-        if (!auth()->user()->hasRole(['approver', 'admin'])) {
-            return response()->json(['error' => 'Unauthorized'], 403);
-        }
+        // Anyone who can see the request may discuss it: PMD / division roles on
+        // every request, department users on their own.
+        $this->authorize('view', $projectRequest);
 
         $request->validate([
             'content' => ['required', 'string', 'max:2000'],
@@ -67,12 +66,7 @@ class CommentController extends Controller
             );
         }
 
-        return response()->json([
-            'id'      => $comment->id,
-            'content' => $comment->content,
-            'author'  => $comment->user->name ?? 'Unknown',
-            'date'    => $comment->created_at->format('M d, H:i'),
-        ]);
+        return response()->json($this->commentData($comment));
     }
 
     /**
@@ -80,18 +74,15 @@ class CommentController extends Controller
      */
     public function index(ProjectRequest $projectRequest): JsonResponse
     {
+        $this->authorize('view', $projectRequest);
+
         $comments = Comment::where('reference_id', $projectRequest->id)
             ->where('reference_type', ProjectRequest::class)
             ->where('status', 'active')
             ->with('user')
             ->oldest()
             ->get()
-            ->map(fn($c) => [
-                'id'      => $c->id,
-                'content' => $c->content,
-                'author'  => $c->user->name ?? 'Unknown',
-                'date'    => $c->created_at->format('M d, H:i'),
-            ]);
+            ->map(fn (Comment $c) => $this->commentData($c));
 
         return response()->json($comments);
     }
@@ -101,15 +92,34 @@ class CommentController extends Controller
      */
     public function destroy(Comment $comment): JsonResponse
     {
-        // Project engineers (approver) and admins may delete any comment;
-        // otherwise only the comment's own author can delete it.
-        $user = auth()->user();
-        if (!$user->hasRole(['approver', 'admin']) && $comment->user_id !== $user->id) {
+        if (!$this->canDelete($comment)) {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
 
         $comment->delete();
 
         return response()->json(['success' => true]);
+    }
+
+    /**
+     * Project engineers (approver) and admins may delete any comment;
+     * otherwise only the comment's own author can delete it.
+     */
+    private function canDelete(Comment $comment): bool
+    {
+        $user = auth()->user();
+
+        return $user->hasRole(['approver', 'admin']) || $comment->user_id === $user->id;
+    }
+
+    private function commentData(Comment $comment): array
+    {
+        return [
+            'id'         => $comment->id,
+            'content'    => $comment->content,
+            'author'     => $comment->user->name ?? 'Unknown',
+            'date'       => $comment->created_at->format('M d, H:i'),
+            'can_delete' => $this->canDelete($comment),
+        ];
     }
 }

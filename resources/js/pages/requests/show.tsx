@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import ApprovalTimeline, { ApprovalRemarks, ApprovalStep } from '@/components/ApprovalTimeline';
 import { FileHistory, FileVersion, VersionBadge } from '@/components/FileVersions';
 import { useConfirm } from '@/components/useConfirm';
+import { commentError } from '@/lib/comments';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Attachment {
@@ -21,6 +22,7 @@ interface Comment {
     content: string;
     author: string;
     date: string;
+    can_delete: boolean;
 }
 
 interface User {
@@ -426,11 +428,12 @@ function FeedbackSection({ feedbacks, onEdit, onDelete }: {
 }
 
 // ── Comments Section ───────────────────────────────────────────────────────
-function CommentsSection({ projectRequestId, canComment }: { projectRequestId: number; canComment: boolean }) {
+function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
     const [comments, setComments] = useState<Comment[]>([]);
     const [loading, setLoading] = useState(true);
     const [newComment, setNewComment] = useState('');
     const [posting, setPosting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
     // Read Laravel's XSRF-TOKEN cookie (refreshed on every response) rather than
@@ -457,6 +460,7 @@ function CommentsSection({ projectRequestId, canComment }: { projectRequestId: n
     const postComment = async () => {
         if (!newComment.trim()) return;
         setPosting(true);
+        setError(null);
         try {
             const res = await fetch(route('comments.store', projectRequestId), {
                 method: 'POST',
@@ -480,9 +484,12 @@ function CommentsSection({ projectRequestId, canComment }: { projectRequestId: n
                     only: ['projectRequest'],
                     onFinish: () => loadComments(),
                 });
+            } else {
+                setError(await commentError(res));
             }
         } catch (err) {
             console.error(err);
+            setError('Could not reach the server. Please try again.');
         } finally {
             setPosting(false);
         }
@@ -531,7 +538,7 @@ function CommentsSection({ projectRequestId, canComment }: { projectRequestId: n
                                         <span style={{ fontSize: '13px', fontWeight: 700, color: '#374151' }}>{c.author}</span>
                                         <span style={{ fontSize: '11.5px', color: '#9ca3af' }}>{c.date}</span>
                                     </div>
-                                    {canComment && (
+                                    {c.can_delete && (
                                         <button
                                             onClick={() => deleteComment(c.id)}
                                             title="Delete comment"
@@ -549,28 +556,27 @@ function CommentsSection({ projectRequestId, canComment }: { projectRequestId: n
                     </div>
                 )}
 
-                {canComment && (
-                    <div>
-                        <textarea
-                            rows={3}
-                            value={newComment}
-                            onChange={e => setNewComment(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postComment(); }}
-                            placeholder="Write a comment… (Ctrl+Enter to submit)"
-                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e5e7eb', fontSize: '13px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
-                            onFocus={e => (e.target.style.borderColor = '#2563eb')}
-                            onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
-                        />
-                        <button
-                            onClick={postComment}
-                            disabled={posting || !newComment.trim()}
-                            style={{ marginTop: '8px', padding: '9px 20px', borderRadius: '8px', background: posting || !newComment.trim() ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: posting || !newComment.trim() ? 'not-allowed' : 'pointer', transition: 'background 0.15s', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                        >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                            {posting ? 'Posting…' : 'Post Comment'}
-                        </button>
-                    </div>
-                )}
+                <div>
+                    <textarea
+                        rows={3}
+                        value={newComment}
+                        onChange={e => setNewComment(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) postComment(); }}
+                        placeholder="Write a comment… (Ctrl+Enter to submit)"
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1.5px solid #e5e7eb', fontSize: '13px', resize: 'vertical', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', transition: 'border-color 0.15s' }}
+                        onFocus={e => (e.target.style.borderColor = '#2563eb')}
+                        onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
+                    />
+                    {error && <p style={{ fontSize: '12px', color: '#dc2626', margin: '6px 0 0' }}>{error}</p>}
+                    <button
+                        onClick={postComment}
+                        disabled={posting || !newComment.trim()}
+                        style={{ marginTop: '8px', padding: '9px 20px', borderRadius: '8px', background: posting || !newComment.trim() ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: posting || !newComment.trim() ? 'not-allowed' : 'pointer', transition: 'background 0.15s', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        {posting ? 'Posting…' : 'Post Comment'}
+                    </button>
+                </div>
             </div>
         </div>
     );
@@ -841,7 +847,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
 
             <FeedbackSection feedbacks={feedbacks} onEdit={openEditFeedback} onDelete={deleteFeedback} />
 
-            <CommentsSection projectRequestId={projectRequest.id} canComment={role === 'approver' || role === 'admin'} />
+            <CommentsSection projectRequestId={projectRequest.id} />
         </AuthenticatedLayout>
     );
 }

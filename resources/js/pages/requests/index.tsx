@@ -2,6 +2,7 @@ import { Head, Link, router } from '@inertiajs/react';
 import { useState, useEffect, useRef } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { useConfirm } from '@/components/useConfirm';
+import { commentError } from '@/lib/comments';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Comment {
@@ -9,6 +10,7 @@ interface Comment {
     author: string;
     date: string;
     content: string;
+    can_delete: boolean;
 }
 
 interface ProjectRequest {
@@ -107,7 +109,8 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
     const [newComment, setNewComment] = useState('');
     const [loading, setLoading]       = useState(false);
     const [posting, setPosting]       = useState(false);
-    const bottomRef                   = useRef<HTMLDivElement>(null);
+    const [error, setError]           = useState<string | null>(null);
+    const bottomRef                  = useRef<HTMLDivElement>(null);
 
     // Read Laravel's XSRF-TOKEN cookie (refreshed on every response) rather than
     // the <meta> tag, which goes stale after Inertia reloads / session rotation.
@@ -137,6 +140,7 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
     const postComment = async () => {
         if (!request || !newComment.trim()) return;
         setPosting(true);
+        setError(null);
         try {
             const res = await fetch(route('comments.store', request.id), {
                 method: 'POST',
@@ -155,9 +159,12 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
                 // refresh the list so the status column reflects it. reload() keeps
                 // scroll + component state automatically, so the modal stays open.
                 router.reload({ only: ['requests'] });
+            } else {
+                setError(await commentError(res));
             }
         } catch (err) {
             console.error(err);
+            setError('Could not reach the server. Please try again.');
         } finally {
             setPosting(false);
         }
@@ -220,15 +227,17 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
                                         <span style={{ fontSize: '12px', fontWeight: 700, color: '#374151' }}>{c.author}</span>
                                         <span style={{ fontSize: '11px', color: '#9ca3af' }}>{c.date}</span>
                                     </div>
-                                    <button
-                                        onClick={() => deleteComment(c.id)}
-                                        title="Delete comment"
-                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', display: 'flex', padding: '2px', borderRadius: '4px' }}
-                                        onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
-                                        onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
-                                    >
-                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
-                                    </button>
+                                    {c.can_delete && (
+                                        <button
+                                            onClick={() => deleteComment(c.id)}
+                                            title="Delete comment"
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d1d5db', display: 'flex', padding: '2px', borderRadius: '4px' }}
+                                            onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                                            onMouseLeave={e => (e.currentTarget.style.color = '#d1d5db')}
+                                        >
+                                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                                        </button>
+                                    )}
                                 </div>
                                 <p style={{ fontSize: '12.5px', color: '#334155', margin: 0, lineHeight: 1.6, paddingLeft: '31px' }}>{c.content}</p>
                             </div>
@@ -250,6 +259,7 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
                         onFocus={e => (e.target.style.borderColor = '#2563eb')}
                         onBlur={e => (e.target.style.borderColor = '#e5e7eb')}
                     />
+                    {error && <p style={{ fontSize: '12px', color: '#dc2626', margin: '6px 0 0' }}>{error}</p>}
                     <button
                         onClick={postComment}
                         disabled={posting || !newComment.trim()}
