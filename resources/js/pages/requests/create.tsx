@@ -1,6 +1,7 @@
 import { Head, router } from '@inertiajs/react';
-import { useMemo, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import SearchableSelect from '@/components/SearchableSelect';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface UploadRow {
@@ -61,65 +62,6 @@ const inputStyle: React.CSSProperties = {
 
 const focus = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => (e.target.style.borderColor = '#2563eb');
 const blur  = (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => (e.target.style.borderColor = '#e5e7eb');
-
-function SearchableSelect({
-    value, onChange, options, placeholder, required, listId,
-}: {
-    value: string;
-    onChange: (value: string) => void;
-    options: MasterOption[];
-    placeholder: string;
-    required?: boolean;
-    listId: string;
-}) {
-    const [open, setOpen] = useState(false);
-    const optionText = (option: MasterOption) =>
-        option.label ?? (option.description ? `${option.name} — ${option.description}` : option.name);
-    const filtered = useMemo(() => {
-        const needle = value.trim().toLowerCase();
-        return needle
-            ? options.filter(option => optionText(option).toLowerCase().includes(needle)).slice(0, 8)
-            : options.slice(0, 8);
-    }, [options, value]);
-
-    return (
-        <div style={{ position: 'relative' }}>
-            <input
-                value={value}
-                onChange={e => { onChange(e.target.value); setOpen(true); }}
-                onFocus={e => { focus(e); setOpen(true); }}
-                onBlur={e => { blur(e); window.setTimeout(() => setOpen(false), 120); }}
-                required={required}
-                placeholder={placeholder}
-                role="combobox"
-                aria-expanded={open}
-                aria-controls={listId}
-                autoComplete="off"
-                style={{ ...inputStyle, paddingRight: '34px' }}
-            />
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" style={{ position: 'absolute', right: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
-                <polyline points="6 9 12 15 18 9" />
-            </svg>
-            {open && (
-                <div id={listId} role="listbox" style={{ position: 'absolute', top: 'calc(100% + 5px)', left: 0, right: 0, zIndex: 50, background: '#fff', border: '1px solid #dbe3ef', borderRadius: '8px', boxShadow: '0 14px 32px rgba(15,23,42,0.14)', overflow: 'hidden', maxHeight: '220px', overflowY: 'auto' }}>
-                    {filtered.length ? filtered.map(option => (
-                        <button
-                            key={option.id}
-                            type="button"
-                            onMouseDown={e => e.preventDefault()}
-                            onClick={() => { onChange(option.name); setOpen(false); }}
-                            style={{ width: '100%', border: 'none', background: option.name === value ? '#eff6ff' : '#fff', padding: '9px 12px', textAlign: 'left', fontSize: '13px', color: '#334155', cursor: 'pointer' }}
-                        >
-                            {optionText(option)}
-                        </button>
-                    )) : (
-                        <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>No results found</div>
-                    )}
-                </div>
-            )}
-        </div>
-    );
-}
 
 // ── Upload Section ─────────────────────────────────────────────────────────
 function UploadSection({ label, icon, accept, placeholder, rows, onAdd, onRemove, onFileChange, onDescChange }: {

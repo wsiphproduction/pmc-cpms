@@ -2,6 +2,7 @@ import { Head } from '@inertiajs/react';
 import { useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { FileHistory, FileVersion, ReplaceFileButton, VersionBadge } from '@/components/FileVersions';
+import SearchableSelect from '@/components/SearchableSelect';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface ExistingAttachment {
@@ -44,6 +45,7 @@ interface Props {
 interface MasterOption {
     id: number;
     name: string;
+    description?: string | null;
     /** Fuller dropdown line (e.g. cost code — department — description). */
     label?: string | null;
 }
@@ -201,6 +203,17 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
 
     const requiresCostCode = opex || capex;
 
+    // Same rule as the create form: the cost code only applies to OPEX/CAPEX,
+    // so unticking both clears it.
+    const setFunding = (field: 'opex' | 'capex' | 'for_budgeting', value: boolean) => {
+        setFundingError('');
+        const next = { opex, capex, for_budgeting: forBudgeting, [field]: value };
+        if (field === 'opex') setOpex(value);
+        if (field === 'capex') setCapex(value);
+        if (field === 'for_budgeting') setForBudgeting(value);
+        if (!next.opex && !next.capex) setCostcode('');
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
@@ -319,29 +332,15 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                 <SectionTitle>Financials &amp; Budgeting</SectionTitle>
                 <div data-tour="request-funding" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '28px' }}>
                     <div>
-                        <FormLabel required={requiresCostCode}>Cost Code</FormLabel>
-                        <select value={costcode} onChange={e => { setCostcode(e.target.value); setCostcodeError(''); }} onFocus={focus} onBlur={blur} style={{ ...inputStyle, cursor: 'pointer', borderColor: costcodeError ? '#dc2626' : undefined }}>
-                            <option value="">Select Cost Code…</option>
-                            {!hasOption(costCodes, costcode) && <option value={costcode}>{costcode}</option>}
-                            {costCodes.map(code => <option key={code.id} value={code.name}>{code.label ?? code.name}</option>)}
-                        </select>
-                        {costcodeError && (
-                            <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '5px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                                {costcodeError}
-                            </p>
-                        )}
-                    </div>
-                    <div>
                         <FormLabel required>Funding Classification</FormLabel>
                         <div style={{ background: '#f8fafc', border: `1.5px solid ${fundingError ? '#fca5a5' : '#e5e7eb'}`, borderRadius: '8px', padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-around', height: 'calc(100% - 22px)' }}>
                             {[
-                                ['opex',         'OPEX',          opex,         setOpex]         as const,
-                                ['capex',        'CAPEX',         capex,        setCapex]        as const,
-                                ['for_budgeting','For Budgeting', forBudgeting, setForBudgeting] as const,
-                            ].map(([key, lbl, val, setter]) => (
+                                ['opex',         'OPEX',          opex]         as const,
+                                ['capex',        'CAPEX',         capex]        as const,
+                                ['for_budgeting','For Budgeting', forBudgeting] as const,
+                            ].map(([key, lbl, val]) => (
                                 <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '13px', fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                                    <input type="checkbox" checked={val} onChange={e => { setter(e.target.checked); setFundingError(''); }} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
+                                    <input type="checkbox" checked={val} onChange={e => setFunding(key, e.target.checked)} style={{ width: '15px', height: '15px', accentColor: '#2563eb', cursor: 'pointer' }} />
                                     {lbl}
                                 </label>
                             ))}
@@ -351,6 +350,20 @@ export default function Edit({ projectRequest, jobTypes, jobLocations, costCodes
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                                 {fundingError}
                             </p>
+                        )}
+                    </div>
+                    <div>
+                        {requiresCostCode && (
+                            <>
+                                <FormLabel required>Cost Code</FormLabel>
+                                <SearchableSelect value={costcode} onChange={value => { setCostcode(value); setCostcodeError(''); }} options={costCodes} placeholder="Type or select cost code..." required listId="cost-code-options" />
+                                {costcodeError && (
+                                    <p style={{ fontSize: '11.5px', color: '#dc2626', margin: '5px 0 0', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                                        {costcodeError}
+                                    </p>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>
