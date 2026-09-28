@@ -54,7 +54,7 @@ export default function ReportsIndex({ summary }: Props) {
                 </p>
             </div>
 
-            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px', maxWidth: '760px' }}>
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '24px 26px' }}>
                 <div style={{ fontSize: '10.5px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '1px', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '18px' }}>
                     My Accomplishment Report
                 </div>
