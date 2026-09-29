@@ -31,6 +31,32 @@ it('lets PMD roles other than the engineer comment on a request', function () {
     expect($pr->fresh()->status)->toBe('pending');
 });
 
+it('puts a pending request on hold when the engineer comments', function () {
+    $engineer = makeUserWithRoleForComments(User::ROLE_ENGINEER);
+    $pr = ProjectRequest::factory()->create(['status' => 'pending']);
+
+    $this->actingAs($engineer)
+        ->postJson(route('comments.store', $pr), ['content' => 'Please attach photos.'])
+        ->assertOk();
+
+    expect($pr->fresh())
+        ->status->toBe('hold')
+        ->status_before_hold->toBe('pending');
+});
+
+it('leaves a fully approved request alone when the engineer comments', function (string $status) {
+    $engineer = makeUserWithRoleForComments(User::ROLE_ENGINEER);
+    $pr = ProjectRequest::factory()->create(['status' => $status]);
+
+    $this->actingAs($engineer)
+        ->postJson(route('comments.store', $pr), ['content' => 'Noted for the site visit.'])
+        ->assertOk();
+
+    expect($pr->fresh())
+        ->status->toBe($status)
+        ->status_before_hold->toBeNull();
+})->with(['approved', 'ongoing']);
+
 it('lets the requester comment on their own request', function () {
     $requestor = makeUserWithRoleForComments(User::ROLE_REQUESTOR);
     $pr = ProjectRequest::factory()->create(['requester_id' => $requestor->id]);

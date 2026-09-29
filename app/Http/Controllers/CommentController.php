@@ -49,10 +49,12 @@ class CommentController extends Controller
 
         // Whenever a Project Engineer (approver role) comments, put the request
         // ON HOLD so the requester knows action is needed — except when it is
-        // already in a final state (completed/rejected) or already on hold.
+        // already fully approved (approved/ongoing), in a final state
+        // (completed/rejected) or already on hold. Holding an approved request
+        // would also reopen it to the requester for editing and deletion.
         if (
             auth()->user()->hasRole('approver')
-            && !in_array($projectRequest->status, ['completed', 'rejected', 'hold'], true)
+            && !in_array($projectRequest->status, ['approved', 'ongoing', 'completed', 'rejected', 'hold'], true)
         ) {
             $projectRequest->update([
                 'status_before_hold' => $projectRequest->status,
