@@ -226,6 +226,35 @@ function DepartmentSelect({ value, options, onChange, required, placeholder = 'S
     );
 }
 
+// ── Pagination ─────────────────────────────────────────────────────────────
+const PER_PAGE = 10;
+
+const pageNumbers = (page: number, totalPages: number): (number | '…')[] => {
+    if (totalPages <= 7) return Array.from({ length: totalPages }, (_, i) => i + 1);
+    if (page <= 4) return [1, 2, 3, 4, 5, '…', totalPages];
+    if (page >= totalPages - 3) return [1, '…', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+    return [1, '…', page - 1, page, page + 1, '…', totalPages];
+};
+
+function PageButtons({ page, totalPages, onPage }: { page: number; totalPages: number; onPage: (p: number) => void }) {
+    if (totalPages <= 1) return null;
+    const btn = (disabled: boolean): React.CSSProperties => ({ padding: '4px 10px', borderRadius: '5px', border: '1px solid #e2e8f0', background: '#fff', color: disabled ? '#cbd5e1' : '#374151', cursor: disabled ? 'default' : 'pointer', fontSize: '12px' });
+    return (
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            <button type="button" onClick={() => onPage(page - 1)} disabled={page === 1} style={btn(page === 1)}>‹ Prev</button>
+            {pageNumbers(page, totalPages).map((n, i) =>
+                n === '…'
+                    ? <span key={`e${i}`} style={{ padding: '4px 6px', color: '#94a3b8' }}>…</span>
+                    : <button key={n} type="button" onClick={() => onPage(n)}
+                        style={{ padding: '4px 10px', borderRadius: '5px', border: '1px solid #e2e8f0', background: n === page ? '#2563eb' : '#fff', color: n === page ? '#fff' : '#374151', cursor: 'pointer', fontSize: '12px', fontWeight: n === page ? 700 : 400 }}>
+                        {n}
+                      </button>
+            )}
+            <button type="button" onClick={() => onPage(page + 1)} disabled={page === totalPages} style={btn(page === totalPages)}>Next ›</button>
+        </div>
+    );
+}
+
 // ── Main Page ──────────────────────────────────────────────────────────────
 export default function UsersIndex({ users, trashedUsers, roles, departments, divisions = [], singletonRoles }: Props) {
     const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string> }>();
@@ -256,6 +285,20 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
         const q = search.toLowerCase();
         return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
     });
+
+    // Back to page 1 whenever the visible list changes shape.
+    const [page, setPage] = useState(1);
+    useEffect(() => setPage(1), [tab, search, filterRole]);
+
+    const listCount  = tab === 'active' ? filtered.length : filteredTrashed.length;
+    const totalPages = Math.max(1, Math.ceil(listCount / PER_PAGE));
+    // Clamp so deleting the last row on the last page doesn't strand us on an empty page.
+    const safePage   = Math.min(page, totalPages);
+    const pageSlice  = <T,>(rows: T[]) => rows.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+    const pagedUsers   = pageSlice(filtered);
+    const pagedTrashed = pageSlice(filteredTrashed);
+    const rangeFrom  = listCount === 0 ? 0 : (safePage - 1) * PER_PAGE + 1;
+    const rangeTo    = Math.min(safePage * PER_PAGE, listCount);
 
     const handleAdd = (e: React.FormEvent) => {
         e.preventDefault();
@@ -476,7 +519,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                                             <span style={{ fontSize: '13px', color: '#9ca3af' }}>No users found.</span>
                                         </td>
                                     </tr>
-                                ) : filtered.map(u => (
+                                ) : pagedUsers.map(u => (
                                     <tr key={u.id}
                                         style={{ borderBottom: '1px solid #f8fafc', transition: 'background 0.1s' }}
                                         onMouseEnter={e => (e.currentTarget.style.background = '#f8fafc')}
@@ -554,7 +597,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                                             <span style={{ fontSize: '13px', color: '#9ca3af' }}>Trash is empty.</span>
                                         </td>
                                     </tr>
-                                ) : filteredTrashed.map(u => (
+                                ) : pagedTrashed.map(u => (
                                     <tr key={u.id}
                                         style={{ borderBottom: '1px solid #fef2f2', transition: 'background 0.1s', opacity: 0.85 }}
                                         onMouseEnter={e => (e.currentTarget.style.background = '#fff5f5')}
@@ -594,13 +637,15 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                 )}
 
                 {/* Footer */}
-                <div style={{ padding: '12px 18px', borderTop: '1px solid #f3f4f6' }}>
+                <div style={{ padding: '12px 18px', borderTop: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: '12.5px', color: '#9ca3af' }}>
-                        {tab === 'active'
-                            ? <>Showing <strong style={{ color: '#374151' }}>{filtered.length}</strong> of <strong style={{ color: '#374151' }}>{users.length}</strong> active users</>
-                            : <>Showing <strong style={{ color: '#374151' }}>{filteredTrashed.length}</strong> of <strong style={{ color: '#374151' }}>{trashedUsers.length}</strong> trashed users</>
-                        }
+                        Showing <strong style={{ color: '#374151' }}>{rangeFrom}–{rangeTo}</strong> of <strong style={{ color: '#374151' }}>{listCount}</strong>
+                        {tab === 'active' ? ' active users' : ' trashed users'}
+                        {listCount !== (tab === 'active' ? users.length : trashedUsers.length) && (
+                            <> (filtered from {tab === 'active' ? users.length : trashedUsers.length})</>
+                        )}
                     </span>
+                    <PageButtons page={safePage} totalPages={totalPages} onPage={setPage} />
                 </div>
             </div>
 
