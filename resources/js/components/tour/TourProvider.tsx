@@ -9,7 +9,10 @@ import { TOURS, TOUR_ROLES, stepsFor, type TourStep } from './tours';
 // children untouched.
 
 interface PageProps {
-    auth: { user: { name: string; role?: string | null; tour_seen_at?: string | null } | null };
+    auth: {
+        user: { name: string; role?: string | null; tour_seen_at?: string | null } | null;
+        impersonator?: { name: string } | null;
+    };
     [key: string]: unknown;
 }
 
@@ -81,11 +84,13 @@ export default function TourProvider({ children }: { children: ReactNode }) {
 
     // First sign-in: offer the tour once. The offer is recorded as answered
     // whichever way it goes, so it never comes back — the Guide button covers
-    // later replays.
+    // later replays. Not while impersonating: answering it would use up the
+    // real user's own first-sign-in offer.
+    const impersonating = !!props.auth?.impersonator;
     useEffect(() => {
-        if (!eligible || user?.tour_seen_at || session(WELCOMED_KEY)) return;
+        if (!eligible || impersonating || user?.tour_seen_at || session(WELCOMED_KEY)) return;
         setWelcomeOpen(true);
-    }, [eligible, user?.tour_seen_at]);
+    }, [eligible, impersonating, user?.tour_seen_at]);
 
     const answerWelcome = (takeTour: boolean) => {
         setWelcomeOpen(false);

@@ -41,6 +41,7 @@ class UserController extends Controller
                     ->value('name'),
             ]),
             'roleLabels' => User::ROLE_LABELS,
+            'canImpersonate' => (bool) auth()->user()?->canImpersonate(),
             'departments' => Department::where('is_active', true)->orderBy('name')->get(['name', 'description'])->map(fn (Department $row) => [
                 'value'        => (string) $row->name,
                 'label'        => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,

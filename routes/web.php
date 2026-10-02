@@ -5,6 +5,7 @@ use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\FileVersionController;
+use App\Http\Controllers\ImpersonationController;
 use App\Http\Controllers\ManualController;
 use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\NotificationController;
@@ -55,6 +56,10 @@ Route::middleware(['auth'])->group(function () {
     // ── Notifications ────────────────────────────────────────────────────
     Route::get('notifications/{notification}/open', [NotificationController::class, 'open'])->name('notifications.open');
     Route::patch('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+
+    // ── Impersonation ────────────────────────────────────────────────────
+    // Open to any role: the impersonated user is the one signed in when this runs.
+    Route::post('impersonate/leave', [ImpersonationController::class, 'leave'])->name('impersonate.leave');
 
     // ── Account ──────────────────────────────────────────────────────────
     Route::get('account', [AccountController::class, 'edit'])->name('account.edit');
@@ -229,6 +234,8 @@ Route::middleware(['auth'])->group(function () {
             Route::delete('users/{user}', [UserController::class, 'destroy'])->name('users.destroy');
             Route::patch('users/{id}/restore', [UserController::class, 'restore'])->name('users.restore');
             Route::delete('users/{id}/force-delete', [UserController::class, 'forceDelete'])->name('users.force-delete');
+            // Further limited to the IT support account inside the controller.
+            Route::post('users/{user}/impersonate', [ImpersonationController::class, 'start'])->name('users.impersonate');
         });
 
         // ── Master Data ───────────────────────────────────────────────────────

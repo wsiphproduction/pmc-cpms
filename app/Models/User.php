@@ -74,6 +74,17 @@ class User extends Authenticatable
         self::ROLE_ADMIN,
     ];
 
+    /** The one account allowed to sign in as other users, for support. */
+    public const IMPERSONATOR_EMAIL = 'it@philsagamining.com';
+
+    /** Session key holding the real user's id while they are signed in as someone else. */
+    public const IMPERSONATOR_SESSION_KEY = 'impersonator_id';
+
+    public function canImpersonate(): bool
+    {
+        return strcasecmp((string) $this->email, self::IMPERSONATOR_EMAIL) === 0;
+    }
+
     public static function roleLabel(?string $role): string
     {
         if ($role === null || $role === '') {

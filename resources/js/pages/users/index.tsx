@@ -36,6 +36,8 @@ interface Props {
     divisions: DepartmentOption[];
     // Roles limited to one holder → the name of whoever holds each one now.
     singletonRoles: Record<string, string | null>;
+    // Only the IT support account may sign in as other users.
+    canImpersonate?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -256,8 +258,9 @@ function PageButtons({ page, totalPages, onPage }: { page: number; totalPages: n
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function UsersIndex({ users, trashedUsers, roles, departments, divisions = [], singletonRoles }: Props) {
-    const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string> }>();
+export default function UsersIndex({ users, trashedUsers, roles, departments, divisions = [], singletonRoles, canImpersonate = false }: Props) {
+    const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string>; auth?: { user?: { id: number } | null } }>();
+    const currentUserId = props.auth?.user?.id;
     const flash  = props.flash;
     const errors = props.errors ?? {};
 
@@ -339,6 +342,10 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
         router.delete(route('users.destroy', deleteUser.id), {
             onSuccess: () => { setDeleteUser(null); setTab('active'); },
         });
+    };
+
+    const handleImpersonate = (u: UserRow) => {
+        router.post(route('users.impersonate', u.id));
     };
 
     const handleRestore = (u: TrashedUserRow) => {
@@ -546,6 +553,11 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                                         <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{formatDate(u.created_at)}</td>
                                         <td style={{ padding: '12px 16px' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'flex-end' }}>
+                                                {canImpersonate && u.id !== currentUserId && (
+                                                    <IconBtn title={`Impersonate ${u.name}`} color="#7c3aed" onClick={() => handleImpersonate(u)}>
+                                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                                                    </IconBtn>
+                                                )}
                                                 <IconBtn title="Edit user" onClick={() => openEdit(u)}>
                                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                                                 </IconBtn>

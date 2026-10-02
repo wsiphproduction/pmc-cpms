@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Http\Controllers\ApprovalController;
 use App\Models\Notification;
 use App\Models\ProjectNtp;
+use App\Models\User;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -62,6 +63,11 @@ class HandleInertiaRequests extends Middleware
                         'tour_seen_at' => $request->user()->tour_seen_at?->toIso8601String(),
                     ]
                 ) : null,
+                // Set while the IT account is signed in as someone else, so
+                // every page can show the "Exit impersonation" banner.
+                'impersonator' => $request->user() && $request->session()->has(User::IMPERSONATOR_SESSION_KEY)
+                    ? User::whereKey($request->session()->get(User::IMPERSONATOR_SESSION_KEY))->first(['id', 'name', 'email'])
+                    : null,
             ],
             'notifications' => $request->user()
                 ? Notification::where('recipient', $request->user()->id)
