@@ -25,7 +25,7 @@ it('turns visitors away', function () {
 
 it('offers every role a booklet of its own plus the complete edition', function () {
     foreach (array_keys(User::ROLE_LABELS) as $role) {
-        if ($role === User::ROLE_ADMIN) {
+        if ($role === User::ROLE_ADMIN || in_array($role, User::ADMIN_EQUIVALENT_ROLES, true)) {
             continue; // covered on its own below
         }
 
@@ -49,6 +49,14 @@ it('shows the administrator every booklet, since they support everybody', functi
         ->assertInertia(fn (Assert $page) => $page
             ->component('manuals/index')
             ->where('mine', 'admin')
+            ->has('manuals', count(ManualContent::manuals())));
+});
+
+it('shows the division manager every booklet too, since they carry admin rights', function () {
+    $this->actingAs(manualUser(User::ROLE_DIVISION_MANAGER))
+        ->get(route('manual.index'))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('mine', ManualContent::slugForRole(User::ROLE_DIVISION_MANAGER))
             ->has('manuals', count(ManualContent::manuals())));
 });
 

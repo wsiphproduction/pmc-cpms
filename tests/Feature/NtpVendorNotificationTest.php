@@ -131,8 +131,9 @@ it('refuses an approver who is not the one being waited on', function () {
         ->patch(route('ntp-reviews.approve', $this->ntp))
         ->assertForbidden();
 
-    // Nor can the Division Manager skip the Assistant Manager.
-    $this->actingAs($this->division)
+    // Nor can the PMD Department Manager skip the Assistant Manager. (The
+    // Division Manager can: they carry admin rights, and admins settle any step.)
+    $this->actingAs($this->pmdManager)
         ->patch(route('approvals.ntps.approve', $this->ntp))
         ->assertForbidden();
 
@@ -149,8 +150,8 @@ it('keeps the final step to the manager user of the department\'s own division',
         ->patch(route('ntp-reviews.approve', $this->ntp))
         ->assertForbidden();
 
-    // And the Division Manager office, which already signed, cannot sign for it.
-    $this->actingAs($this->division)
+    // And a PMD office, which already signed, cannot sign for it.
+    $this->actingAs($this->pmdManager)
         ->patch(route('approvals.ntps.approve', $this->ntp))
         ->assertForbidden();
 

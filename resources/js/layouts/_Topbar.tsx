@@ -89,18 +89,20 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     // Tied to one division rather than one department; otherwise sees the
     // same portal a department user does.
     const isDivisionUser = role === 'division_manager_user';
-    const isAdmin = role === 'admin';
+    // Admins, plus the division manager, who carries admin rights.
+    const isAdmin = !!auth?.user?.is_admin;
     // The PMD/division sign-off roles: their portal is For Approval, Requests
     // and Projects — they review the work rather than execute it, so the
-    // delivery-side sections (master data, weekly status, reports) stay hidden.
-    const isApprovalRole = ['pmd_asst_manager', 'pmd_dept_manager', 'division_manager'].includes(role ?? '');
+    // delivery-side sections (master data, weekly status, reports) stay hidden
+    // unless they also carry admin rights.
+    const isApprovalRole = ['pmd_asst_manager', 'pmd_dept_manager', 'division_manager'].includes(role ?? '') && !isAdmin;
     // The PMD Department Manager schedules roster breaks and names an OIC.
     const takesRosterBreaks = role === 'pmd_dept_manager';
     // User management is admin-only.
     const canManageUsers = isAdmin;
     // Project engineers ("approver") own the weekly status; assistant managers
     // cover for them and admins administer, matching the project-update policy.
-    const canSubmitWeeklyStatus = ['approver', 'assistant_manager', 'admin'].includes(role ?? '');
+    const canSubmitWeeklyStatus = isAdmin || ['approver', 'assistant_manager'].includes(role ?? '');
 
     const navItems: NavItem[] = [
         {

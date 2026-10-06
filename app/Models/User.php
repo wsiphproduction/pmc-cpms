@@ -13,7 +13,10 @@ use Spatie\Permission\Traits\HasRoles;
 class User extends Authenticatable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasRoles, SoftDeletes;
+    use HasFactory, Notifiable, SoftDeletes;
+    use HasRoles {
+        hasRole as protected holdsRole;
+    }
 
     // ── Roles ─────────────────────────────────────────────────────────────
     //
@@ -103,6 +106,34 @@ class User extends Authenticatable
         return self::whereHas('roles', fn ($q) => $q->where('name', $role))
             ->oldest('id')
             ->value('name');
+    }
+
+    /**
+     * Roles that carry full admin rights on top of their own: wherever the
+     * admin role is asked for, holding one of these answers too.
+     */
+    public const ADMIN_EQUIVALENT_ROLES = [
+        self::ROLE_DIVISION_MANAGER,
+    ];
+
+    /**
+     * Spatie's check, widened so admin-equivalent roles pass every admin
+     * check — route middleware, policies and controllers alike. Arrays and
+     * pipe lists recurse through here, so they are covered as well.
+     */
+    public function hasRole($roles, ?string $guard = null): bool
+    {
+        if ($roles === self::ROLE_ADMIN && $this->holdsRole(self::ADMIN_EQUIVALENT_ROLES, $guard)) {
+            return true;
+        }
+
+        return $this->holdsRole($roles, $guard);
+    }
+
+    /** Holds the admin role, or one that carries admin rights. */
+    public function isAdmin(): bool
+    {
+        return $this->hasRole(self::ROLE_ADMIN);
     }
 
     /** A user holds exactly one role in this system. */

@@ -59,6 +59,9 @@ class HandleInertiaRequests extends Middleware
                     $request->user()->toArray(),
                     [
                         'role' => $request->user()->roles->first()?->name,
+                        // True for admins and for roles carrying admin rights
+                        // (the division manager), so the UI can gate on one flag.
+                        'is_admin' => $request->user()->isAdmin(),
                         // Null until the first-login guided-tour offer is answered.
                         'tour_seen_at' => $request->user()->tour_seen_at?->toIso8601String(),
                     ]

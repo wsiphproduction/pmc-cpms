@@ -586,11 +586,11 @@ function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
 export default function Show({ projectRequest, feedbacks = [] }: Props) {
     if (!projectRequest) return null;
 
-    const { auth } = usePage().props as unknown as { auth: { user: { id: number; role: string | null } | null } };
+    const { auth } = usePage().props as unknown as { auth: { user: { id: number; role: string | null; is_admin?: boolean } | null } };
     const role = auth?.user?.role ?? null;
     // Technical feedback is an engineer/approver responsibility — department
     // users (requestors) submit and edit requests, they don't review them.
-    const canGiveFeedback = role === 'approver' || role === 'assistant_manager' || role === 'admin';
+    const canGiveFeedback = role === 'approver' || role === 'assistant_manager' || !!auth?.user?.is_admin;
 
     const [showFeedback, setShowFeedback] = useState(false);
     const [editingFeedback, setEditingFeedback] = useState<FeedbackEntry | null>(null);

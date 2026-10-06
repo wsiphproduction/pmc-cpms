@@ -276,8 +276,8 @@ function NotificationsCard({ notifications }: { notifications: NotificationRow[]
 export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: DashboardProps) {
     const { props } = usePage<PageProps>();
     const role = props.auth?.user?.role;
-    const isDeptUser = role !== 'approver' && role !== 'assistant_manager' && role !== 'admin';
-    const isAdmin = role === 'admin';
+    const isAdmin = !!props.auth?.user?.is_admin;
+    const isDeptUser = role !== 'approver' && role !== 'assistant_manager' && !isAdmin;
 
     const kpiTileStyle: React.CSSProperties = {
         textAlign: 'left', background: '#f59e0b', border: 'none', borderRadius: '8px', padding: '16px 20px',
