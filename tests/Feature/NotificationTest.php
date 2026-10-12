@@ -370,3 +370,73 @@ it('does not notify a user of their own project changes', function () {
 
     expect(Notification::where('recipient', $admin->id)->count())->toBe(0);
 });
+
+it('lists only the current user\'s notifications on the notifications page', function () {
+    $user = makeRequestorUser();
+    $other = makeRequestorUser();
+    Notification::create(['recipient' => $user->id, 'message' => 'Unread one', 'is_read' => false]);
+    Notification::create(['recipient' => $user->id, 'message' => 'Already read', 'is_read' => true]);
+    Notification::create(['recipient' => $other->id, 'message' => 'Not mine', 'is_read' => false]);
+
+    $this->actingAs($user)
+        ->get(route('notifications.index'))
+        ->assertInertia(fn ($page) => $page
+            ->component('notifications/index')
+            ->has('items.data', 2)
+            ->where('filter', 'all')
+            ->where('total_count', 2)
+        );
+});
+
+it('filters the notifications page to unread only', function () {
+    $user = makeRequestorUser();
+    Notification::create(['recipient' => $user->id, 'message' => 'Unread one', 'is_read' => false]);
+    Notification::create(['recipient' => $user->id, 'message' => 'Already read', 'is_read' => true]);
+
+    $this->actingAs($user)
+        ->get(route('notifications.index', ['filter' => 'unread']))
+        ->assertInertia(fn ($page) => $page
+            ->has('items.data', 1)
+            ->where('items.data.0.message', 'Unread one')
+            ->where('filter', 'unread')
+        );
+});
+
+it('paginates the notifications page', function () {
+    $user = makeRequestorUser();
+    foreach (range(1, 25) as $i) {
+        Notification::create(['recipient' => $user->id, 'message' => "Message {$i}", 'is_read' => false]);
+    }
+
+    $this->actingAs($user)
+        ->get(route('notifications.index', ['page' => 2]))
+        ->assertInertia(fn ($page) => $page
+            ->has('items.data', 5)
+            ->where('items.total', 25)
+            ->where('items.current_page', 2)
+        );
+});
+
+it('marks a single notification read without redirecting to its link', function () {
+    $user = makeRequestorUser();
+    $notification = Notification::create(['recipient' => $user->id, 'message' => 'One', 'link' => '/requests', 'is_read' => false]);
+
+    $this->actingAs($user)
+        ->from(route('notifications.index'))
+        ->patch(route('notifications.read', $notification->id))
+        ->assertRedirect(route('notifications.index'));
+
+    expect($notification->fresh()->is_read)->toBeTrue();
+});
+
+it('forbids marking another user\'s notification read', function () {
+    $owner = makeRequestorUser();
+    $intruder = makeRequestorUser();
+    $notification = Notification::create(['recipient' => $owner->id, 'message' => 'One', 'is_read' => false]);
+
+    $this->actingAs($intruder)
+        ->patch(route('notifications.read', $notification->id))
+        ->assertForbidden();
+
+    expect($notification->fresh()->is_read)->toBeFalse();
+});

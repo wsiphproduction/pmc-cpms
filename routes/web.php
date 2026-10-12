@@ -54,8 +54,10 @@ Route::middleware(['auth'])->group(function () {
     Route::get('dashboard', DashboardController::class)->name('dashboard');
 
     // ── Notifications ────────────────────────────────────────────────────
+    Route::get('notifications', [NotificationController::class, 'index'])->name('notifications.index');
     Route::get('notifications/{notification}/open', [NotificationController::class, 'open'])->name('notifications.open');
     Route::patch('notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::patch('notifications/{notification}/read', [NotificationController::class, 'read'])->name('notifications.read');
 
     // ── Impersonation ────────────────────────────────────────────────────
     // Open to any role: the impersonated user is the one signed in when this runs.

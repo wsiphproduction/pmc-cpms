@@ -484,6 +484,13 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                                         </Link>
                                     ))
                                 )}
+                                <Link
+                                    href={route('notifications.index')}
+                                    onClick={() => setNotifOpen(false)}
+                                    style={{ position: 'sticky', bottom: 0, display: 'block', padding: '10px 16px', borderTop: '1px solid #f3f4f6', background: '#fff', textAlign: 'center', fontSize: '12px', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}
+                                >
+                                    View all notifications →
+                                </Link>
                             </div>
                         )}
                     </div>
