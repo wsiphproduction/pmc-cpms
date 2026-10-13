@@ -51,7 +51,12 @@ class ProjectHubController extends Controller
             'additional_recipients'   => ['nullable', 'array'],
             'additional_recipients.*' => ['email', 'max:255'],
             'cc_self'         => ['nullable', 'boolean'],
+            // Off when the RFQ went to the supplier some other way (hand
+            // delivery, their own portal) and only needs recording here.
+            'send_email'      => ['nullable', 'boolean'],
         ]);
+
+        $sendEmail = (bool) ($data['send_email'] ?? true);
 
         $rfq = $project->rfqs()->create([
             'contractor_name' => $data['contractor_name'],
@@ -65,11 +70,21 @@ class ProjectHubController extends Controller
         // No placeholder quotation: an RFQ starts empty and fills up with the
         // offers actually made against it — the supplier's, through the portal
         // link in the email, or the team's own, added from the hub.
-        $this->mailRfq($rfq, $project, $data);
+        if ($sendEmail) {
+            $this->mailRfq($rfq, $project, $data);
+        }
 
-        AuditTrail::log("Dispatched RFQ to {$rfq->contractor_name}", $project, ['module' => 'RFQ', 'type' => 'create', 'rfq_id' => $rfq->id]);
+        AuditTrail::log(
+            $sendEmail
+                ? "Dispatched RFQ to {$rfq->contractor_name}"
+                : "Recorded RFQ to {$rfq->contractor_name} (no email sent)",
+            $project,
+            ['module' => 'RFQ', 'type' => 'create', 'rfq_id' => $rfq->id],
+        );
 
-        return back()->with('success', 'RFQ dispatched successfully.');
+        return back()->with('success', $sendEmail
+            ? 'RFQ dispatched successfully.'
+            : 'RFQ recorded. No email was sent to the supplier.');
     }
 
     /**

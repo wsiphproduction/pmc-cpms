@@ -772,16 +772,18 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
 }
 
 // ── Success Modal ──────────────────────────────────────────────────────────
-function SuccessModal({ contractor, onClose }: { contractor: string; onClose: () => void }) {
+function SuccessModal({ contractor, emailed, onClose }: { contractor: string; emailed: boolean; onClose: () => void }) {
     return (
-        <Modal title="Request Sent" onClose={onClose} size="400px"
+        <Modal title={emailed ? 'Request Sent' : 'Request Recorded'} onClose={onClose} size="400px"
             footer={<button type="button" onClick={onClose} style={{ padding: '7px 28px', borderRadius: '7px', border: 'none', background: '#0f172a', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>Close</button>}
         >
             <div style={{ textAlign: 'center', padding: '16px 0 8px' }}>
                 <svg width="56" height="56" viewBox="0 0 24 24" fill="#22c55e"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" fill="none" stroke="#22c55e" strokeWidth="2"/><polyline points="22 4 12 14.01 9 11.01" fill="none" stroke="#22c55e" strokeWidth="2.5"/></svg>
-                <h3 style={{ margin: '12px 0 6px', fontWeight: 800, color: '#0f172a' }}>Request Sent!</h3>
+                <h3 style={{ margin: '12px 0 6px', fontWeight: 800, color: '#0f172a' }}>{emailed ? 'Request Sent!' : 'Request Recorded'}</h3>
                 <p style={{ color: '#64748b', fontSize: '13.5px', margin: 0, lineHeight: 1.6 }}>
-                    Request for Quotation was successfully sent to<br /><strong style={{ color: '#0f172a' }}>{contractor}</strong>
+                    {emailed
+                        ? <>Request for Quotation was successfully sent to<br /><strong style={{ color: '#0f172a' }}>{contractor}</strong></>
+                        : <>Request for Quotation was recorded for<br /><strong style={{ color: '#0f172a' }}>{contractor}</strong><br />No email was sent. Use Resend to email it later.</>}
                 </p>
             </div>
         </Modal>
@@ -926,6 +928,8 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
     const [dueDate, setDueDate] = useState('');
     const [showSuccess, setShowSuccess]   = useState(false);
     const [sentContractor, setSentContractor] = useState('');
+    // False when the RFQ was only recorded, with the email left unsent.
+    const [sentByEmail, setSentByEmail] = useState(true);
     const [showSendModal, setShowSendModal]   = useState(false);
     const [viewIds, setViewIds]           = useState<{ rfq: number; quotation: number } | null>(null);
     const [quotesRfqId, setQuotesRfqId]   = useState<number | null>(null);
@@ -963,18 +967,19 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
         setShowSendModal(true);
     };
 
-    const handleSend = (recipientEmail: string, additionalRecipients: string[], ccSelf: boolean) => {
+    const handleSend = (recipientEmail: string, additionalRecipients: string[], ccSelf: boolean, sendEmail: boolean) => {
         setShowSendModal(false);
         setSending(true);
         router.post(route('hub.rfq.store', project.id), {
             contractor_name: dispatchContractor,
             due_date:        dueDate || null,
-            recipient_email: recipientEmail,
+            recipient_email: recipientEmail || null,
             additional_recipients: additionalRecipients,
             cc_self:         ccSelf,
+            send_email:      sendEmail,
         }, {
             preserveScroll: true,
-            onSuccess: () => { setSentContractor(dispatchContractor); setShowSuccess(true); setDispatchContractor(''); setDueDate(''); },
+            onSuccess: () => { setSentContractor(dispatchContractor); setSentByEmail(sendEmail); setShowSuccess(true); setDispatchContractor(''); setDueDate(''); },
             onFinish: () => setSending(false),
             onError:  (errors) => { if (errors.contractor_name) setSendError(errors.contractor_name); },
         });
@@ -1159,13 +1164,14 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
     return (
         <HubShell>
             {confirmDialog}
-            {showSuccess   && <SuccessModal contractor={sentContractor} onClose={() => setShowSuccess(false)} />}
+            {showSuccess   && <SuccessModal contractor={sentContractor} emailed={sentByEmail} onClose={() => setShowSuccess(false)} />}
             {showSendModal && selectedContractor && (
                 <SendConfirmModal
                     contractor={selectedContractor.name}
                     dueDate={dueDate}
                     email={supplierEmails[0] ?? ''}
                     additional={supplierEmails.slice(1).join(', ')}
+                    canSkipEmail
                     onClose={() => setShowSendModal(false)}
                     onSend={handleSend}
                 />

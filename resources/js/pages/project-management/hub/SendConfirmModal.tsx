@@ -12,7 +12,7 @@ interface SendPageProps {
  * sends a document out to a contractor — dispatching an RFQ, re-sending one,
  * and issuing an NTP. The caller supplies the wording and does the posting.
  */
-export function SendConfirmModal({ contractor, dueDate, dueLabel = 'Due Date', email, additional = '', onClose, onSend, title = 'Confirm & Send RFQ', sendLabel = 'Send RFQ', note }: {
+export function SendConfirmModal({ contractor, dueDate, dueLabel = 'Due Date', email, additional = '', onClose, onSend, title = 'Confirm & Send RFQ', sendLabel = 'Send RFQ', note, canSkipEmail = false, skipLabel = 'Save RFQ' }: {
     contractor: string;
     dueDate: string;
     /** What the date beside the contractor means for this document. */
@@ -21,29 +21,46 @@ export function SendConfirmModal({ contractor, dueDate, dueLabel = 'Due Date', e
     /** Pre-filled CC list — the supplier's remaining mailboxes. */
     additional?: string;
     onClose: () => void;
-    onSend: (email: string, additionalRecipients: string[], ccSelf: boolean) => void;
+    onSend: (email: string, additionalRecipients: string[], ccSelf: boolean, sendEmail: boolean) => void;
     /** Overridden when the same dialog is reused to re-send an existing RFQ. */
     title?: string;
     sendLabel?: string;
     note?: string;
+    /** Offer a "Send email to recipients" checkbox, for recording without mailing anyone. */
+    canSkipEmail?: boolean;
+    /** The confirm button's label when the email is skipped. */
+    skipLabel?: string;
 }) {
     const { auth } = usePage<SendPageProps>().props;
     const [recipientEmail, setRecipientEmail]   = useState(email);
     const [additionalInput, setAdditionalInput] = useState(additional);
     const [ccSelf, setCcSelf]                   = useState(false);
+    const [sendEmail, setSendEmail]             = useState(true);
     const [emailError, setEmailError]           = useState('');
 
     const parseAdditional = () =>
         additionalInput.split(',').map(e => e.trim()).filter(Boolean);
 
+    const isEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
     const handleConfirm = () => {
-        if (!recipientEmail.trim()) { setEmailError('Email address is required.'); return; }
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail.trim())) { setEmailError('Please enter a valid email address.'); return; }
+        const recipient = recipientEmail.trim();
+
+        // Not mailing: the address is optional, kept only for a later re-send.
+        if (!sendEmail) {
+            if (recipient && !isEmail(recipient)) { setEmailError('Please enter a valid email address.'); return; }
+            setEmailError('');
+            onSend(recipient, [], false, false);
+            return;
+        }
+
+        if (!recipient) { setEmailError('Email address is required.'); return; }
+        if (!isEmail(recipient)) { setEmailError('Please enter a valid email address.'); return; }
         const additional = parseAdditional();
-        const invalid = additional.find(e => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+        const invalid = additional.find(e => !isEmail(e));
         if (invalid) { setEmailError(`"${invalid}" is not a valid email address.`); return; }
         setEmailError('');
-        onSend(recipientEmail.trim(), additional, ccSelf);
+        onSend(recipient, additional, ccSelf, true);
     };
 
     return (
@@ -51,8 +68,10 @@ export function SendConfirmModal({ contractor, dueDate, dueLabel = 'Due Date', e
             footer={<>
                 <button type="button" onClick={onClose} style={{ padding: '7px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Cancel</button>
                 <button type="button" onClick={handleConfirm} style={{ padding: '7px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                    {sendLabel}
+                    {sendEmail
+                        ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                        : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>}
+                    {sendEmail ? sendLabel : skipLabel}
                 </button>
             </>}
         >
@@ -76,10 +95,28 @@ export function SendConfirmModal({ contractor, dueDate, dueLabel = 'Due Date', e
                 )}
             </div>
 
+            {canSkipEmail && (
+                <label style={{
+                    display: 'flex', alignItems: 'flex-start', gap: '9px', cursor: 'pointer', marginBottom: '18px',
+                    padding: '10px 12px', borderRadius: '8px',
+                    border: `1px solid ${sendEmail ? '#e2e8f0' : '#fde68a'}`, background: sendEmail ? '#f8fafc' : '#fffbeb',
+                }}>
+                    <input type="checkbox" checked={sendEmail} onChange={e => { setSendEmail(e.target.checked); setEmailError(''); }} style={{ marginTop: '2px' }} />
+                    <span style={{ fontSize: '12.5px', color: '#334155', lineHeight: 1.5 }}>
+                        <strong>Send email to recipients</strong>
+                        <span style={{ display: 'block', fontSize: '11.5px', color: sendEmail ? '#64748b' : '#92400e' }}>
+                            {sendEmail
+                                ? 'The supplier is emailed the RFQ with its quotation link.'
+                                : 'No email goes out. The RFQ is only recorded here, and you can email it later with Resend.'}
+                        </span>
+                    </span>
+                </label>
+            )}
+
             {/* Email input */}
             <div style={{ marginBottom: '6px' }}>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
-                    Recipient Email Address
+                    Recipient Email Address{!sendEmail && <span style={{ fontWeight: 500, color: '#94a3b8', textTransform: 'none', letterSpacing: 0 }}> (optional)</span>}
                 </label>
                 <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
@@ -100,9 +137,13 @@ export function SendConfirmModal({ contractor, dueDate, dueLabel = 'Due Date', e
                     />
                 </div>
                 {emailError && <div style={{ color: '#dc2626', fontSize: '11.5px', fontWeight: 600, marginTop: '5px' }}>{emailError}</div>}
-                <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '5px' }}>You can edit the email before sending.</div>
+                <div style={{ color: '#94a3b8', fontSize: '11px', marginTop: '5px' }}>
+                    {sendEmail ? 'You can edit the email before sending.' : 'Kept on the RFQ for when you do email it.'}
+                </div>
             </div>
 
+            {/* Only matter when something is actually mailed. */}
+            <fieldset disabled={!sendEmail} style={{ border: 'none', margin: 0, padding: 0, minWidth: 0, opacity: sendEmail ? 1 : 0.45 }}>
             {/* Additional recipients */}
             <div style={{ marginBottom: '14px' }}>
                 <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
@@ -126,6 +167,7 @@ export function SendConfirmModal({ contractor, dueDate, dueLabel = 'Due Date', e
                 <input type="checkbox" checked={ccSelf} onChange={e => setCcSelf(e.target.checked)} />
                 Send me a copy of this email ({auth.user.email})
             </label>
+            </fieldset>
         </Modal>
     );
 }

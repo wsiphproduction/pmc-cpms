@@ -94,6 +94,43 @@ it('copies nobody extra when no procurement address is configured', function () 
         && empty($mail->cc));
 });
 
+it('records an rfq without emailing anyone when send_email is off', function () {
+    Mail::fake();
+
+    $approver = makeApproverForRfq();
+    $project = makeProjectForRfq($approver);
+
+    $this->actingAs($approver)->post(route('hub.rfq.store', $project), [
+        'contractor_name' => 'ABC Construction',
+        'recipient_email' => 'contractor@example.com',
+        'send_email' => false,
+    ])->assertRedirect()->assertSessionHas('success', 'RFQ recorded. No email was sent to the supplier.');
+
+    Mail::assertNothingQueued();
+    Mail::assertNothingSent();
+
+    // Recorded all the same, with the address kept for a later resend.
+    $rfq = $project->rfqs()->first();
+    expect($rfq)->not->toBeNull()
+        ->and($rfq->contractor_name)->toBe('ABC Construction')
+        ->and($rfq->recipient_email)->toBe('contractor@example.com');
+});
+
+it('records an rfq without a recipient address when not emailing', function () {
+    Mail::fake();
+
+    $approver = makeApproverForRfq();
+    $project = makeProjectForRfq($approver);
+
+    $this->actingAs($approver)->post(route('hub.rfq.store', $project), [
+        'contractor_name' => 'ABC Construction',
+        'send_email' => false,
+    ])->assertSessionHasNoErrors();
+
+    Mail::assertNothingQueued();
+    expect($project->rfqs()->count())->toBe(1);
+});
+
 it('does not cc the sender when cc_self is not requested', function () {
     Mail::fake();
 
