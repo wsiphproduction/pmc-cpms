@@ -19,6 +19,7 @@ use App\Models\ProjectRfqQuotation;
 use App\Models\ProjectVariationOrder;
 use App\Models\ProjectTask;
 use App\Models\ProjectWeeklyReport;
+use App\Models\RosterBreak;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -567,9 +568,11 @@ class ProjectHubController extends Controller
         AuditTrail::log("NTP {$ntpNo} submitted for approval ({$data['contractor_name']})", $project, array_filter(['module' => 'NTP', 'type' => 'create', 'rfq_id' => $data['project_rfq_id'] ?? null]));
 
         // The chain opens with the PMD Assistant Manager, who acts from the
-        // approvals portal.
+        // approvals portal — as does whoever covers that seat as OIC today.
         Notification::notify(
-            User::whereHas('roles', fn ($q) => $q->where('name', User::ROLE_PMD_ASST_MANAGER))->pluck('id'),
+            User::whereHas('roles', fn ($q) => $q->where('name', User::ROLE_PMD_ASST_MANAGER))->pluck('id')
+                ->merge(RosterBreak::oicIdsCovering([User::ROLE_PMD_ASST_MANAGER]))
+                ->unique(),
             "NTP {$ntpNo} for {$data['contractor_name']} is awaiting your approval on project {$project->project_no}.",
             route('approvals.index', absolute: false)
         );

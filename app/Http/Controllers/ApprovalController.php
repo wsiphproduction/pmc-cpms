@@ -33,7 +33,10 @@ class ApprovalController extends Controller
     {
         $user = $request->user();
         $roles = $user->actingApprovalRoles();
-        $role = $roles[0] ?? null;
+        // Their own seat heads the page; a role covered as OIC is bannered
+        // separately (the Dept Manager covering an Assistant Manager is still
+        // the Dept Manager here).
+        $role = collect(User::APPROVAL_ROLES)->first(fn (string $r) => $user->hasRole($r)) ?? $roles[0] ?? null;
 
         // The break the user is covering under, or away on, today — the page
         // banners both so nobody wonders why a queue grew or who is minding it.

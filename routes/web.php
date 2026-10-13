@@ -115,8 +115,8 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('approvals/ntps/{ntp}/reject',                 [ApprovalController::class, 'rejectNtp'])->name('approvals.ntps.reject');
     });
 
-    // ── Roster Break (the PMD Dept Manager names an OIC while away) ────────
-    Route::middleware(['role:pmd_dept_manager'])->group(function () {
+    // ── Roster Break (a PMD manager names an OIC while away) ──────────────
+    Route::middleware(['role:pmd_dept_manager|pmd_asst_manager'])->group(function () {
         Route::get('roster-break',                  [RosterBreakController::class, 'index'])->name('roster-break.index');
         Route::post('roster-break',                 [RosterBreakController::class, 'store'])->name('roster-break.store');
         Route::put('roster-break/{rosterBreak}',    [RosterBreakController::class, 'update'])->name('roster-break.update');

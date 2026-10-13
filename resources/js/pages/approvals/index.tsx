@@ -205,7 +205,7 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>For Approval</h1>
                 <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
                     {role
-                        ? <>Items waiting on the <strong style={{ color: '#334155' }}>{role_label}</strong>{oic_for ? <> and, as OIC, on the <strong style={{ color: '#334155' }}>{oic_for.role_label}</strong></> : null}. Approving passes each one to the next approver; rejecting ends its chain.</>
+                        ? <>Items waiting on the <strong style={{ color: '#334155' }}>{role_label}</strong>{oic_for && oic_for.role_label !== role_label ? <> and, as OIC, on the <strong style={{ color: '#334155' }}>{oic_for.role_label}</strong></> : null}. Approving passes each one to the next approver; rejecting ends its chain.</>
                         : <>You hold no approval role, so nothing is queued to you. Admins settle steps from the record's own screen.</>}
                 </p>
             </div>
@@ -215,7 +215,10 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
                     <span style={{ fontSize: '20px' }}>🛡️</span>
                     <div style={{ fontSize: '13px', color: '#1e3a8a' }}>
                         You are <strong>OIC for {oic_for.manager ?? `the ${oic_for.role_label}`}</strong> until <strong>{oic_for.ends_on}</strong>.
-                        Their {oic_for.role_label} approvals appear in your queue below, and anything you settle is recorded as signed on their behalf.
+                        {oic_for.role_label === role_label
+                            // A fellow Assistant Manager already shares this queue and signs as themselves.
+                            ? <>You already share their {oic_for.role_label} queue below, so please keep it moving while they are away.</>
+                            : <>Their {oic_for.role_label} approvals appear in your queue below, and anything you settle is recorded as signed on their behalf.</>}
                         {oic_for.notes && (
                             <div style={{ marginTop: '8px', padding: '8px 12px', borderRadius: '8px', background: '#fff', border: '1px solid #bfdbfe', whiteSpace: 'pre-wrap' }}>
                                 <span style={{ fontSize: '10px', fontWeight: 800, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '2px' }}>Notes from {oic_for.manager ?? 'the manager'}</span>

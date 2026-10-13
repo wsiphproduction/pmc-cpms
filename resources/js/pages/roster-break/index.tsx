@@ -7,6 +7,9 @@ interface OicOption {
     id: number;
     name: string;
     email: string;
+    role_label: string;
+    /** Their own current and upcoming breaks — they cannot cover while away. */
+    away: { starts_on: string; ends_on: string; span: string }[];
 }
 
 interface BreakRow {
@@ -23,7 +26,8 @@ interface BreakRow {
 interface Props {
     breaks: BreakRow[];
     oic_options: OicOption[];
-    oic_role_label: string;
+    /** Who may be named, e.g. "a PMD Assistant Manager or the PMD Department Manager". */
+    oic_who: string;
     today: string;
 }
 
@@ -53,7 +57,7 @@ const labelStyle: React.CSSProperties = { fontSize: '12.5px', fontWeight: 600, c
 
 const errorStyle: React.CSSProperties = { fontSize: '11.5px', color: '#dc2626', margin: '6px 0 0' };
 
-export default function RosterBreakIndex({ breaks, oic_options, oic_role_label, today }: Props) {
+export default function RosterBreakIndex({ breaks, oic_options, oic_who, today }: Props) {
     const { props } = usePage<{ flash?: { success?: string; error?: string }; errors?: Record<string, string> }>();
     const flash  = props.flash;
     const errors = props.errors ?? {};
@@ -67,6 +71,12 @@ export default function RosterBreakIndex({ breaks, oic_options, oic_role_label, 
     const active   = breaks.find(b => b.state === 'active') ?? null;
     const upcoming = breaks.filter(b => b.state === 'upcoming');
     const ended    = breaks.filter(b => b.state === 'ended');
+
+    // The candidate's own break overlapping the dates on the form, if any —
+    // the server refuses them too, this just says so before submitting.
+    const awayDuring = (o: OicOption) => o.away.find(a => a.starts_on <= form.ends_on && a.ends_on >= form.starts_on) ?? null;
+    const selected = oic_options.find(o => String(o.id) === form.oic_user_id) ?? null;
+    const selectedAway = selected ? awayDuring(selected) : null;
 
     const set = (key: keyof FormState) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
         setForm(f => ({ ...f, [key]: e.target.value }));
@@ -177,9 +187,10 @@ export default function RosterBreakIndex({ breaks, oic_options, oic_role_label, 
             <div style={{ marginBottom: '18px' }}>
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.3px' }}>Roster Break</h1>
                 <p style={{ fontSize: '12.5px', color: '#9ca3af', margin: '4px 0 0', maxWidth: '640px', lineHeight: 1.6 }}>
-                    Schedule the dates you will be away and name a {oic_role_label} as officer-in-charge. For those dates the OIC
-                    sees your project requests and NTPs in their For Approval queue and signs them on your behalf. You keep your own
-                    access throughout, so anything you settle yourself still counts.
+                    Schedule the dates you will be away and name {oic_who} as officer-in-charge — someone who is not on a roster
+                    break of their own over those dates. For the length of your break the OIC sees your project requests and NTPs
+                    in their For Approval queue and signs them on your behalf. You keep your own access throughout, so anything you
+                    settle yourself still counts.
                 </p>
             </div>
 
@@ -200,7 +211,7 @@ export default function RosterBreakIndex({ breaks, oic_options, oic_role_label, 
 
                     {oic_options.length === 0 ? (
                         <p style={{ fontSize: '12.5px', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 12px', margin: 0 }}>
-                            There is no {oic_role_label} account to name as OIC. Ask an admin to add one first.
+                            There is nobody to name as OIC — it has to be {oic_who}. Ask an admin to add one first.
                         </p>
                     ) : (
                         <form onSubmit={submit}>
@@ -212,11 +223,21 @@ export default function RosterBreakIndex({ breaks, oic_options, oic_role_label, 
                                     required
                                     style={{ ...inputStyle, cursor: 'pointer', borderColor: errors.oic_user_id ? '#dc2626' : undefined }}
                                 >
-                                    <option value="">Select a {oic_role_label}…</option>
-                                    {oic_options.map(o => (
-                                        <option key={o.id} value={o.id}>{o.name} — {o.email}</option>
-                                    ))}
+                                    <option value="">Select an OIC…</option>
+                                    {oic_options.map(o => {
+                                        const away = awayDuring(o);
+
+                                        return (
+                                            <option key={o.id} value={o.id} disabled={!!away}>
+                                                {o.name} — {o.role_label}{away ? ` (on break ${away.span})` : ''}
+                                            </option>
+                                        );
+                                    })}
                                 </select>
+                                {/* Picked first, then the dates moved onto their break. */}
+                                {selected && selectedAway && !errors.oic_user_id && (
+                                    <p style={errorStyle}>{selected.name} is on their own roster break {selectedAway.span}. Pick someone who is free on these dates.</p>
+                                )}
                                 {errors.oic_user_id && <p style={errorStyle}>{errors.oic_user_id}</p>}
                             </div>
 

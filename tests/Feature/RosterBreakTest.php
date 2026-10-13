@@ -114,10 +114,134 @@ it('lets the pmd dept manager schedule a break and tells the oic', function () {
         ->exists())->toBeTrue();
 });
 
-it('keeps the roster break page to the pmd dept manager', function () {
-    $this->actingAs($this->pmdAsst)->get(route('roster-break.index'))->assertForbidden();
+it('keeps the roster break page to the pmd managers', function () {
     $this->actingAs($this->engineer)->get(route('roster-break.index'))->assertForbidden();
+    $this->actingAs($this->requester)->get(route('roster-break.index'))->assertForbidden();
     $this->actingAs($this->manager)->get(route('roster-break.index'))->assertOk();
+    $this->actingAs($this->pmdAsst)->get(route('roster-break.index'))->assertOk();
+});
+
+it('lets a pmd assistant manager name a fellow assistant or the dept manager as oic', function () {
+    $this->actingAs($this->pmdAsst)
+        ->get(route('roster-break.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('oic_who', 'a PMD Assistant Manager or the PMD Department Manager')
+            ->has('oic_options', 2));
+
+    $post = fn (User $oic, int $from, int $to) => $this->actingAs($this->pmdAsst)
+        ->from(route('roster-break.index'))
+        ->post(route('roster-break.store'), [
+            'oic_user_id' => $oic->id,
+            'starts_on'   => today()->addDays($from)->toDateString(),
+            'ends_on'     => today()->addDays($to)->toDateString(),
+        ]);
+
+    $post($this->manager, 1, 3)->assertSessionHasNoErrors();
+    $post($this->oic, 5, 7)->assertSessionHasNoErrors();
+    $post($this->engineer, 10, 12)->assertSessionHasErrors('oic_user_id');
+
+    expect($this->pmdAsst->rosterBreaks()->pluck('role')->unique()->all())->toBe([User::ROLE_PMD_ASST_MANAGER])
+        ->and(Notification::where('recipient', $this->manager->id)
+            ->where('message', 'like', '%named you OIC (PMD Assistant Manager)%')
+            ->exists())->toBeTrue();
+});
+
+it('refuses an oic who is on their own roster break over those dates', function () {
+    // The dept manager is away on days 3–6.
+    $this->manager->rosterBreaks()->create([
+        'oic_user_id' => $this->oic->id,
+        'role'        => User::ROLE_PMD_DEPT_MANAGER,
+        'starts_on'   => today()->addDays(3),
+        'ends_on'     => today()->addDays(6),
+    ]);
+
+    $post = fn (int $from, int $to) => $this->actingAs($this->pmdAsst)
+        ->from(route('roster-break.index'))
+        ->post(route('roster-break.store'), [
+            'oic_user_id' => $this->manager->id,
+            'starts_on'   => today()->addDays($from)->toDateString(),
+            'ends_on'     => today()->addDays($to)->toDateString(),
+        ]);
+
+    $post(5, 8)->assertSessionHasErrors(['oic_user_id' => "{$this->manager->name} is on their own roster break "
+        . today()->addDays(3)->format('M d, Y') . ' – ' . today()->addDays(6)->format('M d, Y')
+        . '. Pick someone who is free on these dates.']);
+
+    // Once the manager is back they can cover.
+    $post(7, 9)->assertSessionHasNoErrors();
+
+    // The form is told when each candidate is away, to grey them out.
+    $this->actingAs($this->pmdAsst)
+        ->get(route('roster-break.index'))
+        ->assertInertia(fn ($page) => $page
+            ->where('oic_options', fn ($options) => collect($options)->firstWhere('id', $this->manager->id)['away'][0]['starts_on']
+                === today()->addDays(3)->toDateString()));
+});
+
+it('will not let a manager go away while they are covering somebody', function () {
+    // The assistant manager covers the dept manager on days 2–4.
+    $this->manager->rosterBreaks()->create([
+        'oic_user_id' => $this->pmdAsst->id,
+        'role'        => User::ROLE_PMD_DEPT_MANAGER,
+        'starts_on'   => today()->addDays(2),
+        'ends_on'     => today()->addDays(4),
+    ]);
+
+    $this->actingAs($this->pmdAsst)
+        ->from(route('roster-break.index'))
+        ->post(route('roster-break.store'), [
+            'oic_user_id' => $this->oic->id,
+            'starts_on'   => today()->addDays(4)->toDateString(),
+            'ends_on'     => today()->addDays(5)->toDateString(),
+        ])
+        ->assertSessionHasErrors('starts_on');
+
+    expect($this->pmdAsst->rosterBreaks()->count())->toBe(0);
+});
+
+it('lets the dept manager sign the assistant step as oic for an away assistant manager', function () {
+    $projectRequest = ProjectRequest::create([
+        'request_no'   => 'REQ-ASST-' . uniqid(),
+        'title'        => 'Assistant Cover Request',
+        'job_type'     => 'Repair',
+        'job_location' => 'Main Plant',
+        'description'  => 'Raised for an assistant roster-break test.',
+        'requester_id' => $this->requester->id,
+        'status'       => 'in_approval',
+    ]);
+    $projectRequest->startApprovalChain();
+    $projectRequest->recordApproval($this->engineer);
+
+    // Not covering yet: the assistant step is not the manager's to sign.
+    expect($projectRequest->fresh()->awaitingApprovalFrom($this->manager))->toBeFalse();
+
+    $this->pmdAsst->rosterBreaks()->create([
+        'oic_user_id' => $this->manager->id,
+        'role'        => User::ROLE_PMD_ASST_MANAGER,
+        'starts_on'   => today(),
+        'ends_on'     => today()->addDays(2),
+    ]);
+
+    $manager = $this->manager->fresh();
+
+    $this->actingAs($manager)
+        ->get(route('approvals.index'))
+        ->assertInertia(fn ($page) => $page
+            // Still heads the page as themselves, with the cover bannered.
+            ->where('role', User::ROLE_PMD_DEPT_MANAGER)
+            ->where('oic_for.manager', $this->pmdAsst->name)
+            ->where('oic_for.role_label', 'PMD Assistant Manager')
+            ->where('requests.0.id', $projectRequest->id));
+
+    $this->actingAs($manager)
+        ->patch(route('approvals.requests.approve', $projectRequest))
+        ->assertRedirect();
+
+    $step = $projectRequest->approvals()->where('role', User::ROLE_PMD_ASST_MANAGER)->first();
+
+    expect($step->user_id)->toBe($manager->id)
+        ->and($step->on_behalf_of_user_id)->toBe($this->pmdAsst->id)
+        ->and($projectRequest->fresh()->currentApprovalRole())->toBe(User::ROLE_PMD_DEPT_MANAGER);
 });
 
 it('only accepts a pmd assistant manager as oic', function () {

@@ -96,8 +96,8 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     // delivery-side sections (master data, weekly status, reports) stay hidden
     // unless they also carry admin rights.
     const isApprovalRole = ['pmd_asst_manager', 'pmd_dept_manager', 'division_manager'].includes(role ?? '') && !isAdmin;
-    // The PMD Department Manager schedules roster breaks and names an OIC.
-    const takesRosterBreaks = role === 'pmd_dept_manager';
+    // The PMD Department and Assistant Managers schedule roster breaks and name an OIC.
+    const takesRosterBreaks = ['pmd_dept_manager', 'pmd_asst_manager'].includes(role ?? '');
     // User management is admin-only.
     const canManageUsers = isAdmin;
     // Project engineers ("approver") own the weekly status; assistant managers
