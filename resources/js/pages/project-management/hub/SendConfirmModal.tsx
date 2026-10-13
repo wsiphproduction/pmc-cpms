@@ -106,7 +106,7 @@ export function SendConfirmModal({ contractor, dueDate, dueLabel = 'Due Date', e
                         <strong>Send email to recipients</strong>
                         <span style={{ display: 'block', fontSize: '11.5px', color: sendEmail ? '#64748b' : '#92400e' }}>
                             {sendEmail
-                                ? 'The supplier is emailed the RFQ with its quotation link.'
+                                ? 'The supplier will receive an RFQ email with its quotation link.'
                                 : 'No email goes out. The RFQ is only recorded here, and you can email it later with Resend.'}
                         </span>
                     </span>
