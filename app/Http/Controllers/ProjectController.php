@@ -72,6 +72,12 @@ class ProjectController extends Controller
             }
         }
 
+        // The engineer in charge is the one who registered the project — an
+        // exact id match, unlike the free-text fields above.
+        if ($request->filled('engineer')) {
+            $query->where('created_by', $request->integer('engineer'));
+        }
+
         $projects = $query->paginate(15)->withQueryString()
             ->through(fn (Project $project) => $this->projectListData($project));
 
@@ -80,6 +86,7 @@ class ProjectController extends Controller
             'filters' => $request->only([
                 'search',
                 ...array_keys($this->filterableFields()),
+                'engineer',
                 'jip',
                 'need_civil',
                 'need_electrical',
@@ -92,6 +99,11 @@ class ProjectController extends Controller
             // Advanced search filters by the denormalized project_manager_name column, not the user id.
             'managers' => User::orderBy('name')->get(['name'])
                 ->map(fn (User $user) => ['value' => (string) $user->name, 'label' => $user->name]),
+            // Only engineers who have actually registered a listed project, so
+            // no choice in the dropdown is guaranteed to come back empty.
+            'engineers' => User::whereIn('id', Project::whereNull('parent_id')->whereNotNull('created_by')->select('created_by'))
+                ->orderBy('name')->get(['id', 'name'])
+                ->map(fn (User $user) => ['value' => (string) $user->id, 'label' => $user->name]),
         ]);
     }
 

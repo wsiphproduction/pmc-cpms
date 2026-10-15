@@ -249,6 +249,41 @@ it('lists sub-projects under their parent rather than as rows of their own', fun
             ->where('projects.data.0.sub_projects.0.ntp_no', null));
 });
 
+it('filters the project index by the engineer in charge', function () {
+    $mine  = makeApproverUser();
+    $other = makeApproverUser();
+
+    foreach ([[$mine, 'PRJ-2026-0001'], [$other, 'PRJ-2026-0002']] as [$engineer, $projectNo]) {
+        Project::create([
+            'project_no'   => $projectNo,
+            'title'        => 'Warehouse Rehab',
+            'site'         => 'Main Plant',
+            'asset_id'     => 'Asset A',
+            'class_name'   => 'Major',
+            'priority'     => 'P1 - Urgent',
+            'status_key'   => 'PLANNING',
+            'work_force'   => 'In-house Team',
+            'wr_no'        => 'WR-1',
+            'wr_date'      => '2026-05-04',
+            'dept_owner'   => 'Engineering',
+            'cost_code'    => 'CC-001',
+            'category'     => 'Renovation',
+            'service_type' => 'Design-Build',
+            'deadline'     => '2026-06-04',
+            'created_by'   => $engineer->id,
+        ]);
+    }
+
+    $this->actingAs($mine)
+        ->get(route('projects.index', ['engineer' => $other->id]))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('projects.data', 1)
+            ->where('projects.data.0.project_no', 'PRJ-2026-0002')
+            ->where('filters.engineer', (string) $other->id)
+            ->has('engineers', 2));
+});
+
 it('leaves the cost code list off the project index, which never filters by it', function () {
     $user = makeApproverUser();
     seedProjectMasterData();

@@ -59,6 +59,7 @@ interface AdvancedFilters {
     service_type?: string;
     work_force?: string;
     structure_type?: string;
+    engineer?: string;
     jip?: boolean;
     need_civil?: boolean;
     need_electrical?: boolean;
@@ -77,6 +78,7 @@ interface SelectOption {
 
 interface MasterData {
     managers: SelectOption[];
+    engineers: SelectOption[];
     sites: SelectOption[];
     assets: SelectOption[];
     departments: SelectOption[];
@@ -191,7 +193,7 @@ function IconBtn({ onClick, title, children }: {
 // ── Advanced Filter Modal ──────────────────────────────────────────────────
 function AdvancedFilterModal({
     filters, onClose,
-    managers, sites, assets, departments, classes, priorities, statuses, workForces, categories, serviceTypes, structures,
+    managers, engineers, sites, assets, departments, classes, priorities, statuses, workForces, categories, serviceTypes, structures,
 }: MasterData & { filters: Filters; onClose: () => void }) {
     const [form, setForm] = useState<AdvancedFilters>({
         project_no:        filters.project_no ?? '',
@@ -211,7 +213,8 @@ function AdvancedFilterModal({
         service_type:      filters.service_type ?? '',
         work_force:        filters.work_force ?? '',
         structure_type:    filters.structure_type ?? '',
-        jip:               filters.jip ?? false,
+        engineer:          filters.engineer ?? '',
+        jip:            filters.jip ?? false,
         need_civil:        filters.need_civil ?? false,
         need_electrical:   filters.need_electrical ?? false,
         need_mechanical:   filters.need_mechanical ?? false,
@@ -233,7 +236,7 @@ function AdvancedFilterModal({
         project_no: '', project_manager: '', title: '', project_type: '',
         site: '', asset_id: '', cls: '', priority_no: '', status: '', wr_no: '',
         wr_date_received: '', dept_owner: '', cost_code: '', category: '',
-        service_type: '', work_force: '', structure_type: '',
+        service_type: '', work_force: '', structure_type: '', engineer: '',
         jip: false, need_civil: false, need_electrical: false, need_mechanical: false,
     });
 
@@ -372,6 +375,13 @@ function AdvancedFilterModal({
                                 {structures.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
                         </div>
+                        <div>
+                            <label style={labelStyle}>Engineer In-Charge</label>
+                            <select value={form.engineer} onChange={e => set('engineer', e.target.value)} style={inputStyle}>
+                                <option value="">All Engineers</option>
+                                {engineers.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                            </select>
+                        </div>
                     </div>
 
                     {/* Checkboxes */}
@@ -452,7 +462,7 @@ function Pagination({ data }: { data: Paginated<unknown> }) {
 // ── Main Page ──────────────────────────────────────────────────────────────
 export default function ProjectsIndex({
     projects, filters, canCreate,
-    managers, sites, assets, departments, classes, priorities, statuses, workForces, categories, serviceTypes, structures,
+    managers, engineers, sites, assets, departments, classes, priorities, statuses, workForces, categories, serviceTypes, structures,
 }: Props) {
     const [search,         setSearch]         = useState(filters.search ?? '');
     const [showAdvFilter,  setShowAdvFilter]   = useState(false);
@@ -484,7 +494,7 @@ export default function ProjectsIndex({
                 <AdvancedFilterModal
                     filters={filters}
                     onClose={() => setShowAdvFilter(false)}
-                    managers={managers} sites={sites} assets={assets} departments={departments}
+                    managers={managers} engineers={engineers} sites={sites} assets={assets} departments={departments}
                     classes={classes} priorities={priorities} statuses={statuses} workForces={workForces}
                     categories={categories} serviceTypes={serviceTypes} structures={structures}
                 />
