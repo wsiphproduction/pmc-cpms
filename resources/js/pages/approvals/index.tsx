@@ -21,6 +21,13 @@ interface RequestRow {
     attachments: number;
     requester: { name: string; department: string | null };
     approvals: ApprovalStep[];
+    /** The final signature, where a project engineer may be assigned. */
+    assigns_engineer: boolean;
+}
+
+interface SelectOption {
+    value: string;
+    label: string;
 }
 
 interface HistoryRow {
@@ -43,6 +50,7 @@ interface Props {
     ntps: NtpReview[];
     history: HistoryRow[];
     shows_requests: boolean;
+    engineers: SelectOption[];
     /** Set while the signed-in user is covering a manager's roster break. */
     oic_for: { manager: string | null; role_label: string; ends_on: string; notes: string | null } | null;
     /** Set while the signed-in user is away on a roster break themselves. */
@@ -50,6 +58,63 @@ interface Props {
 }
 
 const sectionLabel: React.CSSProperties = { fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' };
+
+// ── Final approval, with an optional engineer assignment ─────────────────────
+// The PMD Department Manager's signature completes the request, so this is
+// where they may name who should run it. The project form then opens with
+// that engineer as Project Manager; left blank, it defaults as before.
+function AssignEngineerApproveModal({ row, engineers, onClose }: {
+    row: RequestRow;
+    engineers: SelectOption[];
+    onClose: () => void;
+}) {
+    const [engineerId, setEngineerId] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const submit = () => {
+        setSaving(true);
+        router.patch(route('approvals.requests.approve', row.id), { engineer_id: engineerId || null }, {
+            preserveScroll: true,
+            onSuccess: onClose,
+            onFinish: () => setSaving(false),
+        });
+    };
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '460px', overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}>
+                <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9', background: '#ecfdf5' }}>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#047857' }}>Approve Request {row.request_no}</h3>
+                </div>
+                <div style={{ padding: '22px' }}>
+                    <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#475569', lineHeight: 1.55 }}>
+                        Yours is the final signature. The request will be fully approved and ready to register as a project.
+                    </p>
+                    <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                        Project Engineer (optional)
+                    </label>
+                    <select
+                        value={engineerId}
+                        onChange={e => setEngineerId(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit', outline: 'none', background: '#fff' }}
+                    >
+                        <option value="">— Not assigned —</option>
+                        {engineers.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                    <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '6px' }}>
+                        Pre-selected as Project Manager when the project is registered.
+                    </div>
+                </div>
+                <div style={{ padding: '14px 22px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                    <button type="button" onClick={onClose} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Cancel</button>
+                    <button type="button" onClick={submit} disabled={saving} style={{ padding: '8px 22px', borderRadius: '7px', border: 'none', background: '#059669', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                        {saving ? 'Approving…' : 'Approve'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // ── Request card ─────────────────────────────────────────────────────────────
 function RequestCard({ row, onApprove, onReject }: {
@@ -142,9 +207,10 @@ function RequestCard({ row, onApprove, onReject }: {
 // ── Portal ───────────────────────────────────────────────────────────────────
 type TabKey = 'requests' | 'ntps' | 'history';
 
-export default function ApprovalsIndex({ role, role_label, requests, ntps, history, shows_requests, oic_for, on_break }: Props) {
+export default function ApprovalsIndex({ role, role_label, requests, ntps, history, shows_requests, engineers, oic_for, on_break }: Props) {
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
     const [rejectRequest, setRejectRequest] = useState<RequestRow | null>(null);
+    const [finalApprove, setFinalApprove] = useState<RequestRow | null>(null);
     const [rejectNtp, setRejectNtp] = useState<NtpReview | null>(null);
     const [tab, setTab] = useState<TabKey>(shows_requests && requests.length > 0 ? 'requests' : 'ntps');
 
@@ -155,6 +221,11 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
     ];
 
     const approveRequest = (row: RequestRow) => {
+        if (row.assigns_engineer) {
+            setFinalApprove(row);
+            return;
+        }
+
         showConfirm(
             `Approve request ${row.request_no}? It moves to the next approver in the chain.`,
             () => router.patch(route('approvals.requests.approve', row.id), {}, { preserveScroll: true }),
@@ -182,6 +253,9 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
         <AuthenticatedLayout>
             <Head title="For Approval" />
             {confirmDialog}
+            {finalApprove && (
+                <AssignEngineerApproveModal row={finalApprove} engineers={engineers} onClose={() => setFinalApprove(null)} />
+            )}
             {rejectRequest && (
                 <RejectModal
                     heading={`Reject Request ${rejectRequest.request_no}`}

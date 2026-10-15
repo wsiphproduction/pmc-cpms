@@ -24,8 +24,11 @@ class ApprovalFlow
     /**
      * Record a signature on a project request and move it along. Returns false
      * when the user was not the one being waited on.
+     *
+     * `$engineerId` is the project engineer the PMD Department Manager names
+     * to run the work; it is only taken from that office's signature.
      */
-    public function approveRequest(ProjectRequest $projectRequest, User $user, ?string $remarks = null): bool
+    public function approveRequest(ProjectRequest $projectRequest, User $user, ?string $remarks = null, ?int $engineerId = null): bool
     {
         if (! $this->mayAct($projectRequest, $user)) {
             return false;
@@ -34,6 +37,10 @@ class ApprovalFlow
         $step = $projectRequest->recordApproval($user, $remarks);
         $link = route('requests.show', $projectRequest->id, absolute: false);
         $label = $step->officeLabel();
+
+        if ($step->role === User::ROLE_PMD_DEPT_MANAGER) {
+            $projectRequest->update(['assigned_engineer_id' => $engineerId]);
+        }
 
         if ($projectRequest->approvalChainComplete()) {
             $projectRequest->update(['status' => 'approved', 'status_before_hold' => null]);
@@ -44,13 +51,25 @@ class ApprovalFlow
                 $link
             );
 
-            // The engineers are the ones who turn an approved request into a project.
+            // The engineers are the ones who turn an approved request into a
+            // project — all of them, unless one was assigned, in which case the
+            // others can no longer see it and are left out.
             $this->notifyRoles(
-                [User::ROLE_ENGINEER, User::ROLE_ASSISTANT_MANAGER],
+                $projectRequest->assigned_engineer_id
+                    ? [User::ROLE_ASSISTANT_MANAGER]
+                    : [User::ROLE_ENGINEER, User::ROLE_ASSISTANT_MANAGER],
                 "Project Request #{$projectRequest->request_no} is fully approved and ready to be registered as a project.",
                 $link,
                 $user
             );
+
+            if ($projectRequest->assigned_engineer_id && $projectRequest->assigned_engineer_id !== $user->id) {
+                Notification::notify(
+                    $projectRequest->assigned_engineer_id,
+                    "You were assigned as project engineer for Project Request #{$projectRequest->request_no}.",
+                    $link
+                );
+            }
 
             return true;
         }

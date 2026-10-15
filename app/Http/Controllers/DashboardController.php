@@ -46,8 +46,7 @@ class DashboardController extends Controller
             ->whereNull('parent_id')
             ->visibleTo($user);
 
-        $requestsQuery = ProjectRequest::query()
-            ->when($isDeptUser, fn (Builder $q) => $q->where('requester_id', $user->id));
+        $requestsQuery = ProjectRequest::query()->visibleTo($user);
 
         $visibleProjectIds = $isDeptUser ? (clone $projectsQuery)->pluck('id') : null;
 

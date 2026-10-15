@@ -140,10 +140,15 @@ class ProjectController extends Controller
         }
 
         $projectRequest = $request->filled('request_id')
-            ? ProjectRequest::with(['project', 'requester'])->findOrFail($request->integer('request_id'))
+            ? ProjectRequest::with(['project', 'requester', 'assignedEngineer'])->findOrFail($request->integer('request_id'))
             : null;
 
         abort_if($projectRequest?->project, 409, 'This project request already has a project.');
+
+        // A request assigned to another engineer is theirs to register.
+        if ($projectRequest) {
+            $this->authorize('view', $projectRequest);
+        }
 
         return Inertia::render('project-management/create', [
             'next_project_no' => $this->nextProjectNo(),
@@ -165,6 +170,10 @@ class ProjectController extends Controller
 
         abort_if($sourceRequest && $sourceRequest->status !== 'approved', 422, 'Only approved requests can be converted to projects.');
         abort_if($sourceRequest?->project, 409, 'This project request already has a project.');
+
+        if ($sourceRequest) {
+            $this->authorize('view', $sourceRequest);
+        }
 
         // Sub-project mode: validate the parent and derive the number from it.
         $sub = $request->validate([
@@ -1399,7 +1408,12 @@ class ProjectController extends Controller
         return [
             'project_request_id' => (string) $request->id,
             'title' => $request->title,
-            'project_manager' => '',
+            // The engineer the PMD Department Manager assigned, while they are
+            // still an engineer (and so in the dropdown). Left empty, the form
+            // falls back to the engineer registering the project.
+            'project_manager' => $request->assignedEngineer?->hasRole(User::ROLE_ENGINEER)
+                ? (string) $request->assigned_engineer_id
+                : '',
             'site' => $request->job_location ?? '',
             'asset_id' => '',
             'cls' => '',

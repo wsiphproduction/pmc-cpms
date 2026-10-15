@@ -500,6 +500,102 @@ describe('update', function () {
         expect($pr->fresh()->status)->toBe('approved');
     });
 
+    it('lets the PMD Department Manager assign the engineer who registers it', function () {
+        $approver = makeApprover();
+        $assigned = makeApprover();
+        $pr       = makeRequest(['status' => 'pending']);
+
+        $asst        = makeChainApprover('pmd_asst_manager');
+        $deptManager = makeChainApprover('pmd_dept_manager');
+
+        $this->actingAs($approver)->patch(route('requests.update', $pr), ['status' => 'approved']);
+
+        // Only the final office's pick counts; an earlier signer's is ignored.
+        $this->actingAs($asst)
+            ->patch(route('approvals.requests.approve', $pr), ['engineer_id' => $approver->id])
+            ->assertRedirect();
+
+        expect($pr->fresh()->assigned_engineer_id)->toBeNull();
+
+        $this->actingAs($deptManager)
+            ->get(route('approvals.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('requests.0.assigns_engineer', true)
+                ->has('engineers', 2));
+
+        $this->actingAs($deptManager)
+            ->patch(route('approvals.requests.approve', $pr), ['engineer_id' => $assigned->id])
+            ->assertRedirect();
+
+        expect($pr->fresh())
+            ->status->toBe('approved')
+            ->assigned_engineer_id->toBe($assigned->id);
+
+        // The project form opens with the assigned engineer as Project Manager,
+        // even for an assistant manager registering it on their behalf.
+        $this->actingAs(makeChainApprover('assistant_manager'))
+            ->get(route('projects.create', ['request_id' => $pr->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('project.project_manager', (string) $assigned->id));
+    });
+
+    it('rejects assigning someone who is not a project engineer', function () {
+        $approver = makeApprover();
+        $pr       = makeRequest(['status' => 'pending']);
+
+        $asst        = makeChainApprover('pmd_asst_manager');
+        $deptManager = makeChainApprover('pmd_dept_manager');
+
+        $this->actingAs($approver)->patch(route('requests.update', $pr), ['status' => 'approved']);
+        $this->actingAs($asst)->patch(route('approvals.requests.approve', $pr));
+
+        $this->actingAs($deptManager)
+            ->patch(route('approvals.requests.approve', $pr), ['engineer_id' => $asst->id])
+            ->assertSessionHasErrors('engineer_id');
+
+        expect($pr->fresh()->status)->toBe('in_approval');
+    });
+
+    it('hides a request assigned to one engineer from the other engineers', function () {
+        $assigned = makeApprover();
+        $other    = makeApprover();
+        $manager  = makeChainApprover('assistant_manager');
+
+        $mine = makeRequest(['status' => 'approved', 'assigned_engineer_id' => $assigned->id]);
+        $open = makeRequest(['status' => 'approved']);
+
+        // The other engineer sees only the unassigned one, and is turned away
+        // from the assigned one however they reach it.
+        $this->actingAs($other)
+            ->get(route('requests.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('requests.data', 1)
+                ->where('requests.data.0.id', $open->id));
+
+        $this->actingAs($other)->get(route('requests.show', $mine))->assertForbidden();
+        $this->actingAs($other)->get(route('projects.create', ['request_id' => $mine->id]))->assertForbidden();
+
+        $this->actingAs($assigned)->get(route('requests.show', $mine))->assertOk();
+        $this->actingAs($assigned)
+            ->get(route('requests.index'))
+            ->assertInertia(fn (Assert $page) => $page->has('requests.data', 2));
+
+        // Above the engineers, nothing is hidden.
+        $this->actingAs($manager)
+            ->get(route('requests.index'))
+            ->assertInertia(fn (Assert $page) => $page->has('requests.data', 2));
+    });
+
+    it('leaves the project manager to default when no engineer was assigned', function () {
+        $approver = makeApprover();
+        $pr       = makeRequest(['status' => 'approved']);
+
+        $this->actingAs($approver)
+            ->get(route('projects.create', ['request_id' => $pr->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('project.project_manager', ''));
+    });
+
     it('refuses an approval from a role the chain is not waiting on', function () {
         $pr = makeRequest(['status' => 'pending']);
 

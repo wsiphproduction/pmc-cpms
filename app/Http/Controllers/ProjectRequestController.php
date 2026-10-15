@@ -27,13 +27,10 @@ class ProjectRequestController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = ProjectRequest::with(['requester', 'project', 'approvals.user'])->latest();
-
-        // Everyone inside PMD sees every request; department users see their own.
         $user = $request->user();
-        if (!$user->hasRole(User::INTERNAL_ROLES)) {
-            $query->where('requester_id', $user->id);
-        }
+        $query = ProjectRequest::with(['requester', 'project', 'approvals.user'])
+            ->visibleTo($user)
+            ->latest();
 
         if ($request->filled('search')) {
             $search = $request->search;

@@ -252,7 +252,8 @@ export default function ProjectCreate({
     // is carried over and must not be changed. Editable only when none was passed.
     const requestNoLocked = Boolean(project?.project_request_id);
 
-    // Default the Project Manager to the logged-in Project Engineer. `managers`
+    // Default the Project Manager to the engineer the PMD Department Manager
+    // assigned on the request, else to the logged-in Project Engineer. `managers`
     // only contains approver (Project Engineer) users, so if the current user's
     // id is present there, they're an engineer and we pre-select them.
     const { auth } = usePage<SharedData>().props;

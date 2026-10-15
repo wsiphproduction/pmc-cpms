@@ -14,11 +14,7 @@ class ProjectRequestPolicy
 
     public function view(User $user, ProjectRequest $projectRequest): bool
     {
-        if ($user->hasRole(User::INTERNAL_ROLES)) {
-            return true;
-        }
-
-        return $projectRequest->requester_id === $user->id;
+        return $projectRequest->isVisibleTo($user);
     }
 
     public function create(User $user): bool

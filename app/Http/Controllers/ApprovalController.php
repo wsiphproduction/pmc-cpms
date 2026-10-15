@@ -9,6 +9,7 @@ use App\Support\ApprovalFlow;
 use App\Support\NtpPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -52,6 +53,9 @@ class ApprovalController extends Controller
             // A Division Manager only signs NTPs; hide the request queue entirely
             // rather than showing them a tab that can never hold anything.
             'shows_requests' => array_intersect($roles, ProjectRequest::APPROVAL_CHAIN) !== [],
+            // Who the PMD Department Manager may name to run an approved request.
+            'engineers' => User::role(User::ROLE_ENGINEER)->orderBy('name')->get(['id', 'name'])
+                ->map(fn (User $engineer) => ['value' => (string) $engineer->id, 'label' => $engineer->name]),
             'oic_for' => $duty ? [
                 'manager'    => $duty->user?->name,
                 'role_label' => User::roleLabel($duty->role),
@@ -68,10 +72,21 @@ class ApprovalController extends Controller
 
     public function approveRequest(Request $request, ProjectRequest $projectRequest): RedirectResponse
     {
-        $data = $request->validate(['remarks' => ['nullable', 'string', 'max:1000']]);
+        $data = $request->validate([
+            'remarks'     => ['nullable', 'string', 'max:1000'],
+            // Optional: the PMD Department Manager may name who runs the project.
+            'engineer_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where(
+                fn ($q) => $q->whereIn('id', User::role(User::ROLE_ENGINEER)->select('id'))
+            )],
+        ]);
 
         abort_unless(
-            $this->flow->approveRequest($projectRequest, $request->user(), $data['remarks'] ?? null),
+            $this->flow->approveRequest(
+                $projectRequest,
+                $request->user(),
+                $data['remarks'] ?? null,
+                isset($data['engineer_id']) ? (int) $data['engineer_id'] : null,
+            ),
             403,
             'This request is not awaiting your approval.'
         );
@@ -164,6 +179,8 @@ class ApprovalController extends Controller
                     'department' => $projectRequest->requester?->department,
                 ],
                 'approvals'    => $projectRequest->approvalTimeline(),
+                // The final signature, where an engineer may be assigned.
+                'assigns_engineer' => $projectRequest->currentApprovalRole() === User::ROLE_PMD_DEPT_MANAGER,
             ])->values()->all();
     }
 

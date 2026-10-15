@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\HasApprovalChain;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -32,6 +33,7 @@ class ProjectRequest extends Model
         'job_type',
         'description',
         'requester_id',
+        'assigned_engineer_id',
         'job_location',
         'costcode',
         'opex',
@@ -43,7 +45,8 @@ class ProjectRequest extends Model
 
     protected $casts = [
         'requester_id' => 'integer',
-        'opex'         => 'boolean',
+        'assigned_engineer_id' => 'integer',
+        'opex'        => 'boolean',
         'capex'        => 'boolean',
         'for_budgeting'=> 'boolean',
     ];
@@ -53,6 +56,12 @@ class ProjectRequest extends Model
     public function requester(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requester_id');
+    }
+
+    /** The engineer the PMD Department Manager named to run it, if any. */
+    public function assignedEngineer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_engineer_id');
     }
 
     public function project(): HasOne
@@ -81,6 +90,42 @@ class ProjectRequest extends Model
     }
 
     // ── Scopes ─────────────────────────────────────────────────────────────
+
+    /**
+     * Requests a user may see. Department users see their own. Inside PMD
+     * everyone sees everything, except that once the PMD Department Manager
+     * assigns a request to an engineer, the other engineers no longer see it.
+     */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->isDepartmentUser()) {
+            return $query->where('requester_id', $user->id);
+        }
+
+        if ($user->hasRole(User::ROLE_ENGINEER)) {
+            return $query->where(fn (Builder $q) => $q
+                ->whereNull('assigned_engineer_id')
+                ->orWhere('assigned_engineer_id', $user->id)
+                ->orWhere('requester_id', $user->id));
+        }
+
+        return $query;
+    }
+
+    public function isVisibleTo(User $user): bool
+    {
+        if ($user->isDepartmentUser()) {
+            return $this->requester_id === $user->id;
+        }
+
+        if ($user->hasRole(User::ROLE_ENGINEER)) {
+            return $this->assigned_engineer_id === null
+                || $this->assigned_engineer_id === $user->id
+                || $this->requester_id === $user->id;
+        }
+
+        return true;
+    }
 
     public function scopePending($query)
     {
