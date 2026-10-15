@@ -45,6 +45,8 @@ interface ProjectRequestData {
     approvals?: ApprovalStep[];
     awaiting_role_label?: string | null;
     requester: User | null;
+    /** Named by the PMD Department Manager on the final approval. */
+    assigned_engineer: string | null;
     project: { id: number; project_no: string } | null;
     attachments: Attachment[];
     created_at: string | null;
@@ -765,6 +767,13 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                                     {!projectRequest.opex && !projectRequest.capex && !projectRequest.for_budgeting && (
                                         <span style={{ color: '#9ca3af', fontStyle: 'italic', fontSize: '13.5px' }}>None specified</span>
                                     )}
+                                </InfoValue>
+                            </div>
+                            <div>
+                                <InfoLabel>Assigned Engineer</InfoLabel>
+                                <InfoValue>
+                                    {projectRequest.assigned_engineer
+                                        ?? <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Not assigned</span>}
                                 </InfoValue>
                             </div>
                         </div>

@@ -23,6 +23,8 @@ interface ProjectRequest {
     costcode: string | null;
     created_at: string | null;
     requester?: { name: string; department?: string | null };
+    /** Named by the PMD Department Manager on the final approval. */
+    assigned_engineer?: string | null;
     project?: { id: number; project_no: string } | null;
     // Who the sign-off chain is currently waiting on, once it has left the engineer.
     awaiting_role_label?: string | null;
@@ -553,7 +555,7 @@ export default function RequestsIndex({ requests, filters, canCreate }: Props) {
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['Request ID', 'Title', 'Requester', 'Created At', 'Status', 'Project No', 'Actions'].map((h, i, arr) => (
+                                {['Request ID', 'Title', 'Requester', 'Created At', 'Status', 'Assigned Engineer', 'Project No', 'Actions'].map((h, i, arr) => (
                                     <th key={h} data-tour={h === 'Status' ? 'requests-status' : undefined} style={{ padding: '10px 16px', textAlign: i === arr.length - 1 ? 'right' : 'left', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #f3f4f6', whiteSpace: 'nowrap' }}>
                                         {h}
                                     </th>
@@ -563,7 +565,7 @@ export default function RequestsIndex({ requests, filters, canCreate }: Props) {
                         <tbody>
                             {requests.data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} style={{ padding: '48px', textAlign: 'center' }}>
+                                    <td colSpan={8} style={{ padding: '48px', textAlign: 'center' }}>
                                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" style={{ display: 'block', margin: '0 auto 10px' }}>
                                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
                                         </svg>
@@ -591,6 +593,9 @@ export default function RequestsIndex({ requests, filters, canCreate }: Props) {
                                                 with {req.awaiting_role_label}
                                             </div>
                                         )}
+                                    </td>
+                                    <td style={{ padding: '12px 16px', color: '#6b7280' }}>
+                                        {req.assigned_engineer ?? <span style={{ color: '#d1d5db', fontSize: '12px' }}>—</span>}
                                     </td>
                                     <td style={{ padding: '12px 16px' }}>
                                         {req.project?.project_no

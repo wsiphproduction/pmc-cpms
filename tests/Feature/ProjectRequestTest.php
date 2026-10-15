@@ -561,7 +561,8 @@ describe('update', function () {
         $other    = makeApprover();
         $manager  = makeChainApprover('assistant_manager');
 
-        $mine = makeRequest(['status' => 'approved', 'assigned_engineer_id' => $assigned->id]);
+        // Older, so it lists second.
+        $mine = makeRequest(['status' => 'approved', 'assigned_engineer_id' => $assigned->id, 'created_at' => now()->subDay()]);
         $open = makeRequest(['status' => 'approved']);
 
         // The other engineer sees only the unassigned one, and is turned away
@@ -575,15 +576,22 @@ describe('update', function () {
         $this->actingAs($other)->get(route('requests.show', $mine))->assertForbidden();
         $this->actingAs($other)->get(route('projects.create', ['request_id' => $mine->id]))->assertForbidden();
 
-        $this->actingAs($assigned)->get(route('requests.show', $mine))->assertOk();
+        $this->actingAs($assigned)
+            ->get(route('requests.show', $mine))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('projectRequest.assigned_engineer', $assigned->name));
         $this->actingAs($assigned)
             ->get(route('requests.index'))
             ->assertInertia(fn (Assert $page) => $page->has('requests.data', 2));
 
-        // Above the engineers, nothing is hidden.
+        // Above the engineers, nothing is hidden, and the list names who has it.
         $this->actingAs($manager)
             ->get(route('requests.index'))
-            ->assertInertia(fn (Assert $page) => $page->has('requests.data', 2));
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('requests.data', 2)
+                ->where('requests.data.0.assigned_engineer', null)
+                ->where('requests.data.1.assigned_engineer', $assigned->name));
     });
 
     it('leaves the project manager to default when no engineer was assigned', function () {

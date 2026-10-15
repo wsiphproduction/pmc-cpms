@@ -28,7 +28,7 @@ class ProjectRequestController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $query = ProjectRequest::with(['requester', 'project', 'approvals.user'])
+        $query = ProjectRequest::with(['requester', 'assignedEngineer', 'project', 'approvals.user'])
             ->visibleTo($user)
             ->latest();
 
@@ -130,6 +130,7 @@ class ProjectRequestController extends Controller
                 'awaiting_role_label' => $projectRequest->currentApprovalRole()
                     ? User::roleLabel($projectRequest->currentApprovalRole())
                     : null,
+                'assigned_engineer' => $projectRequest->assignedEngineer?->name,
                 'can' => $this->abilities($projectRequest),
             ],
             'feedbacks' => $projectRequest->technicalFeedback()->with('user')->latest()->get()
@@ -479,6 +480,7 @@ class ProjectRequestController extends Controller
                 'name' => $projectRequest->requester->name,
                 'department' => $projectRequest->requester->department,
             ] : null,
+            'assigned_engineer' => $projectRequest->assignedEngineer?->name,
             'project' => $projectRequest->project ? [
                 'id' => $projectRequest->project->id,
                 'project_no' => $projectRequest->project->project_no,
