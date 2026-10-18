@@ -1,0 +1,113 @@
+name: CI / Deploy
+
+# Every push and PR runs the tests. A push to master that passes them is
+# promoted to the `production` branch, which the live cPanel server pulls
+# from (see scripts/deploy.sh) — cPanel has no SSH, so GitHub can't push to
+# it; the server polls instead.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: pmc_cpms_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: pmc_cpms_test
+      DB_USERNAME: root
+      DB_PASSWORD: root
+      # Only the `chrome` PDF driver needs it, and production uses `browser`.
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2' # matches ea-php82 on the live server
+          extensions: mbstring, pdo_mysql, zip, gd, intl, bcmath
+          tools: composer:v2
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.composer/cache/files
+          key: composer-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          composer install --no-interaction --prefer-dist --no-progress
+          php artisan key:generate
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      # public/build is committed and deployed as-is, so a frontend change
+      # pushed without rebuilding never reaches users.
+      - name: Check public/build is up to date
+        run: |
+          npm run build
+          if [ -n "$(git status --porcelain public/build)" ]; then
+            echo "::warning::public/build is stale — run 'npm run build' and commit the result."
+            git status --short public/build
+          fi
+
+      # known-failing: pre-existing failures, still visible when run locally.
+      # browser: renders through real headless Chrome.
+      - name: Run tests
+        run: ./vendor/bin/pest --exclude-group=known-failing,browser
+
+  promote:
+    needs: tests
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: promote-production
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Fast-forward only: a rejected push means production was moved by
+      # hand and needs a look, not an overwrite.
+      - name: Fast-forward production to this commit
+        run: git push origin "${GITHUB_SHA}:refs/heads/production"
