@@ -82,7 +82,7 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                         fontSize: '11px', fontWeight: 600, color: 'rgba(255,255,255,0.8)',
                         letterSpacing: '0.5px', marginBottom: '18px',
                     }}>
-                        Construction Project Management
+                        Construction Project Management System
                     </div>
                     <h2 style={{
                         fontSize: '28px', fontWeight: 800, color: '#fff',
