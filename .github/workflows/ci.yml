@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     services:
       mysql:
@@ -45,7 +45,7 @@ jobs:
       PUPPETEER_SKIP_DOWNLOAD: 'true'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -56,13 +56,13 @@ jobs:
           coverage: none
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
 
       - name: Cache Composer packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.composer/cache/files
           key: composer-${{ hashFiles('composer.lock') }}
@@ -85,6 +85,7 @@ jobs:
           if [ -n "$(git status --porcelain public/build)" ]; then
             echo "::warning::public/build is stale — run 'npm run build' and commit the result."
             git status --short public/build
+            git --no-pager diff public/build/manifest.json
           fi
 
       # known-failing: pre-existing failures, still visible when run locally.
@@ -95,7 +96,7 @@ jobs:
   promote:
     needs: tests
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     concurrency:
@@ -103,7 +104,7 @@ jobs:
       cancel-in-progress: false
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
