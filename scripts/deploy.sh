@@ -25,7 +25,9 @@ main() {
 
     # Fail rather than hang the cron waiting for a password prompt.
     export GIT_TERMINAL_PROMPT=0
-    git fetch --quiet origin "$BRANCH"
+    # Explicit refspec: the host's git (1.8.x) won't otherwise move
+    # origin/$BRANCH on a single-branch fetch — it only writes FETCH_HEAD.
+    git fetch --quiet origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH"
 
     local current target
     current="$(git rev-parse HEAD)"
