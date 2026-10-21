@@ -21,6 +21,7 @@ use App\Models\Structure;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\WorkForce;
+use App\Support\NtpSignatories;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -455,7 +456,7 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
-        $validSections = ['rfq', 'ntp', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
+        $validSections = ['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
         // Sub-projects run their own procurement now, so no section is off
@@ -501,6 +502,8 @@ class ProjectController extends Controller
         return [
             'rfq'         => $countAcross('rfqs'),
             'ntp'         => $countAcross('ntps'),
+            // Steps this project hands to someone other than the default.
+            'signatories' => $project->ntpSignatories()->count(),
             // Direct children only — that's what the Sub-Projects list shows.
             'subprojects' => $project->children->count(),
             'permits'     => $countAcross('permits'),
@@ -559,6 +562,10 @@ class ProjectController extends Controller
                     fn ($p) => $p->ntps()->with('rfq.items', 'reviewer', 'creator', 'approvals.user')->get(),
                     fn ($ntp, $sub) => $this->ntpRow($ntp, $sub, $subProjectsByNtp),
                 ),
+            ],
+
+            'signatories' => [
+                'steps' => NtpSignatories::forProject($project),
             ],
 
             'subprojects' => [

@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Division;
+use App\Models\Site;
 use App\Models\User;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role;
@@ -92,6 +93,52 @@ describe('division manager user', function () {
         $user->refresh();
         expect($user->division)->toBeNull()
             ->and($user->department)->toBe('Civil Works');
+    });
+
+    it('limits a division manager user to the sites ticked', function () {
+        Division::create(['name' => 'Engineering Division']);
+        Site::create(['name' => 'Mine']);
+        Site::create(['name' => 'Sinug-ang']);
+
+        $this->actingAs(makeUsersAdmin())
+            ->post(route('users.store'), divisionUserPayload(['sites' => ['Mine', 'Sinug-ang']]))
+            ->assertSessionHasNoErrors();
+
+        $user = User::where('email', 'dana@example.com')->firstOrFail();
+        expect($user->sites)->toBe(['Mine', 'Sinug-ang'])
+            ->and($user->claimsSite('mine'))->toBeTrue()
+            ->and($user->claimsSite('Mill'))->toBeFalse();
+    });
+
+    it('takes no site when none is ticked', function () {
+        Division::create(['name' => 'Engineering Division']);
+
+        $this->actingAs(makeUsersAdmin())
+            ->post(route('users.store'), divisionUserPayload(['sites' => []]))
+            ->assertSessionHasNoErrors();
+
+        $user = User::where('email', 'dana@example.com')->firstOrFail();
+        expect($user->sites)->toBeNull()
+            ->and($user->claimsSite('Mill'))->toBeFalse();
+    });
+
+    it('rejects a site that is not on the master list', function () {
+        Division::create(['name' => 'Engineering Division']);
+
+        $this->actingAs(makeUsersAdmin())
+            ->post(route('users.store'), divisionUserPayload(['sites' => ['Nowhere']]))
+            ->assertSessionHasErrors(['sites.0']);
+    });
+
+    it('drops the sites for a role that does not use them', function () {
+        Division::create(['name' => 'Engineering Division']);
+        Site::create(['name' => 'Mine']);
+
+        $this->actingAs(makeUsersAdmin())
+            ->post(route('users.store'), divisionUserPayload(['role' => User::ROLE_REQUESTOR, 'department' => 'Civil Works', 'sites' => ['Mine']]))
+            ->assertSessionHasNoErrors();
+
+        expect(User::where('email', 'dana@example.com')->firstOrFail()->sites)->toBeNull();
     });
 
     it('ignores a division sent for a role that does not use one', function () {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Department;
 use App\Models\Division;
+use App\Models\Site;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -23,6 +24,7 @@ class UserController extends Controller
                 'email'      => $user->email,
                 'department' => $user->department,
                 'division'   => $user->division,
+                'sites'      => $user->sites ?? [],
                 'role'       => $user->roles->first()?->name,
                 'created_at' => $user->created_at,
             ]),
@@ -52,6 +54,12 @@ class UserController extends Controller
                 'label'        => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,
                 'displayLabel' => (string) $row->name,
             ]),
+            // Sites a division manager user can be limited to, when their
+            // division splits NTP sign-off by site.
+            'siteOptions' => Site::where('is_active', true)->orderBy('name')->get(['name', 'description'])->map(fn (Site $row) => [
+                'value' => (string) $row->name,
+                'label' => $row->description ? "{$row->name} — {$row->description}" : (string) $row->name,
+            ]),
         ]);
     }
 
@@ -64,6 +72,7 @@ class UserController extends Controller
             'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule()],
             'department' => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_REQUESTOR), 'nullable', 'string', 'max:191'],
             'division'   => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_DIVISION_MANAGER_USER), 'nullable', 'string', 'max:191', 'exists:divisions,name'],
+            ...$this->siteRules(),
         ]);
 
         $user = User::create([
@@ -72,6 +81,7 @@ class UserController extends Controller
             'password'   => Hash::make($data['password']),
             'department' => $data['role'] === User::ROLE_REQUESTOR ? ($data['department'] ?? null) : null,
             'division'   => $data['role'] === User::ROLE_DIVISION_MANAGER_USER ? ($data['division'] ?? null) : null,
+            'sites'      => $this->sitesFor($data),
         ]);
 
         $user->assignRole($data['role']);
@@ -87,6 +97,7 @@ class UserController extends Controller
             'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule($user)],
             'department' => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_REQUESTOR), 'nullable', 'string', 'max:191'],
             'division'   => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_DIVISION_MANAGER_USER), 'nullable', 'string', 'max:191', 'exists:divisions,name'],
+            ...$this->siteRules(),
         ]);
 
         $user->update([
@@ -94,6 +105,7 @@ class UserController extends Controller
             'email'      => $data['email'],
             'department' => $data['role'] === User::ROLE_REQUESTOR ? ($data['department'] ?? null) : null,
             'division'   => $data['role'] === User::ROLE_DIVISION_MANAGER_USER ? ($data['division'] ?? null) : null,
+            'sites'      => $this->sitesFor($data),
         ]);
 
         $user->syncRoles([$data['role']]);
@@ -173,6 +185,28 @@ class UserController extends Controller
                 $fail(User::roleLabel($value) . " is limited to one user and is currently held by {$holder->name}.");
             }
         };
+    }
+
+    /** The optional sites a division manager user is limited to. */
+    private function siteRules(): array
+    {
+        return [
+            'sites'   => ['nullable', 'array'],
+            'sites.*' => ['string', 'max:191', 'exists:sites,name'],
+        ];
+    }
+
+    /**
+     * Only a division manager user keeps sites; none ticked is stored as null,
+     * meaning every site in their division.
+     */
+    private function sitesFor(array $data): ?array
+    {
+        if ($data['role'] !== User::ROLE_DIVISION_MANAGER_USER) {
+            return null;
+        }
+
+        return array_values(array_unique($data['sites'] ?? [])) ?: null;
     }
 
     private function singletonHolder(string $role): ?string

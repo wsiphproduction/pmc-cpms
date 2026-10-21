@@ -207,6 +207,19 @@ class ApprovalFlow
         return true;
     }
 
+    /**
+     * Call on whoever an open NTP is now waiting on — after its project names
+     * a different signatory for the step it sits at.
+     */
+    public function notifyCurrentSigner(ProjectNtp $ntp): void
+    {
+        $this->notifyNextApprover(
+            $ntp,
+            "NTP {$ntp->ntp_no} for {$ntp->contractor_name} is awaiting your approval on project {$ntp->project->project_no}.",
+            route('approvals.index', absolute: false)
+        );
+    }
+
     /** The final signature: the NTP takes effect. */
     private function issueNtp(ProjectNtp $ntp, Project $project): void
     {
@@ -281,6 +294,21 @@ class ApprovalFlow
         $role = $record->currentApprovalRole();
 
         if ($role === null) {
+            return;
+        }
+
+        // A step the project names somebody for goes to them alone (and to
+        // their OIC while they are away), on whichever page they sign from.
+        if ($record instanceof ProjectNtp && ($named = $record->project?->ntpSignatoryFor($role))) {
+            Notification::notify(
+                RosterBreak::activeOn()->where('user_id', $named->id)->where('role', $role)
+                    ->pluck('oic_user_id')
+                    ->prepend($named->id)
+                    ->unique(),
+                $message,
+                route($named->signsFromApprovalsPortal() ? 'approvals.index' : 'ntp-reviews.index', absolute: false)
+            );
+
             return;
         }
 

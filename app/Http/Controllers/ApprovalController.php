@@ -48,7 +48,7 @@ class ApprovalController extends Controller
             'role'       => $role,
             'role_label' => User::roleLabel($role),
             'requests'   => $this->pendingRequests($roles),
-            'ntps'       => $this->pendingNtps($roles),
+            'ntps'       => $this->pendingNtps($user, $roles),
             'history'    => $this->history($user),
             // A Division Manager only signs NTPs; hide the request queue entirely
             // rather than showing them a tab that can never hold anything.
@@ -146,7 +146,23 @@ class ApprovalController extends Controller
         }
 
         return ProjectRequest::awaitingAnyRole($roles)->count()
-            + ProjectNtp::awaitingAnyRole($roles)->count();
+            + self::ntpsAwaiting($user, $roles)->count();
+    }
+
+    /**
+     * The NTPs waiting on this user: their roles' queue, less the steps a
+     * project has named somebody else for, plus any a project names them for.
+     *
+     * @param  array<int, string>  $roles
+     */
+    private static function ntpsAwaiting(User $user, array $roles, array $with = []): \Illuminate\Support\Collection
+    {
+        return ProjectNtp::signableBy($user, $roles)
+            ->with($with)
+            ->latest()
+            ->get()
+            ->filter(fn (ProjectNtp $ntp) => $ntp->awaitingApprovalFrom($user))
+            ->values();
     }
 
     /** @param  array<int, string>  $roles */
@@ -185,20 +201,16 @@ class ApprovalController extends Controller
     }
 
     /** @param  array<int, string>  $roles */
-    private function pendingNtps(array $roles): array
+    private function pendingNtps(User $user, array $roles): array
     {
         if ($roles === []) {
             return [];
         }
 
-        return ProjectNtp::awaitingAnyRole($roles)
-            // The presenter dereferences the project, and deleting a project
-            // leaves its NTPs behind — without this one soft-deleted project
-            // takes down the whole portal.
-            ->whereHas('project')
-            ->with(['project.projectRequest', 'creator', 'reviewer', 'rfq.items', 'approvals.user', 'approvals.onBehalfOf'])
-            ->latest()
-            ->get()
+        // `signableBy` keeps out NTPs whose project was deleted: the presenter
+        // dereferences the project, and one soft-deleted project would take
+        // down the whole portal.
+        return self::ntpsAwaiting($user, $roles, ['creator', 'reviewer', 'rfq.items', 'approvals.user', 'approvals.onBehalfOf'])
             ->map(fn (ProjectNtp $ntp) => NtpPresenter::row($ntp))
             ->values()->all();
     }

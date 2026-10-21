@@ -146,6 +146,15 @@ class Hub
                     ],
                     ['p', 'PMD signs first, up through the Division Manager. The notice then goes to the side the work is being done for — the owning department, and last its division manager. The last two steps are held per project rather than by a single office, which is why they are settled from NTP Reviews.'],
 
+                    ['h', 'Changing who signs: NTP Signatories'],
+                    ['p', 'The NTP Signatories menu in the hub lists the five steps with the people who sign each one by default. To hand a step to someone else on this project, pick them in that step\'s row and click Save Signatories; choose Default, or click Reset to defaults, to undo it. The badge on the menu counts the steps you have changed.'],
+                    ['ul', [
+                        'The person picked is the only one notified for that step and the only one who can approve it on this project. Their name prints on the NTP.',
+                        'The Division Manager step can go to a Division Manager User and the other way round, so one division\'s manager can sign for another\'s.',
+                        'A change applies to every step not yet signed, including on NTPs already part-way through. If one is waiting on the changed step right now, the new signatory is notified.',
+                        'Someone picked who signs from NTP Reviews (a department or division manager user) finds the NTP there, even for a PMD step.',
+                    ]],
+
                     ['h', 'Preparing an NTP'],
                     ['ol', [
                         'Open the NTP tab and click Prepare NTP.',

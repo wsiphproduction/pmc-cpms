@@ -120,7 +120,7 @@ class Projects
                     ['p', 'Every NTP you follow, with those awaiting review listed first, then the issued and rejected ones as history. Each row carries the NTP number, the contractor, the project, who prepared it, the approval timeline so far, and the RFQ line items behind it.'],
                     ['ul', [
                         'A department user follows NTPs on the projects they requested and on the projects their department owns.',
-                        'A Division Manager User follows every department inside their division.',
+                        'A Division Manager User follows every department inside their division, plus every project on the sites they cover. The last signature on a project at a covered site is theirs, whichever division owns it.',
                     ]],
                     ['p', 'Only the step that is actually yours is actionable. Rows further up or down the chain are there so you can see the whole picture, not so you can sign them.'],
 

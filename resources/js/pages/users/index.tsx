@@ -9,6 +9,8 @@ interface UserRow {
     email: string;
     department: string | null;
     division: string | null;
+    // Sites a division manager user signs NTPs for; empty = every site.
+    sites: string[];
     role: string | null;
     created_at: string;
 }
@@ -34,6 +36,8 @@ interface Props {
     departments: DepartmentOption[];
     // Divisions a "Division Manager User" can be attached to; same shape.
     divisions: DepartmentOption[];
+    // Sites a division manager user can be limited to.
+    siteOptions: DepartmentOption[];
     // Roles limited to one holder → the name of whoever holds each one now.
     singletonRoles: Record<string, string | null>;
     // Only the IT support account may sign in as other users.
@@ -228,6 +232,38 @@ function DepartmentSelect({ value, options, onChange, required, placeholder = 'S
     );
 }
 
+// Tick-list of the sites a division manager user takes over NTP sign-off for,
+// whichever division owns the project. None ticked: only their own division's.
+function SiteChecklist({ value, options, onChange, error }: {
+    value: string[];
+    options: DepartmentOption[];
+    onChange: (value: string[]) => void;
+    error?: string;
+}) {
+    const toggle = (site: string) =>
+        onChange(value.includes(site) ? value.filter(s => s !== site) : [...value, site]);
+
+    return (
+        <div style={fieldStyle}>
+            <label style={labelStyle}>Sites Covered</label>
+            <div style={{ border: '1.5px solid #e5e7eb', borderRadius: '7px', padding: '6px 10px', maxHeight: '160px', overflowY: 'auto' }}>
+                {options.length ? options.map(opt => (
+                    <label key={opt.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '4px 0', fontSize: '13px', color: '#334155', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={value.includes(opt.value)} onChange={() => toggle(opt.value)} />
+                        {opt.label}
+                    </label>
+                )) : (
+                    <div style={{ padding: '4px 0', fontSize: '12.5px', color: '#94a3b8' }}>No sites on the master list.</div>
+                )}
+            </div>
+            <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '11.5px' }}>
+                NTPs for projects on these sites go to this user for the last signature, whichever division owns the project. Projects on other sites still follow the division. Leave all unticked to sign for their own division only.
+            </p>
+            {error && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{error}</p>}
+        </div>
+    );
+}
+
 // ── Pagination ─────────────────────────────────────────────────────────────
 const PER_PAGE = 10;
 
@@ -258,7 +294,7 @@ function PageButtons({ page, totalPages, onPage }: { page: number; totalPages: n
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function UsersIndex({ users, trashedUsers, roles, departments, divisions = [], singletonRoles, canImpersonate = false }: Props) {
+export default function UsersIndex({ users, trashedUsers, roles, departments, divisions = [], siteOptions = [], singletonRoles, canImpersonate = false }: Props) {
     const { props } = usePage<{ flash?: { success?: string }; errors?: Record<string, string>; auth?: { user?: { id: number } | null } }>();
     const currentUserId = props.auth?.user?.id;
     const flash  = props.flash;
@@ -274,8 +310,8 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
     const [filterRole, setFilterRole] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
-    const [addForm,  setAddForm]  = useState({ name: '', email: '', password: '', role: roles[0] ?? '', department: '', division: '' });
-    const [editForm, setEditForm] = useState({ name: '', email: '', role: '', department: '', division: '' });
+    const [addForm,  setAddForm]  = useState({ name: '', email: '', password: '', role: roles[0] ?? '', department: '', division: '', sites: [] as string[] });
+    const [editForm, setEditForm] = useState({ name: '', email: '', role: '', department: '', division: '', sites: [] as string[] });
     const [resetPw,  setResetPw]  = useState({ password: '', password_confirmation: '' });
 
     const filtered = users.filter(u => {
@@ -308,12 +344,12 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
         setSubmitting(true);
         router.post(route('users.store'), addForm, {
             onFinish:  () => setSubmitting(false),
-            onSuccess: () => { setShowAdd(false); setAddForm({ name: '', email: '', password: '', role: roles[0] ?? '', department: '', division: '' }); },
+            onSuccess: () => { setShowAdd(false); setAddForm({ name: '', email: '', password: '', role: roles[0] ?? '', department: '', division: '', sites: [] }); },
         });
     };
 
     const openEdit = (u: UserRow) => {
-        setEditForm({ name: u.name, email: u.email, role: u.role ?? roles[0] ?? '', department: u.department ?? '', division: u.division ?? '' });
+        setEditForm({ name: u.name, email: u.email, role: u.role ?? roles[0] ?? '', department: u.department ?? '', division: u.division ?? '', sites: u.sites ?? [] });
         setEditUser(u);
     };
 
@@ -549,6 +585,9 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                                         <td style={{ padding: '12px 16px' }}><RoleBadge role={u.role} /></td>
                                         <td style={{ padding: '12px 16px', color: (u.department || u.division) ? '#374151' : '#d1d5db' }}>
                                             {u.department ?? (u.division ? <>{u.division} <span style={{ color: '#94a3b8', fontSize: '11px' }}>(division)</span></> : '—')}
+                                            {u.division && u.sites?.length > 0 && (
+                                                <div style={{ color: '#64748b', fontSize: '11px', marginTop: '2px' }}>Sites: {u.sites.join(', ')}</div>
+                                            )}
                                         </td>
                                         <td style={{ padding: '12px 16px', color: '#64748b', fontSize: '12px', whiteSpace: 'nowrap' }}>{formatDate(u.created_at)}</td>
                                         <td style={{ padding: '12px 16px' }}>
@@ -720,6 +759,14 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                                 {errors.division && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.division}</p>}
                             </div>
                         )}
+                        {addForm.role === 'division_manager_user' && (
+                            <SiteChecklist
+                                value={addForm.sites}
+                                options={siteOptions}
+                                onChange={v => setAddForm(f => ({ ...f, sites: v }))}
+                                error={errors.sites ?? Object.entries(errors).find(([k]) => k.startsWith('sites.'))?.[1]}
+                            />
+                        )}
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
                             <button type="button" style={btnSecondary} onClick={() => setShowAdd(false)}>Cancel</button>
                             <button type="submit" style={{ ...btnPrimary, opacity: submitting ? 0.7 : 1 }} disabled={submitting}>
@@ -782,6 +829,14 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                                 />
                                 {errors.division && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.division}</p>}
                             </div>
+                        )}
+                        {editForm.role === 'division_manager_user' && (
+                            <SiteChecklist
+                                value={editForm.sites}
+                                options={siteOptions}
+                                onChange={v => setEditForm(f => ({ ...f, sites: v }))}
+                                error={errors.sites ?? Object.entries(errors).find(([k]) => k.startsWith('sites.'))?.[1]}
+                            />
                         )}
                         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
                             <button type="button" style={btnSecondary} onClick={() => setEditUser(null)}>Cancel</button>

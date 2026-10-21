@@ -10,7 +10,6 @@ use App\Models\Project;
 use App\Models\ProjectBilling;
 use App\Models\ProjectIocItem;
 use App\Models\ProjectMtrDoc;
-use App\Models\Notification;
 use App\Models\ProjectNtp;
 use App\Models\ProjectPermit;
 use App\Models\ProjectQualityDoc;
@@ -19,11 +18,12 @@ use App\Models\ProjectRfqQuotation;
 use App\Models\ProjectVariationOrder;
 use App\Models\ProjectTask;
 use App\Models\ProjectWeeklyReport;
-use App\Models\RosterBreak;
 use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use App\Support\ApprovalFlow;
+use App\Support\NtpSignatories;
 use App\Support\PsrTemplateWriter;
 use App\Support\WeeklyReportSheet;
 use Illuminate\Http\Response;
@@ -583,14 +583,9 @@ class ProjectHubController extends Controller
         AuditTrail::log("NTP {$ntpNo} submitted for approval ({$data['contractor_name']})", $project, array_filter(['module' => 'NTP', 'type' => 'create', 'rfq_id' => $data['project_rfq_id'] ?? null]));
 
         // The chain opens with the PMD Assistant Manager, who acts from the
-        // approvals portal — as does whoever covers that seat as OIC today.
-        Notification::notify(
-            User::whereHas('roles', fn ($q) => $q->where('name', User::ROLE_PMD_ASST_MANAGER))->pluck('id')
-                ->merge(RosterBreak::oicIdsCovering([User::ROLE_PMD_ASST_MANAGER]))
-                ->unique(),
-            "NTP {$ntpNo} for {$data['contractor_name']} is awaiting your approval on project {$project->project_no}.",
-            route('approvals.index', absolute: false)
-        );
+        // approvals portal — as does whoever covers that seat as OIC today —
+        // unless the project names somebody for that step.
+        app(ApprovalFlow::class)->notifyCurrentSigner($ntp->setRelation('project', $project));
 
         return back()->with('success', "NTP {$ntpNo} submitted for approval.");
     }
@@ -660,6 +655,61 @@ class ProjectHubController extends Controller
         // from NTPs — so deleting an NTP no longer changes the project budget.
 
         return back()->with('success', 'NTP deleted.');
+    }
+
+    // ── NTP Signatories ──────────────────────────────────────────────────────
+
+    /**
+     * Name who signs each NTP step on this project; a blank step goes back to
+     * its default holder. Applies to every step not yet signed, including on
+     * NTPs already part-way through, so whoever one of those is now waiting
+     * on is told.
+     */
+    public function updateNtpSignatories(Request $request, ApprovalFlow $flow, Project $project): RedirectResponse
+    {
+        $rules = ['signatories' => ['present', 'array']];
+        foreach (ProjectNtp::APPROVAL_CHAIN as $role) {
+            $rules["signatories.{$role}"] = ['nullable', 'integer', Rule::in(NtpSignatories::candidates($role)->pluck('id'))];
+        }
+        $data = $request->validate($rules, [
+            'signatories.*.in' => 'That person cannot sign this step.',
+        ]);
+
+        $current = $project->ntpSignatories()->pluck('user_id', 'role');
+        $changed = [];
+
+        foreach (ProjectNtp::APPROVAL_CHAIN as $role) {
+            $userId = isset($data['signatories'][$role]) ? (int) $data['signatories'][$role] : null;
+
+            if ($userId === ($current->has($role) ? (int) $current[$role] : null)) {
+                continue;
+            }
+
+            if ($userId === null) {
+                $project->ntpSignatories()->where('role', $role)->delete();
+            } else {
+                $project->ntpSignatories()->updateOrCreate(['role' => $role], ['user_id' => $userId]);
+            }
+
+            $changed[] = $role;
+            $name = $userId ? User::find($userId)?->name : 'the default';
+            AuditTrail::log("NTP signatory for " . User::roleLabel($role) . " set to {$name}", $project, ['module' => 'NTP', 'type' => 'update']);
+        }
+
+        if ($changed === []) {
+            return back()->with('success', 'No changes to the NTP signatories.');
+        }
+
+        $project->unsetRelation('ntpSignatories');
+
+        $project->ntps()->approvalPending()->with('approvals')->get()
+            ->filter(fn (ProjectNtp $ntp) => in_array($ntp->currentApprovalRole(), $changed, true))
+            ->each(function (ProjectNtp $ntp) use ($flow, $project) {
+                $ntp->setRelation('project', $project);
+                $flow->notifyCurrentSigner($ntp);
+            });
+
+        return back()->with('success', 'NTP signatories saved.');
     }
 
     // ── Permits ───────────────────────────────────────────────────────────────

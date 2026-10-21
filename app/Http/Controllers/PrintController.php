@@ -61,11 +61,18 @@ class PrintController extends Controller
     private function ntpForm(Project $project, ProjectNtp $ntp): Response
     {
         $ntp->load('rfq.items', 'creator', 'approvals.user');
+        $project->loadMissing('ntpSignatories.user');
 
         return $this->pdf->stream('print.ntp', [
             'project'      => $project,
             'ntp'          => $ntp,
             'signatories'  => $this->signatories($project),
+            // The people this project names for a step, which beat the
+            // office-wide names until the step is signed and stamped.
+            'named'        => $project->ntpSignatories
+                ->filter(fn ($row) => $row->user)
+                ->mapWithKeys(fn ($row) => [$row->role => $row->user->name])
+                ->all(),
             'subProjectNo' => $project->parent_id ? $project->project_no : null,
         ], "NTP {$ntp->ntp_no}");
     }

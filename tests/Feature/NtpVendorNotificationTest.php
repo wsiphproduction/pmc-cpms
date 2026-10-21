@@ -3,6 +3,7 @@
 use App\Mail\NtpIssuedToVendor;
 use App\Models\Department;
 use App\Models\Division;
+use App\Models\Notification;
 use App\Models\Project;
 use App\Models\ProjectNtp;
 use App\Models\ProjectRfq;
@@ -180,6 +181,86 @@ it('lists the ntp on the division manager user\'s review page once it is their t
     $outsider = makeUserWithRole(User::ROLE_DIVISION_MANAGER_USER, ['division' => 'Mining']);
     $others = collect($this->actingAs($outsider)->get(route('ntp-reviews.index'))->inertiaPage()['props']['ntps']);
     expect($others->pluck('id'))->not->toContain($this->ntp->id);
+});
+
+/**
+ * A manager user of another division who has taken the mine-side sites, as
+ * the Mine division's does for the Mill division's work at the mine.
+ */
+function makeMineSiteManager(): User
+{
+    return makeUserWithRole(User::ROLE_DIVISION_MANAGER_USER, [
+        'division' => 'Mining',
+        'sites'    => ['Mine', 'Sinug-ang'],
+    ]);
+}
+
+function reachDivisionUserStep($test): void
+{
+    approvePmdSteps($test);
+    $test->actingAs($test->requestor)->patch(route('ntp-reviews.approve', $test->ntp))->assertRedirect();
+}
+
+function listedFor($test, User $user)
+{
+    return collect($test->actingAs($user)->get(route('ntp-reviews.index'))->assertOk()->inertiaPage()['props']['ntps']);
+}
+
+it('sends the last signature to the manager user who took the site, whichever division owns the work', function () {
+    $mineManager = makeMineSiteManager();
+    $this->project->update(['site' => 'Mine']);
+
+    reachDivisionUserStep($this);
+
+    $awaiting = fn (User $u) => Notification::where('recipient', $u->id)
+        ->where('message', 'like', "%{$this->ntp->ntp_no}%awaiting your approval%")
+        ->exists();
+
+    expect($awaiting($mineManager))->toBeTrue()
+        ->and($awaiting($this->divisionUser))->toBeFalse()
+        ->and(ProjectNtp::awaitingReviewFrom($mineManager)->count())->toBe(1)
+        ->and(ProjectNtp::awaitingReviewFrom($this->divisionUser)->count())->toBe(0)
+        ->and(listedFor($this, $mineManager)->firstWhere('id', $this->ntp->id)['can_act'])->toBeTrue();
+
+    // The owning division's own manager user no longer holds it.
+    $this->actingAs($this->divisionUser)
+        ->patch(route('ntp-reviews.approve', $this->ntp))
+        ->assertForbidden();
+
+    $this->actingAs($mineManager)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+    expect($this->ntp->fresh()->status)->toBe('issued');
+});
+
+it('leaves a site nobody took with the owning division', function () {
+    $mineManager = makeMineSiteManager();
+    $this->project->update(['site' => 'Other']);
+
+    reachDivisionUserStep($this);
+
+    expect($this->project->fresh()->divisionAudience()->all())->toBe([$this->divisionUser->id])
+        ->and(ProjectNtp::awaitingReviewFrom($this->divisionUser)->count())->toBe(1)
+        ->and(ProjectNtp::awaitingReviewFrom($mineManager)->count())->toBe(0)
+        ->and(listedFor($this, $mineManager)->pluck('id'))->not->toContain($this->ntp->id);
+
+    $this->actingAs($mineManager)
+        ->patch(route('ntp-reviews.approve', $this->ntp))
+        ->assertForbidden();
+
+    $this->actingAs($this->divisionUser)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+    expect($this->ntp->fresh()->status)->toBe('issued');
+});
+
+it('still gives a manager user their own division\'s work on a site nobody took', function () {
+    // Taking the mill side does not cost them the rest of their division.
+    $this->divisionUser->update(['sites' => ['Mill', 'Padigusan']]);
+    makeMineSiteManager();
+
+    reachDivisionUserStep($this);
+
+    expect(ProjectNtp::awaitingReviewFrom($this->divisionUser)->count())->toBe(1);
+
+    $this->actingAs($this->divisionUser)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+    expect($this->ntp->fresh()->status)->toBe('issued');
 });
 
 it('records who signed each step, for the printed form to stamp', function () {

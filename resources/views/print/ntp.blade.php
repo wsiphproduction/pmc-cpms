@@ -106,21 +106,21 @@
         ])
         @include('print.partials.signature', [
             'role' => 'Reviewed by:', 'title' => 'PMD Assistant Manager',
-            'name' => $signatories['pmd_assistant_manager'] ?? '', 'approval' => $stamp('pmd_asst_manager'),
+            'name' => $named['pmd_asst_manager'] ?? $signatories['pmd_assistant_manager'] ?? '', 'approval' => $stamp('pmd_asst_manager'),
         ])
         @include('print.partials.signature', [
             'role' => 'Noted by:', 'title' => 'PMD Manager',
-            'name' => $signatories['pmd_manager'] ?? '', 'approval' => $stamp('pmd_dept_manager'),
+            'name' => $named['pmd_dept_manager'] ?? $signatories['pmd_manager'] ?? '', 'approval' => $stamp('pmd_dept_manager'),
         ])
     </div>
     <div class="sig tight">
         @include('print.partials.signature', [
             'role' => 'Noted by:', 'title' => 'Mine Division Manager',
-            'name' => '', 'approval' => $stamp('division_manager'),
+            'name' => $named['division_manager'] ?? '', 'approval' => $stamp('division_manager'),
         ])
         @include('print.partials.signature', [
             'role' => 'Checked by:', 'title' => 'Project Owner Representative',
-            'name' => '', 'approval' => $stamp('requestor'),
+            'name' => $named['requestor'] ?? '', 'approval' => $stamp('requestor'),
         ])
         @include('print.partials.signature', [
             'role' => 'Received by:', 'title' => 'Service Contractor Representative',

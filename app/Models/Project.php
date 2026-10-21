@@ -250,6 +250,22 @@ class Project extends Model
         return $this->hasMany(ProjectTask::class)->orderBy('target_date');
     }
 
+    /** The NTP steps this project names somebody other than the default to sign. */
+    public function ntpSignatories(): HasMany
+    {
+        return $this->hasMany(ProjectNtpSignatory::class);
+    }
+
+    /**
+     * Whoever this project names to sign the given NTP step, or null when the
+     * step stays with its default holder. A named account since removed
+     * counts as no one, so the step falls back rather than stalling.
+     */
+    public function ntpSignatoryFor(string $role): ?User
+    {
+        return $this->ntpSignatories->firstWhere('role', $role)?->user;
+    }
+
     // ── Sub-project roll-ups ──────────────────────────────────────────────
     //
     // A project always reports its own physical completion (its own weekly
@@ -493,19 +509,31 @@ class Project extends Model
     }
 
     /**
-     * The division manager users over this project's department — the ones
-     * waiting on the last NTP signature.
+     * The division manager users waiting on this project's last NTP
+     * signature. A manager who has taken the project's site signs for it,
+     * whichever division owns the work; on any other site it falls to the
+     * manager users of the owning department's division.
      */
     public function divisionAudience(): Collection
     {
+        $managers = User::whereHas('roles', fn (Builder $q) => $q->where('name', User::ROLE_DIVISION_MANAGER_USER));
+
+        $onSite = (clone $managers)
+            ->whereNotNull('sites')
+            ->get(['id', 'sites'])
+            ->filter(fn (User $manager) => $manager->claimsSite($this->site));
+
+        if ($onSite->isNotEmpty()) {
+            return $onSite->pluck('id')->map(fn ($id) => (int) $id)->values();
+        }
+
         $division = $this->owningDivision();
 
         if (blank($division)) {
             return collect();
         }
 
-        return User::whereHas('roles', fn (Builder $q) => $q->where('name', User::ROLE_DIVISION_MANAGER_USER))
-            ->where('division', $division)
+        return $managers->where('division', $division)
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->values();

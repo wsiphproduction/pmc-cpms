@@ -154,6 +154,25 @@ class User extends Authenticatable
         return $this->hasRole(self::APPROVAL_ROLES);
     }
 
+    /**
+     * Signs NTPs from the For Approval portal rather than NTP Reviews — so a
+     * step named to them is listed, and linked, there.
+     */
+    public function signsFromApprovalsPortal(): bool
+    {
+        return $this->isApprovalRole() || $this->isAdmin();
+    }
+
+    /**
+     * Whether this division manager user has taken the given site: they then
+     * sign NTPs for every project on it, whichever division owns the work.
+     */
+    public function claimsSite(?string $site): bool
+    {
+        return filled($site)
+            && collect($this->sites ?? [])->contains(fn ($claimed) => strcasecmp((string) $claimed, (string) $site) === 0);
+    }
+
     // ── Roster breaks ─────────────────────────────────────────────────────
 
     /** Breaks this user has taken or scheduled as the manager going away. */
@@ -233,6 +252,7 @@ class User extends Authenticatable
         'password',
         'department',
         'division',
+        'sites',
     ];
 
     /**
@@ -256,6 +276,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'tour_seen_at' => 'datetime',
             'password' => 'hashed',
+            'sites' => 'array',
         ];
     }
 }

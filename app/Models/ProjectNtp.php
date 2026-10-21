@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasApprovalChain;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -89,25 +90,34 @@ class ProjectNtp extends Model
     }
 
     /**
-     * The department step belongs to *this project's* department user, and
-     * the division step to the manager user of *that department's* division —
-     * not to everyone holding those roles. The rest of the chain is held by a
-     * single office each, so holding the role is enough.
+     * A step the project names somebody for is theirs alone — or their OIC's
+     * while they are away. Otherwise the department step belongs to *this
+     * project's* department user, and the division step to the manager user
+     * of *that department's* division — not to everyone holding those roles.
+     * The rest of the chain is held by a single office each, so holding the
+     * role is enough.
      */
     public function approvalStepAuthorizes(ApprovalStep $step, User $user): bool
     {
+        $project = $this->project;
+
+        if ($named = $project?->ntpSignatoryFor($step->role)) {
+            return $user->id === $named->id
+                || RosterBreak::coverFor($user, $step->role)?->user_id === $named->id;
+        }
+
         if (! in_array($step->role, self::REVIEW_ROLES, true)) {
             return $user->actsAs($step->role);
         }
-
-        $project = $this->project;
 
         if ($project === null) {
             return false;
         }
 
+        // The manager who has taken the project's site, else the owning division's.
         if ($step->role === User::ROLE_DIVISION_MANAGER_USER) {
-            return $user->hasRole(User::ROLE_DIVISION_MANAGER_USER) && $project->belongsToDivisionOf($user);
+            return $user->hasRole(User::ROLE_DIVISION_MANAGER_USER)
+                && $project->divisionAudience()->contains($user->id);
         }
 
         // The person who raised the request signs for it, whatever else they
@@ -120,7 +130,9 @@ class ProjectNtp extends Model
 
     /**
      * NTPs this user may follow on the NTP Reviews page: a department user's
-     * own projects, a division manager user's whole division. Admins see all.
+     * own projects, a division manager user's whole division plus the sites
+     * they have taken, and any project that names them to sign a step.
+     * Admins see all.
      */
     public function scopeReviewableBy(Builder $query, User $user): Builder
     {
@@ -128,29 +140,51 @@ class ProjectNtp extends Model
             return $query;
         }
 
-        if ($user->hasRole(User::ROLE_DIVISION_MANAGER_USER)) {
-            return $query->whereHas('project', fn (Builder $q) => $q->forDivisionUser($user));
-        }
+        $own = $user->hasRole(User::ROLE_DIVISION_MANAGER_USER)
+            ? fn (Builder $q) => $q->where(fn (Builder $inner) => $inner
+                ->forDivisionUser($user)
+                ->when(! empty($user->sites), fn (Builder $onSite) => $onSite->orWhereIn('site', $user->sites)))
+            : fn (Builder $q) => $q->forDepartmentUser($user);
 
-        return $query->whereHas('project', fn (Builder $q) => $q->forDepartmentUser($user));
+        return $query->where(fn (Builder $q) => $q
+            ->whereHas('project', $own)
+            ->orWhereHas('project.ntpSignatories', fn (Builder $s) => $s->where('user_id', $user->id)));
+    }
+
+    /**
+     * Narrows to NTPs that may be waiting on this user: the current step is
+     * one of their roles, or one their project names them for. A prefilter
+     * only — `awaitingApprovalFrom` settles each record.
+     *
+     * @param  array<int, string>  $roles
+     */
+    public function scopeSignableBy(Builder $query, User $user, array $roles): Builder
+    {
+        return $query
+            ->approvalPending()
+            ->whereHas('project')
+            ->where(fn (Builder $q) => $q
+                ->awaitingAnyRole($roles)
+                ->orWhereHas('project.ntpSignatories', fn (Builder $s) => $s->where('user_id', $user->id)))
+            ->with(['project.ntpSignatories.user', 'project.projectRequest', 'approvals']);
     }
 
     /**
      * NTPs now sitting on this user's own review step — what the NTP Reviews
      * badge counts. Admins hold no step, so for them it is everything open.
      */
-    public function scopeAwaitingReviewFrom(Builder $query, User $user): Builder
+    public static function awaitingReviewFrom(User $user): Collection
     {
         if ($user->hasRole(User::ROLE_ADMIN)) {
-            return $query->approvalPending();
+            return static::approvalPending()->get();
         }
 
-        $role = collect(self::REVIEW_ROLES)->first(fn (string $role) => $user->hasRole($role));
+        $roles = array_values(array_filter(self::REVIEW_ROLES, fn (string $role) => $user->hasRole($role)));
 
-        if ($role === null) {
-            return $query->whereRaw('1 = 0');
-        }
-
-        return $query->awaitingRole($role)->reviewableBy($user);
+        return static::signableBy($user, $roles)
+            ->reviewableBy($user)
+            ->get()
+            ->filter(fn (self $ntp) => $ntp->awaitingApprovalFrom($user))
+            ->values();
     }
 }

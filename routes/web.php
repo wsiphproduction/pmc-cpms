@@ -129,7 +129,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('projects/{project}/completion', [ProjectController::class, 'saveCompletion'])
         ->middleware('can:update,project')->name('projects.completion.save');
 
-    foreach (['rfq', 'ntp', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'] as $section) {
+    foreach (['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'] as $section) {
         Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])
             ->defaults('section', $section)
             ->middleware('can:view,project')
@@ -173,6 +173,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('ntp',                     [ProjectHubController::class, 'storeNtp'])->name('hub.ntp.store');
         Route::post('ntp/{ntp}/send',          [ProjectHubController::class, 'sendNtp'])->name('hub.ntp.send');
         Route::delete('ntp/{ntp}',             [ProjectHubController::class, 'destroyNtp'])->name('hub.ntp.destroy');
+
+        Route::put('signatories',              [ProjectHubController::class, 'updateNtpSignatories'])->name('hub.signatories.update');
         // Permits
         Route::post('permits',                 [ProjectHubController::class, 'storePermit'])->name('hub.permits.store');
         Route::delete('permits/{permit}',      [ProjectHubController::class, 'destroyPermit'])->name('hub.permits.destroy');

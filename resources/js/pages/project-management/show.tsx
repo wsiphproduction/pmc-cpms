@@ -7,6 +7,7 @@ import AuditTrailHub from './hub/AuditTrailHub';
 import IocHub from './hub/IocHub';
 import MtrHub from './hub/MtrHub';
 import NtpHub from './hub/NtpHub';
+import NtpSignatoriesHub from './hub/NtpSignatoriesHub';
 import PermitsHub from './hub/PermitsHub';
 import PsrHub from './hub/PsrHub';
 import QppHub from './hub/QppHub';
@@ -133,6 +134,7 @@ const STATUS_HINTS: Record<string, string> = {
 const OPS_MENU = [
     { key: 'rfq', label: 'Request for Quotations', short: 'RFQ', action: 'Create RFQ Package', summary: 'Prepare quotation requests, contractor scopes, and bid comparison notes.' },
     { key: 'ntp', label: 'Notice to Proceed', short: 'NTP', action: 'Prepare NTP', summary: 'Track approval readiness, signatures, and notice issuance details.' },
+    { key: 'signatories', label: 'NTP Signatories', short: 'SIG', action: 'Set Signatories', summary: 'See who signs each NTP step on this project, and name someone else where needed.' },
     { key: 'subprojects', label: 'Sub-Projects', short: 'SUB', action: 'Add Sub-Project', summary: 'Split the project into parts that are planned, procured and billed on their own.' },
     { key: 'permits', label: 'Permits', short: 'PER', action: 'Add Permit', summary: 'Monitor required permits, filing dates, and release status.' },
     { key: 'vof', label: 'Variation Order Form', short: 'VOF', action: 'Create Variation', summary: 'Log scope changes, cost movement, and approval remarks.' },
@@ -164,6 +166,7 @@ function renderHubSection(
     switch (section) {
         case 'rfq':     return <RfqHub     project={hubProject} rfqs={hubData.rfqs ?? []} suppliers={hubData.suppliers ?? []} canEdit={canEdit} />;
         case 'ntp':     return <NtpHub     project={hubProject} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
+        case 'signatories': return <NtpSignatoriesHub project={hubProject} steps={hubData.steps ?? []} canEdit={canEdit} />;
         case 'subprojects': return <SubProjectsHub
             project={hubProject}
             subprojects={hubData.subprojects ?? []}
