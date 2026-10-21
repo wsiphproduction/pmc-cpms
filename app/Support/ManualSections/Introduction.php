@@ -16,7 +16,7 @@ class Introduction
                     ['h', 'What the system holds'],
                     ['ul', [
                         'Project requests raised by the operating departments, with their attachments and the conversation about them.',
-                        'Projects registered by PMD, each with a Project Hub holding thirteen working areas — procurement, permits, variations, quality, billing, cost and progress.',
+                        'Projects registered by PMD, each with a Project Hub holding sixteen working areas — procurement, permits, variations, quality, billing, cost, progress, meeting minutes and site photos.',
                         'Two sequential sign-off chains: one for a project request, one for a Notice to Proceed.',
                         'The controlled PMD forms — RFQ, NTP, the Acceptance Certificate and the Completion Summary — printed from the record rather than typed again.',
                         'A supplier portal that lets contractors quote against an RFQ without holding an account.',

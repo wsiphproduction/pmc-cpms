@@ -230,6 +230,16 @@ class Project extends Model
         return $this->hasMany(ProjectMtrDoc::class)->latest();
     }
 
+    public function meetingMinutes(): HasMany
+    {
+        return $this->hasMany(ProjectMeetingMinute::class)->orderByDesc('meeting_date')->orderByDesc('id');
+    }
+
+    public function photoAlbums(): HasMany
+    {
+        return $this->hasMany(ProjectPhotoAlbum::class)->orderByDesc('photo_date')->orderByDesc('id');
+    }
+
     public function billings(): HasMany
     {
         return $this->hasMany(ProjectBilling::class)->latest();

@@ -5,10 +5,12 @@ import type { HubProject } from './hub/Common';
 import AcrHub from './hub/AcrHub';
 import AuditTrailHub from './hub/AuditTrailHub';
 import IocHub from './hub/IocHub';
+import MomHub from './hub/MomHub';
 import MtrHub from './hub/MtrHub';
 import NtpHub from './hub/NtpHub';
 import NtpSignatoriesHub from './hub/NtpSignatoriesHub';
 import PermitsHub from './hub/PermitsHub';
+import PhotosHub from './hub/PhotosHub';
 import PsrHub from './hub/PsrHub';
 import QppHub from './hub/QppHub';
 import RfpHub from './hub/RfpHub';
@@ -144,6 +146,8 @@ const OPS_MENU = [
     { key: 'ioc', label: 'Input Other Cost', short: 'IOC', action: 'Add Other Cost', summary: 'Capture miscellaneous project costs outside the main budget line.' },
     { key: 'acr', label: 'Actual Cost Report', short: 'ACR', action: 'Generate Cost Report', summary: 'Review paid, committed, and actual project cost movement.' },
     { key: 'psr', label: 'Project Status Report', short: 'PSR', action: 'Create Status Report', summary: 'Summarize progress, blockers, photos, milestones, and next actions.' },
+    { key: 'mom',    label: 'Minutes of the Meeting', short: 'MOM', action: 'Add Minutes', summary: 'Keep the minutes of each project meeting, filed by meeting date.' },
+    { key: 'photos', label: 'Photos',                 short: 'PHO', action: 'Upload Photos', summary: 'Site photos grouped by date, viewed as a gallery.' },
     { key: 'at',   label: 'Project Audit Trail', short: 'AT',  action: 'View Audit Trail',   summary: 'Review project events, status changes, and user activity history.' },
     { key: 'todo', label: 'Todo List',           short: 'TODO', action: 'Add Task',           summary: 'Track project tasks with target dates and completion status.' },
 ];
@@ -183,6 +187,8 @@ function renderHubSection(
         case 'ioc':     return <IocHub     project={hubProject} iocs={hubData.iocs ?? []} costCodes={hubData.cost_codes ?? []} canEdit={canEdit} />;
         case 'acr':     return <AcrHub     project={hubProject} iocs={hubData.iocs ?? []} canEdit={canEdit} />;
         case 'psr':     return <PsrHub     project={hubProject} reports={hubData.reports ?? []} ntps={hubData.ntps ?? []} checklist={hubData.checklist ?? []} issueRows={hubData.issue_rows ?? 3} statuses={hubData.statuses ?? []} canEdit={canEdit} />;
+        case 'mom':     return <MomHub     project={hubProject} minutes={hubData.minutes ?? []} canEdit={canEdit} />;
+        case 'photos':  return <PhotosHub  project={hubProject} albums={hubData.albums ?? []} canEdit={canEdit} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
         case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} canEdit={canEdit} />;
         default:        return <RfqHub     project={hubProject} rfqs={[]} canEdit={canEdit} />;

@@ -51,7 +51,7 @@ class Projects
                     ['p', 'Every change is kept in the project’s status log with your name, the time and your remarks, and it appears in the audit trail.'],
 
                     ['h', 'The project page'],
-                    ['p', 'Opening a project shows its details — number, encoder, asset ID, cost code, project cost, WR number and date, priority, department owner, owner’s email, class, category, service type, structure, workforce, deadline and the disciplines the work needs — followed by the thirteen hub sections and the summary cards for RFQs and NTPs.'],
+                    ['p', 'Opening a project shows its details — number, encoder, asset ID, cost code, project cost, WR number and date, priority, department owner, owner’s email, class, category, service type, structure, workforce, deadline and the disciplines the work needs — followed by the sixteen hub sections and the summary cards for RFQs and NTPs.'],
 
                     ['h', 'What you may change'],
                     ['ul', [

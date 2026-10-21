@@ -9,9 +9,12 @@ use Illuminate\Support\Facades\Mail;
 use App\Models\Project;
 use App\Models\ProjectBilling;
 use App\Models\ProjectIocItem;
+use App\Models\ProjectMeetingMinute;
 use App\Models\ProjectMtrDoc;
 use App\Models\ProjectNtp;
 use App\Models\ProjectPermit;
+use App\Models\ProjectPhoto;
+use App\Models\ProjectPhotoAlbum;
 use App\Models\ProjectQualityDoc;
 use App\Models\ProjectRfq;
 use App\Models\ProjectRfqQuotation;
@@ -20,6 +23,7 @@ use App\Models\ProjectTask;
 use App\Models\ProjectWeeklyReport;
 use App\Models\Setting;
 use App\Models\User;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Support\ApprovalFlow;
@@ -1020,6 +1024,118 @@ class ProjectHubController extends Controller
         $mtr->delete();
 
         return back()->with('success', 'Report deleted.');
+    }
+
+    // ── Minutes of the Meeting ────────────────────────────────────────────────
+
+    public function storeMinutes(Request $request, Project $project): RedirectResponse
+    {
+        $data = $request->validate([
+            'meeting_date' => ['required', 'date'],
+            // Documents and scans only: these land on the public disk, so
+            // nothing a web server would run or render as a page.
+            'file'         => ['required', 'file', 'mimes:pdf,doc,docx,odt,rtf,txt,xls,xlsx,jpg,jpeg,png', 'max:20480'],
+        ]);
+
+        $file = $request->file('file');
+        $path = $file->store("hub/mom/{$project->id}", 'public');
+
+        $minutes = $project->meetingMinutes()->create([
+            'meeting_date' => $data['meeting_date'],
+            'file_path'    => $path,
+            'filename'     => $file->getClientOriginalName(),
+            'created_by'   => auth()->id(),
+        ]);
+
+        $minutes->recordFileVersion(
+            $path,
+            $file->getClientOriginalName(),
+            mimeType: $file->getMimeType(),
+            size: $file->getSize(),
+        );
+
+        AuditTrail::log("Minutes of the meeting uploaded for {$minutes->meeting_date->format('M d, Y')}", $project, ['module' => 'MOM', 'type' => 'upload']);
+
+        return back()->with('success', 'Minutes of the meeting uploaded.');
+    }
+
+    public function destroyMinutes(Project $project, ProjectMeetingMinute $minutes): RedirectResponse
+    {
+        abort_unless((int) $minutes->project_id === (int) $project->id, 403);
+
+        AuditTrail::log("Minutes of the meeting deleted for {$minutes->meeting_date->format('M d, Y')}", $project, ['module' => 'MOM', 'type' => 'delete']);
+        Storage::disk('public')->delete($minutes->file_path);
+        $minutes->delete();
+
+        return back()->with('success', 'Minutes deleted.');
+    }
+
+    // ── Photos ────────────────────────────────────────────────────────────────
+
+    /**
+     * Adds photos to the album for a date, opening one if the date has none.
+     * The page sends a large selection in several smaller requests (so no
+     * single one runs into the host's post size limit) and asks for JSON, then
+     * reloads once at the end.
+     */
+    public function storePhotos(Request $request, Project $project): RedirectResponse|JsonResponse
+    {
+        $data = $request->validate([
+            'photo_date' => ['required', 'date'],
+            'photos'     => ['required', 'array', 'min:1', 'max:20'],
+            'photos.*'   => ['required', 'image', 'mimes:jpg,jpeg,png,webp,gif', 'max:15360'],
+        ]);
+
+        $album = $project->photoAlbums()->firstOrCreate(
+            ['photo_date' => $data['photo_date']],
+            ['created_by' => auth()->id()],
+        );
+
+        foreach ($request->file('photos') as $file) {
+            $album->photos()->create([
+                'file_path'  => $file->store("hub/photos/{$project->id}", 'public'),
+                'filename'   => $file->getClientOriginalName(),
+                'created_by' => auth()->id(),
+            ]);
+        }
+
+        $count = count($request->file('photos'));
+        AuditTrail::log("{$count} photo(s) uploaded for {$album->photo_date->format('M d, Y')}", $project, ['module' => 'Photos', 'type' => 'upload']);
+
+        if ($request->expectsJson()) {
+            return response()->json(['album_id' => $album->id, 'uploaded' => $count]);
+        }
+
+        return back()->with('success', 'Photos uploaded.');
+    }
+
+    public function destroyPhotoAlbum(Project $project, ProjectPhotoAlbum $album): RedirectResponse
+    {
+        abort_unless((int) $album->project_id === (int) $project->id, 403);
+
+        AuditTrail::log("Photos deleted for {$album->photo_date->format('M d, Y')} ({$album->photos()->count()} photo(s))", $project, ['module' => 'Photos', 'type' => 'delete']);
+        Storage::disk('public')->delete($album->photos()->pluck('file_path')->all());
+        $album->photos()->delete();
+        $album->delete();
+
+        return back()->with('success', 'Photos deleted.');
+    }
+
+    public function destroyPhoto(Project $project, ProjectPhotoAlbum $album, ProjectPhoto $photo): RedirectResponse
+    {
+        abort_unless((int) $album->project_id === (int) $project->id, 403);
+        abort_unless((int) $photo->project_photo_album_id === (int) $album->id, 404);
+
+        AuditTrail::log("Photo deleted from {$album->photo_date->format('M d, Y')}: {$photo->filename}", $project, ['module' => 'Photos', 'type' => 'delete']);
+        Storage::disk('public')->delete($photo->file_path);
+        $photo->delete();
+
+        // An album is only its photos, so the last one out takes it along.
+        if (! $album->photos()->exists()) {
+            $album->delete();
+        }
+
+        return back()->with('success', 'Photo deleted.');
     }
 
     // ── Billing (RFP) ─────────────────────────────────────────────────────────

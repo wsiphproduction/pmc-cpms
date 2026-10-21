@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\ProjectBilling;
 use App\Models\ProjectIocItem;
+use App\Models\ProjectMeetingMinute;
 use App\Models\ProjectMtrDoc;
 use App\Models\ProjectPermitFile;
 use App\Models\ProjectQualityDoc;
@@ -39,6 +40,7 @@ class FileVersionController extends Controller
         'vof'         => [ProjectVariationOrder::class, 'attachment',        null,       'vof-files'],
         'qpp'         => [ProjectQualityDoc::class,     'file_path',         'filename', 'hub/qpp/%d'],
         'mtr'         => [ProjectMtrDoc::class,         'file_path',         'filename', 'hub/mtr/%d'],
+        'mom'         => [ProjectMeetingMinute::class,  'file_path',         'filename', 'hub/mom/%d'],
         'rfp'         => [ProjectBilling::class,        'file_path',         'filename', 'hub/rfp/%d'],
         'ioc'         => [ProjectIocItem::class,        'file_path',         'filename', 'hub/ioc/%d'],
         'psr'         => [ProjectWeeklyReport::class,   'file_path',         'filename', 'hub/psr/%d'],
@@ -51,6 +53,7 @@ class FileVersionController extends Controller
         'vof'         => 'VOF',
         'qpp'         => 'QPP',
         'mtr'         => 'MTR',
+        'mom'         => 'MOM',
         'rfp'         => 'RFP',
         'ioc'         => 'IOC',
         'psr'         => 'PSR',

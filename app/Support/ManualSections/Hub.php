@@ -2,7 +2,7 @@
 
 namespace App\Support\ManualSections;
 
-/** The thirteen working areas of the Project Hub, plus the supplier portal. */
+/** The sixteen working areas of the Project Hub, plus the supplier portal. */
 class Hub
 {
     public static function sections(): array
@@ -12,13 +12,14 @@ class Hub
                 'title' => 'The Project Hub',
                 'blocks' => [
                     ['path', 'Open a project > the hub tabs'],
-                    ['p', 'The hub is where a project is actually run. Thirteen sections sit behind one project, each holding one kind of record, and every change made in any of them is written to the project’s audit trail with your name against it.'],
+                    ['p', 'The hub is where a project is actually run. Sixteen sections sit behind one project, each holding one kind of record, and every change made in any of them is written to the project’s audit trail with your name against it.'],
 
                     ['table',
                         ['Tab', 'Full name', 'What it holds'],
                         [
                             ['RFQ', 'Request for Quotations', 'Quotation requests sent to contractors, and the offers that came back.'],
                             ['NTP', 'Notice to Proceed', 'The notices awarding work, and their five-office approval chain.'],
+                            ['SIG', 'NTP Signatories', 'Who signs each NTP step on this project, where it is not the default.'],
                             ['SUB', 'Sub-Projects', 'Parts of the project planned, procured and billed on their own.'],
                             ['PER', 'Permits', 'Permits the work needs, with the documents behind them.'],
                             ['VOF', 'Variation Order Form', 'Changes to scope, schedule and cost after award.'],
@@ -28,6 +29,8 @@ class Hub
                             ['IOC', 'Input Other Cost', 'Costs outside the main contract line.'],
                             ['ACR', 'Actual Cost Report', 'Paid, committed and actual cost, read together.'],
                             ['PSR', 'Project Status Report', 'Weekly progress, site checklist, issues and action plans.'],
+                            ['MOM', 'Minutes of the Meeting', 'The minutes of each project meeting, filed by meeting date.'],
+                            ['PHO', 'Photos', 'Site photos grouped by date, viewed as a gallery.'],
                             ['AT', 'Project Audit Trail', 'Everything that has happened on the project.'],
                             ['TODO', 'Todo List', 'Project tasks with target dates.'],
                         ],
@@ -373,6 +376,38 @@ class Hub
                         'Upload the completed workbook.',
                     ]],
                     ['p', 'The completion percentage on the latest report is what drives the project’s reported progress, and through it the completion KPI on the dashboard.'],
+                ],
+            ],
+
+            'hub-mom' => [
+                'title' => 'MOM — Minutes of the Meeting',
+                'blocks' => [
+                    ['path', 'Open a project > Minutes of the Meeting'],
+                    ['p', 'The minutes of each meeting held on the project, one document per meeting, listed newest meeting first.'],
+                    ['ol', [
+                        'Pick the meeting date.',
+                        'Attach the minutes — PDF, Word, Excel or a scan, up to 20 MB.',
+                        'Click Add Minutes.',
+                    ]],
+                    ['p', 'View opens the document in a new tab; Download saves it under the name it was uploaded with. Word and Excel files download rather than open, as browsers cannot show them.'],
+                    ['p', 'If the minutes are corrected after the meeting, replace the file on the existing row rather than adding a second one — the earlier version stays in the row’s history.'],
+                ],
+            ],
+
+            'hub-photos' => [
+                'title' => 'Photos',
+                'blocks' => [
+                    ['path', 'Open a project > Photos'],
+                    ['p', 'Site photos, grouped by the date they were taken. Each date is one row in the table, with a preview of its first few photos.'],
+                    ['ol', [
+                        'Pick the date the photos were taken.',
+                        'Choose the photos — select several at once, or drag them onto the upload box. Remove any you picked by mistake from the preview.',
+                        'Click Upload Photos.',
+                    ]],
+                    ['p', 'Uploading on a date that already has photos adds the new ones to that date. Large photos are scaled down in your browser before they are sent, so a phone’s full-size photos upload quickly.'],
+                    ['h', 'Viewing'],
+                    ['p', 'Click View, or the preview, to open the date’s gallery. Click any photo to see it full size; use the arrows, or the ← and → keys, to step through, and Esc to close. Each photo can be downloaded from there.'],
+                    ['p', 'Delete on a row removes every photo for that date. To remove a single photo, open the gallery and use the delete button on that photo.'],
                 ],
             ],
 

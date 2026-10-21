@@ -50,6 +50,8 @@ const MODULE_COLORS: Record<string, [string, string]> = {
     'RFP':     ['#fffbeb', '#d97706'],
     'IOC':     ['#fdf4ff', '#a21caf'],
     'PSR':     ['#f0fdf4', '#15803d'],
+    'MOM':     ['#f0fdfa', '#0d9488'],
+    'Photos':  ['#f5f3ff', '#7c3aed'],
     'Project': ['#f8fafc', '#475569'],
 };
 

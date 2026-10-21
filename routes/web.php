@@ -132,7 +132,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('projects/{project}/completion', [ProjectController::class, 'saveCompletion'])
         ->middleware('can:update,project')->name('projects.completion.save');
 
-    foreach (['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'] as $section) {
+    foreach (['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'at', 'todo'] as $section) {
         Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])
             ->defaults('section', $section)
             ->middleware('can:view,project')
@@ -192,6 +192,13 @@ Route::middleware(['auth'])->group(function () {
         // MTR
         Route::post('mtr',                     [ProjectHubController::class, 'storeMtr'])->name('hub.mtr.store');
         Route::delete('mtr/{mtr}',             [ProjectHubController::class, 'destroyMtr'])->name('hub.mtr.destroy');
+        // Minutes of the Meeting
+        Route::post('mom',                     [ProjectHubController::class, 'storeMinutes'])->name('hub.mom.store');
+        Route::delete('mom/{minutes}',         [ProjectHubController::class, 'destroyMinutes'])->name('hub.mom.destroy');
+        // Photos
+        Route::post('photos',                  [ProjectHubController::class, 'storePhotos'])->name('hub.photos.store');
+        Route::delete('photos/{album}',        [ProjectHubController::class, 'destroyPhotoAlbum'])->name('hub.photos.destroy');
+        Route::delete('photos/{album}/{photo}', [ProjectHubController::class, 'destroyPhoto'])->name('hub.photos.destroy-photo');
         // Billing (RFP)
         Route::post('rfp',                     [ProjectHubController::class, 'storeBilling'])->name('hub.rfp.store');
         Route::patch('rfp/{billing}',          [ProjectHubController::class, 'updateBilling'])->name('hub.rfp.update');

@@ -26,6 +26,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -456,7 +457,7 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
-        $validSections = ['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'at', 'todo'];
+        $validSections = ['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
         // Sub-projects run their own procurement now, so no section is off
@@ -497,7 +498,8 @@ class ProjectController extends Controller
         // hub views so the sidebar badges agree with what's listed.
         $ids = collect([$project->id])->concat($project->children->pluck('id'))->all();
         $countAcross = fn (string $relation) => $project->newQuery()
-            ->whereIn('id', $ids)->withCount($relation)->get()->sum("{$relation}_count");
+            // withCount names its column in snake case (mtrDocs → mtr_docs_count).
+            ->whereIn('id', $ids)->withCount($relation)->get()->sum(Str::snake($relation).'_count');
 
         return [
             'rfq'         => $countAcross('rfqs'),
@@ -514,6 +516,8 @@ class ProjectController extends Controller
             'ioc'         => $countAcross('iocItems'),
             'acr'         => $countAcross('iocItems'),
             'psr'         => $countAcross('weeklyReports'),
+            'mom'         => $countAcross('meetingMinutes'),
+            'photos'      => $countAcross('photoAlbums'),
             'at'          => AuditTrail::where('reference_type', Project::class)->whereIn('reference_id', $ids)->count(),
             'todo'        => $countAcross('tasks'),
         ];
@@ -595,6 +599,14 @@ class ProjectController extends Controller
 
             'mtr' => [
                 'mtrs' => $this->collectHubRows($project, fn ($p) => $p->mtrDocs()->with('fileVersions.uploader')->get(), fn ($m, $sub) => $this->mtrRow($m, $sub)),
+            ],
+
+            'mom' => [
+                'minutes' => $this->collectHubRows($project, fn ($p) => $p->meetingMinutes()->with('creator', 'fileVersions.uploader')->get(), fn ($m, $sub) => $this->minutesRow($m, $sub)),
+            ],
+
+            'photos' => [
+                'albums' => $this->collectHubRows($project, fn ($p) => $p->photoAlbums()->with('creator', 'photos.uploader')->get(), fn ($a, $sub) => $this->photoAlbumRow($a, $sub)),
             ],
 
             'rfp' => [
@@ -991,6 +1003,38 @@ class ProjectController extends Controller
             'url'           => Storage::disk('public')->url($doc->file_path),
             'versions'      => $doc->fileVersionPayload(),
             'remarks'       => $doc->remarks,
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
+        ];
+    }
+
+    private function minutesRow($minutes, ?Project $sub): array
+    {
+        return [
+            'id'           => $minutes->id,
+            'meeting_date' => $minutes->meeting_date->format('M d, Y'),
+            'filename'     => $minutes->filename,
+            'url'          => Storage::disk('public')->url($minutes->file_path),
+            'versions'     => $minutes->fileVersionPayload(),
+            'uploaded_by'  => $minutes->creator?->name ?? '-',
+            'uploaded_at'  => $minutes->created_at?->format('M d, Y') ?? '-',
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
+        ];
+    }
+
+    private function photoAlbumRow($album, ?Project $sub): array
+    {
+        return [
+            'id'          => $album->id,
+            'photo_date'  => $album->photo_date->format('M d, Y'),
+            'uploaded_by' => $album->creator?->name ?? '-',
+            'photos'      => $album->photos->map(fn ($photo) => [
+                'id'          => $photo->id,
+                'filename'    => $photo->filename,
+                'url'         => Storage::disk('public')->url($photo->file_path),
+                'uploaded_by' => $photo->uploader?->name ?? '-',
+            ])->values()->all(),
             'sub_project_id' => $sub?->id,
             'sub_project_no' => $sub?->project_no,
         ];
