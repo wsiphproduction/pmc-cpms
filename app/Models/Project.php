@@ -535,12 +535,7 @@ class Project extends Model
      */
     public function divisionAudience(): Collection
     {
-        $managers = User::whereHas('roles', fn (Builder $q) => $q->where('name', User::ROLE_DIVISION_MANAGER_USER));
-
-        $onSite = (clone $managers)
-            ->whereNotNull('sites')
-            ->get(['id', 'sites'])
-            ->filter(fn (User $manager) => $manager->claimsSite($this->site));
+        $onSite = $this->siteManagers();
 
         if ($onSite->isNotEmpty()) {
             return $onSite->pluck('id')->map(fn ($id) => (int) $id)->values();
@@ -552,9 +547,26 @@ class Project extends Model
             return collect();
         }
 
-        return $managers->where('division', $division)
+        return User::whereHas('roles', fn (Builder $q) => $q->where('name', User::ROLE_DIVISION_MANAGER_USER))
+            ->where('division', $division)
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
+            ->values();
+    }
+
+    /**
+     * The division manager users who have taken this project's site. They
+     * sign both division steps of its NTPs: the Division Manager's in place of
+     * the office holder, and the last one in place of the owning division's.
+     * Empty on a site nobody has taken.
+     */
+    public function siteManagers(): Collection
+    {
+        return User::whereHas('roles', fn (Builder $q) => $q->where('name', User::ROLE_DIVISION_MANAGER_USER))
+            ->whereNotNull('sites')
+            ->orderBy('name')
+            ->get(['id', 'name', 'sites'])
+            ->filter(fn (User $manager) => $manager->claimsSite($this->site))
             ->values();
     }
 

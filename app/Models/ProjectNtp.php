@@ -91,7 +91,8 @@ class ProjectNtp extends Model
 
     /**
      * A step the project names somebody for is theirs alone — or their OIC's
-     * while they are away. Otherwise the department step belongs to *this
+     * while they are away. On a site a division manager user has taken, the
+     * Division Manager's step is theirs too. Otherwise the department step belongs to *this
      * project's* department user, and the division step to the manager user
      * of *that department's* division — not to everyone holding those roles.
      * The rest of the chain is held by a single office each, so holding the
@@ -104,6 +105,13 @@ class ProjectNtp extends Model
         if ($named = $project?->ntpSignatoryFor($step->role)) {
             return $user->id === $named->id
                 || RosterBreak::coverFor($user, $step->role)?->user_id === $named->id;
+        }
+
+        // On a site a division manager user has taken, the Division Manager's
+        // step is theirs rather than the office holder's.
+        if ($step->role === User::ROLE_DIVISION_MANAGER && $project
+            && ($onSite = $project->siteManagers())->isNotEmpty()) {
+            return $onSite->contains('id', $user->id);
         }
 
         if (! in_array($step->role, self::REVIEW_ROLES, true)) {
@@ -153,19 +161,25 @@ class ProjectNtp extends Model
 
     /**
      * Narrows to NTPs that may be waiting on this user: the current step is
-     * one of their roles, or one their project names them for. A prefilter
-     * only — `awaitingApprovalFrom` settles each record.
+     * one of their roles, one their project names them for, or the Division
+     * Manager's step on a site they have taken. A prefilter only —
+     * `awaitingApprovalFrom` settles each record.
      *
      * @param  array<int, string>  $roles
      */
     public function scopeSignableBy(Builder $query, User $user, array $roles): Builder
     {
+        $takesSites = $user->hasRole(User::ROLE_DIVISION_MANAGER_USER) && ! empty($user->sites);
+
         return $query
             ->approvalPending()
             ->whereHas('project')
             ->where(fn (Builder $q) => $q
                 ->awaitingAnyRole($roles)
-                ->orWhereHas('project.ntpSignatories', fn (Builder $s) => $s->where('user_id', $user->id)))
+                ->orWhereHas('project.ntpSignatories', fn (Builder $s) => $s->where('user_id', $user->id))
+                ->when($takesSites, fn (Builder $onSite) => $onSite->orWhere(fn (Builder $inner) => $inner
+                    ->awaitingRole(User::ROLE_DIVISION_MANAGER)
+                    ->whereHas('project', fn (Builder $p) => $p->whereIn('site', $user->sites)))))
             ->with(['project.ntpSignatories.user', 'project.projectRequest', 'approvals']);
     }
 

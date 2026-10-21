@@ -312,6 +312,15 @@ class ApprovalFlow
             return;
         }
 
+        // On a site a division manager user has taken, the Division Manager's
+        // step goes to them, and they sign it from NTP Reviews.
+        if ($record instanceof ProjectNtp && $role === User::ROLE_DIVISION_MANAGER
+            && ($onSite = $record->project?->siteManagers() ?? collect())->isNotEmpty()) {
+            Notification::notify($onSite->pluck('id'), $message, route('ntp-reviews.index', absolute: false));
+
+            return;
+        }
+
         // An NTP's review steps are held per project, so only the people
         // behind that project's department (or its division) are called on —
         // and from their own review page, not the PMD portal.

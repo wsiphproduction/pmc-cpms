@@ -170,6 +170,98 @@ it('leaves the signatories to those who can edit the project', function () {
     sigSave($this, [User::ROLE_PMD_ASST_MANAGER => $this->pmdAsst2->id], $this->requestor)->assertForbidden();
 });
 
+// ── The Division Manager step on a site a division manager user has taken ──
+
+it('gives the division manager step to the manager user who has taken the site, who also signs the last step', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $this->mineManager->update(['sites' => ['Mine', 'Sinug-ang']]);
+    $ntp = sigRaiseNtp($this);
+
+    foreach ([$this->pmdAsst, $this->pmdManager] as $approver) {
+        $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+    }
+
+    expect(sigAwaiting($this->mineManager, $ntp))->toBeTrue()
+        ->and(Notification::where('recipient', $this->mineManager->id)->latest('id')->value('link'))->toContain('ntp-reviews')
+        ->and(sigAwaiting($this->division, $ntp))->toBeFalse()
+        ->and(sigPortal($this, $this->division)->pluck('id'))->not->toContain($ntp->id)
+        // Not his step (the Division Manager keeps only the admin override every admin has).
+        ->and($ntp->fresh()->awaitingApprovalFrom($this->division))->toBeFalse()
+        ->and(ProjectNtp::awaitingReviewFrom($this->mineManager)->pluck('id')->all())->toBe([$ntp->id]);
+
+    $this->actingAs($this->mineManager)->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
+    $this->actingAs($this->requestor)->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
+
+    // The last step is his too, as the manager who has taken the site.
+    expect($ntp->fresh()->awaitingApprovalFrom($this->mineManager))->toBeTrue();
+    $this->actingAs($this->mineManager)->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
+
+    $timeline = collect($ntp->fresh()->approvalTimeline())->keyBy('role');
+    expect($ntp->fresh()->status)->toBe('issued')
+        ->and($timeline[User::ROLE_DIVISION_MANAGER]['actor'])->toBe('Earl Mine')
+        ->and($timeline[User::ROLE_DIVISION_MANAGER_USER]['actor'])->toBe('Earl Mine');
+});
+
+it('matches the site whatever its case', function () {
+    $this->mineManager->update(['sites' => ['MINE']]);
+    $ntp = sigRaiseNtp($this);
+
+    foreach ([$this->pmdAsst, $this->pmdManager] as $approver) {
+        $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp));
+    }
+
+    expect($ntp->fresh()->awaitingApprovalFrom($this->mineManager))->toBeTrue()
+        ->and($ntp->fresh()->awaitingApprovalFrom($this->division))->toBeFalse();
+});
+
+it('leaves the division manager step with the office holder on a site nobody has taken', function () {
+    $this->mineManager->update(['sites' => ['Sinug-ang']]);
+    $ntp = sigRaiseNtp($this);
+
+    foreach ([$this->pmdAsst, $this->pmdManager] as $approver) {
+        $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+    }
+
+    expect(sigAwaiting($this->division, $ntp))->toBeTrue()
+        ->and(sigPortal($this, $this->division)->pluck('id'))->toContain($ntp->id)
+        ->and($ntp->fresh()->awaitingApprovalFrom($this->mineManager))->toBeFalse();
+
+    $this->actingAs($this->division)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+    expect($ntp->fresh()->currentApprovalRole())->toBe(User::ROLE_REQUESTOR);
+});
+
+it('lists and prints the site manager as the division manager step default', function () {
+    $this->mineManager->update(['sites' => ['Mine', 'Sinug-ang']]);
+
+    $steps = collect($this->actingAs($this->engineer)
+        ->get(route('projects.hub.signatories', $this->project))
+        ->inertiaPage()['props']['hub_data']['steps'])->keyBy('role');
+
+    // A default, not a choice the project made.
+    expect($steps[User::ROLE_DIVISION_MANAGER]['default_names'])->toBe(['Earl Mine'])
+        ->and($steps[User::ROLE_DIVISION_MANAGER]['user_id'])->toBeNull()
+        ->and($steps[User::ROLE_DIVISION_MANAGER_USER]['default_names'])->toBe(['Earl Mine']);
+
+    $ntp = sigRaiseNtp($this);
+    $this->actingAs($this->engineer)
+        ->get(route('print.ntp', [$this->project, $ntp]))
+        ->assertOk()
+        ->assertSee('Earl Mine');
+});
+
+it('still lets a project name someone else over the site manager', function () {
+    $this->mineManager->update(['sites' => ['Mine', 'Sinug-ang']]);
+    sigSave($this, [User::ROLE_DIVISION_MANAGER => $this->millManager->id])->assertSessionHasNoErrors();
+    $ntp = sigRaiseNtp($this);
+
+    foreach ([$this->pmdAsst, $this->pmdManager] as $approver) {
+        $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp));
+    }
+
+    expect($ntp->fresh()->awaitingApprovalFrom($this->millManager))->toBeTrue()
+        ->and($ntp->fresh()->awaitingApprovalFrom($this->mineManager))->toBeFalse();
+});
+
 it('prints the named signatory on the ntp form', function () {
     sigSave($this, [User::ROLE_DIVISION_MANAGER => $this->mineManager->id]);
     $ntp = sigRaiseNtp($this);

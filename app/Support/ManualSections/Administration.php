@@ -69,7 +69,7 @@ class Administration
                         'Set a password of at least eight characters.',
                         'Choose the role.',
                         'If the role is Department User, choose their department. If it is Division Manager User, choose their division. Either is required for that role.',
-                        'For a Division Manager User, optionally tick Sites Covered. The last NTP signature for every project on those sites then goes to them, whichever division owns the project; projects on other sites still go to the owning division\'s manager user.',
+                        'For a Division Manager User, optionally tick Sites Covered. For every project on those sites they then sign two NTP steps: the Division Manager\'s (third) step in place of the Division Manager, and the last signature, whichever division owns the project. Projects on other sites go to the Division Manager and the owning division\'s manager user as before.',
                         'Save, then pass the password to the user and ask them to change it from their Account page.',
                     ]],
                     ['warn', 'The department on a Department User account is what decides which projects they see and which NTPs they are called on to sign. Getting it wrong sends NTPs to the wrong people, and the chain stalls.'],

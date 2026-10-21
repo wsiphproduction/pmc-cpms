@@ -57,9 +57,12 @@ class NtpSignatories
      */
     public static function defaultNames(Project $project, string $role): array
     {
-        $ids = match ($role) {
-            User::ROLE_DIVISION_MANAGER_USER => $project->divisionAudience(),
-            User::ROLE_REQUESTOR => collect([$project->projectRequest?->requester_id])
+        $onSite = $role === User::ROLE_DIVISION_MANAGER ? $project->siteManagers() : collect();
+
+        $ids = match (true) {
+            $onSite->isNotEmpty() => $onSite->pluck('id'),
+            $role === User::ROLE_DIVISION_MANAGER_USER => $project->divisionAudience(),
+            $role === User::ROLE_REQUESTOR => collect([$project->projectRequest?->requester_id])
                 ->filter()
                 ->merge(User::role(User::ROLE_REQUESTOR)->whereIn('id', $project->departmentAudience())->pluck('id')),
             default => User::role($role)->pluck('id'),

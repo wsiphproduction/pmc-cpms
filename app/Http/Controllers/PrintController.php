@@ -69,12 +69,31 @@ class PrintController extends Controller
             'signatories'  => $this->signatories($project),
             // The people this project names for a step, which beat the
             // office-wide names until the step is signed and stamped.
-            'named'        => $project->ntpSignatories
-                ->filter(fn ($row) => $row->user)
-                ->mapWithKeys(fn ($row) => [$row->role => $row->user->name])
-                ->all(),
+            'named'        => $this->namedSignatories($project),
             'subProjectNo' => $project->parent_id ? $project->project_no : null,
         ], "NTP {$ntp->ntp_no}");
+    }
+
+    /**
+     * Names keyed by step role: who the project names, and on a site a
+     * division manager user has taken, them for the Division Manager's step.
+     *
+     * @return array<string, string>
+     */
+    private function namedSignatories(Project $project): array
+    {
+        $named = $project->ntpSignatories
+            ->filter(fn ($row) => $row->user)
+            ->mapWithKeys(fn ($row) => [$row->role => $row->user->name])
+            ->all();
+
+        $onSite = $project->siteManagers();
+
+        if (! isset($named[User::ROLE_DIVISION_MANAGER]) && $onSite->isNotEmpty()) {
+            $named[User::ROLE_DIVISION_MANAGER] = $onSite->pluck('name')->join(' / ');
+        }
+
+        return $named;
     }
 
     /** Project Completion and Acceptance Certificate — PMD-PRJ-FRM-06. */
