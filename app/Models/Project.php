@@ -250,6 +250,15 @@ class Project extends Model
         return $this->hasMany(ProjectTask::class)->orderBy('target_date');
     }
 
+    /**
+     * "Major" or "Minor" for display, from the project type chosen on the
+     * form. (The hidden Class field is no guide: it is usually blank.)
+     */
+    public static function typeLabel(?string $projectType): string
+    {
+        return $projectType === 'major' ? 'Major' : 'Minor';
+    }
+
     /** The NTP steps this project names somebody other than the default to sign. */
     public function ntpSignatories(): HasMany
     {

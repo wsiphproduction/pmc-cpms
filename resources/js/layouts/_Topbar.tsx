@@ -1,5 +1,105 @@
 import { Link, router, usePage } from '@inertiajs/react';
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { FONT_SCALES, rectScale, setFontScale, stepFontScale, useFontScale, viewportSize } from '@/lib/font-scale';
+
+/**
+ * Word-style text size, folded into one top-bar button so it takes no more
+ * room than the bell: it opens a panel to shrink, pick a size, or grow. Saved
+ * to the account, so it follows the user to every page and every sign-in.
+ */
+function FontSizeControl() {
+    const scale = useFontScale();
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    const min = FONT_SCALES[0];
+    const max = FONT_SCALES[FONT_SCALES.length - 1];
+
+    useEffect(() => {
+        if (!open) return;
+        const away = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+        document.addEventListener('mousedown', away);
+        return () => document.removeEventListener('mousedown', away);
+    }, [open]);
+
+    const step = (disabled: boolean): React.CSSProperties => ({
+        width: '38px', height: '34px', borderRadius: '7px', border: '1px solid #e5e7eb',
+        background: disabled ? '#f8fafc' : '#fff', color: disabled ? '#cbd5e1' : '#1e293b',
+        cursor: disabled ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'baseline',
+        justifyContent: 'center', paddingTop: '7px', fontFamily: 'inherit', fontWeight: 700, lineHeight: 1,
+    });
+
+    return (
+        <div ref={ref} style={{ position: 'relative' }}>
+            <button
+                type="button"
+                onClick={() => setOpen(prev => !prev)}
+                aria-label="Text size"
+                aria-expanded={open}
+                title={`Text size (${scale}%)`}
+                style={{
+                    width: '32px', height: '32px', borderRadius: '7px',
+                    border: `1px solid ${scale === 100 ? '#e5e7eb' : '#93c5fd'}`,
+                    background: scale === 100 ? '#fff' : '#eff6ff', color: scale === 100 ? '#475569' : '#1d4ed8',
+                    display: 'inline-flex', alignItems: 'baseline', justifyContent: 'center', paddingTop: '7px',
+                    cursor: 'pointer', flexShrink: 0, fontFamily: 'inherit', fontWeight: 700, lineHeight: 1,
+                }}
+            >
+                <span style={{ fontSize: '15px' }}>A</span><span style={{ fontSize: '11px' }}>a</span>
+            </button>
+            {open && (
+                <div style={{
+                    position: 'absolute', top: '42px', right: 0, width: '220px', padding: '12px 14px',
+                    background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px',
+                    boxShadow: '0 20px 40px rgba(15,23,42,0.15)', zIndex: 200,
+                }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a', marginBottom: '10px' }}>Text size</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <button
+                            type="button"
+                            onClick={() => setFontScale(stepFontScale(scale, -1))}
+                            disabled={scale <= min}
+                            aria-label="Decrease text size"
+                            title="Decrease text size"
+                            style={step(scale <= min)}
+                        >
+                            <span style={{ fontSize: '12px' }}>A</span><span style={{ fontSize: '8px', marginLeft: '1px' }}>▼</span>
+                        </button>
+                        <select
+                            value={scale}
+                            onChange={e => setFontScale(Number(e.target.value))}
+                            aria-label="Text size"
+                            style={{ flex: 1, height: '34px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '13px', fontWeight: 600, color: '#1e293b', padding: '0 6px', cursor: 'pointer', outline: 'none', fontFamily: 'inherit', textAlign: 'center' }}
+                        >
+                            {FONT_SCALES.map(s => <option key={s} value={s}>{s}%</option>)}
+                        </select>
+                        <button
+                            type="button"
+                            onClick={() => setFontScale(stepFontScale(scale, 1))}
+                            disabled={scale >= max}
+                            aria-label="Increase text size"
+                            title="Increase text size"
+                            style={step(scale >= max)}
+                        >
+                            <span style={{ fontSize: '15px' }}>A</span><span style={{ fontSize: '8px', marginLeft: '1px' }}>▲</span>
+                        </button>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', fontSize: '11px', color: '#94a3b8' }}>
+                        <span>Saved to your account</span>
+                        {scale !== 100 && (
+                            <button
+                                type="button"
+                                onClick={() => setFontScale(100)}
+                                style={{ border: 'none', background: 'none', padding: 0, color: '#2563eb', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+                            >
+                                Reset
+                            </button>
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 interface NotificationRow {
     id: number;
@@ -10,7 +110,7 @@ interface NotificationRow {
 }
 
 interface PageProps {
-    auth: { user: { name: string; email: string; role?: string } };
+    auth: { user: { name: string; email: string; role?: string; is_admin?: boolean } };
     logo_url: string;
     notifications: NotificationRow[];
     unread_notifications_count: number;
@@ -60,20 +160,59 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
 
     // The horizontal nav is always visible on desktop, so collapse it back once
     // the viewport grows past the breakpoint.
+    // The breakpoint is only a first guess: how wide the nav is depends on the
+    // role's items, the text size and the fonts. So the bar also folds the nav
+    // into its toggle whenever the items do not fit (they would spill over the
+    // brand and the account controls), and unfolds it once there is room for
+    // the width they were measured at — never flickering between the two.
+    const rowRef = useRef<HTMLDivElement>(null);
+    const rightRef = useRef<HTMLDivElement>(null);
+    const navNeed = useRef(0);
+    const [tooTight, setTooTight] = useState(false);
+    const collapsed = navCollapsed || tooTight;
+
+    useLayoutEffect(() => {
+        const check = () => {
+            const row = rowRef.current;
+            const right = rightRef.current;
+            const nav = navRef.current;
+            if (!row || !right) return;
+            // Rects come in screen pixels; widths are in the zoomed page's.
+            const k = rectScale();
+
+            if (!collapsed && nav && nav.firstElementChild && nav.lastElementChild) {
+                navNeed.current = (nav.lastElementChild.getBoundingClientRect().right - nav.firstElementChild.getBoundingClientRect().left) / k;
+                if (navNeed.current > nav.clientWidth + 1) setTooTight(true);
+            } else if (tooTight && row.firstElementChild) {
+                // The row's 14px gap sits either side of where the nav would go.
+                const room = (right.getBoundingClientRect().left - row.firstElementChild.getBoundingClientRect().right) / k - 28;
+                if (room >= navNeed.current) setTooTight(false);
+            }
+        };
+
+        check();
+        window.addEventListener('resize', check);
+        return () => window.removeEventListener('resize', check);
+    });
+
     useEffect(() => {
-        if (!navCollapsed) setMobileNavOpen(false);
-    }, [navCollapsed]);
+        if (!collapsed) setMobileNavOpen(false);
+    }, [collapsed]);
 
     // The full company name next to the crest needs ~280px, which the
     // horizontal nav cannot spare on an ordinary laptop screen. Spell it out
     // only when the nav has folded into its toggle or the screen is wide.
     const [wideScreen, setWideScreen] = useState(false);
+    const fontScale = useFontScale();
     useEffect(() => {
-        const sync = () => setWideScreen(window.innerWidth >= 1536);
+        const sync = () => setWideScreen(viewportSize().width >= 1536);
         sync();
         window.addEventListener('resize', sync);
         return () => window.removeEventListener('resize', sync);
-    }, []);
+    }, [fontScale]);
+    // Only the breakpoint decides this, not the fit check above: a nav folded
+    // for lack of room must not hand that room to the brand, or it could never
+    // unfold again.
     const showFullBrand = !isMobile && (navCollapsed || wideScreen);
 
     const markAllRead = () => router.patch(route('notifications.read-all'), {}, { preserveScroll: true });
@@ -284,7 +423,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
             zIndex: 100,
             fontFamily: "'Inter', sans-serif",
         }}>
-            <div style={{
+            <div ref={rowRef} style={{
                 height: '56px',
                 display: 'flex',
                 alignItems: 'center',
@@ -318,7 +457,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 </Link>
 
                 {/* Desktop nav */}
-                {!navCollapsed && (
+                {!collapsed && (
                     <nav ref={navRef} data-tour="nav" style={{
                         display: 'flex', alignItems: 'center', gap: '3px',
                         flex: 1, minWidth: 0,
@@ -421,12 +560,14 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     </nav>
                 )}
 
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto' }}>
+                <div ref={rightRef} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginLeft: 'auto' }}>
                     <span style={{ display: isMobile ? 'none' : 'inline', fontSize: '13.5px', color: '#6b7280', whiteSpace: 'nowrap' }}>
                         Welcome, <span style={{ fontWeight: 600, color: '#111827' }}>
                             {auth?.user?.name?.split(' ')[0] ?? 'User'}
                         </span>
                     </span>
+
+                    <FontSizeControl />
 
                     {/* Notifications */}
                     <div ref={notifRef} data-tour="notifications" style={{ position: 'relative' }}>
@@ -557,7 +698,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     </div>
 
                     {/* Nav toggle for narrow viewports */}
-                    {navCollapsed && (
+                    {collapsed && (
                         <button
                             type="button"
                             onClick={() => setMobileNavOpen(prev => !prev)}
@@ -581,7 +722,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
             </div>
 
             {/* Collapsed nav panel */}
-            {navCollapsed && mobileNavOpen && (
+            {collapsed && mobileNavOpen && (
                 <nav data-tour="nav" style={{
                     borderTop: '1px solid #f3f4f6',
                     padding: '8px',

@@ -1,5 +1,10 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+@php
+    // The signed-in user's text size, set here so the first paint is already
+    // at that size; the font size control takes over from there.
+    $fontScale = (int) (auth()->user()?->font_scale ?: 100);
+@endphp
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @if($fontScale !== 100) style="zoom: {{ $fontScale / 100 }}" @endif>
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">

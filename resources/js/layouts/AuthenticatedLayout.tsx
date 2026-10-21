@@ -1,6 +1,7 @@
 import { router, usePage } from '@inertiajs/react';
 import { ReactNode, useEffect, useState } from 'react';
 import TourProvider from '@/components/tour/TourProvider';
+import { useFontScale, viewportSize } from '@/lib/font-scale';
 import Topbar from './_Topbar';
 
 interface Props {
@@ -58,22 +59,27 @@ export default function AuthenticatedLayout({ children }: Props) {
     // The horizontal nav needs more room than the page padding does, so it
     // folds into a toggle earlier than the mobile breakpoint.
     const [navCollapsed, setNavCollapsed] = useState(false);
+    // A larger text size leaves less room, so the breakpoints are judged on
+    // the zoomed width, as if the screen were smaller.
+    const fontScale = useFontScale();
 
     useEffect(() => {
         const syncViewport = () => {
-            setIsMobile(window.innerWidth < 768);
-            setNavCollapsed(window.innerWidth < 1280);
+            const { width } = viewportSize();
+            setIsMobile(width < 768);
+            setNavCollapsed(width < 1280);
         };
 
         syncViewport();
         window.addEventListener('resize', syncViewport);
 
         return () => window.removeEventListener('resize', syncViewport);
-    }, []);
+    }, [fontScale]);
 
     return (
         <div style={{
-            display: 'flex', flexDirection: 'column', minHeight: '100vh',
+            // 100vh is not zoom-adjusted, so a zoomed page would overshoot it.
+            display: 'flex', flexDirection: 'column', minHeight: `${10000 / fontScale}vh`,
             background: '#f8fafc',
             fontFamily: "'Inter', sans-serif",
         }}>

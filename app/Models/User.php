@@ -77,6 +77,12 @@ class User extends Authenticatable
         self::ROLE_ADMIN,
     ];
 
+    /**
+     * The text sizes the top bar's font size control steps through, as a
+     * percentage of normal. Mirrored in resources/js/lib/font-scale.ts.
+     */
+    public const FONT_SCALES = [80, 90, 100, 110, 125, 150];
+
     /** The one account allowed to sign in as other users, for support. */
     public const IMPERSONATOR_EMAIL = 'it@philsagamining.com';
 
@@ -277,6 +283,7 @@ class User extends Authenticatable
             'tour_seen_at' => 'datetime',
             'password' => 'hashed',
             'sites' => 'array',
+            'font_scale' => 'integer',
         ];
     }
 }

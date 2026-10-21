@@ -12,6 +12,7 @@ use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -84,6 +85,18 @@ class AccountController extends Controller
         if ($user->tour_seen_at === null) {
             $user->forceFill(['tour_seen_at' => now()])->save();
         }
+
+        return response()->noContent();
+    }
+
+    /** Remember the text size picked from the top bar's font size control. */
+    public function updateFontScale(Request $request): HttpResponse
+    {
+        $data = $request->validate([
+            'font_scale' => ['required', 'integer', Rule::in(User::FONT_SCALES)],
+        ]);
+
+        $request->user()->forceFill(['font_scale' => $data['font_scale']])->save();
 
         return response()->noContent();
     }

@@ -101,7 +101,7 @@ class AccomplishmentReportWriter
                 $project->project_no,
                 $project->title,
                 $project->parent?->project_no ?? '—',
-                $this->projectType((string) $project->class_name),
+                Project::typeLabel($project->project_type),
                 Project::STATUS_LABELS[$project->status_key] ?? $project->status_key,
                 $project->effectiveCompletionPercent() / 100,
                 $project->dept_owner ?: '—',
@@ -333,12 +333,5 @@ class AccomplishmentReportWriter
             (bool) $this->from       => 'From ' . $fmt($this->from),
             default                  => 'Up to ' . $fmt($this->to),
         };
-    }
-
-    private function projectType(string $className): string
-    {
-        $name = strtolower($className);
-
-        return str_contains($name, 'major') || str_contains($name, 'tier 1') ? 'Major' : 'Minor';
     }
 }

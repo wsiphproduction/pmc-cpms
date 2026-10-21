@@ -1207,7 +1207,7 @@ class ProjectController extends Controller
             'id' => $project->id,
             'project_no' => $project->project_no,
             'title' => $project->title,
-            'type' => $this->projectType($project->class_name),
+            'type' => Project::typeLabel($project->project_type),
             'progress' => $project->effectiveCompletionPercent(),
             'project_manager' => $project->project_manager_name ?? $project->manager?->name ?? 'Unassigned',
             'encoded_by' => $project->creator?->name ?? 'Unassigned',
@@ -1449,13 +1449,6 @@ class ProjectController extends Controller
         $existing = array_search($name, self::STATUS_LABELS, true);
 
         return $existing ?: strtoupper(str_replace([' ', '-', '/', '&'], ['_', '_', '_', 'AND'], $name));
-    }
-
-    private function projectType(string $className): string
-    {
-        return str_contains(strtolower($className), 'major') || str_contains(strtolower($className), 'tier 1')
-            ? 'Major'
-            : 'Minor';
     }
 
 }

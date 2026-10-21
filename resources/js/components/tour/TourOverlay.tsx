@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { pageZoom, rectScale, viewportSize } from '@/lib/font-scale';
 import type { TourStep } from './tours';
 
 // The running tour: a dimmed page with a cut-out around the current step's
@@ -33,9 +34,13 @@ export function anchorElement(target: string): HTMLElement | null {
     return document.querySelector<HTMLElement>(`[data-tour="${target}"]`);
 }
 
+// The overlay is drawn inside the page, so under a larger text size (CSS
+// zoom) it works in the zoomed page's CSS pixels, while the browser reports
+// rects and the window in screen pixels; convert before placing anything.
 function measure(el: HTMLElement): Box {
     const r = el.getBoundingClientRect();
-    return { top: r.top - PAD, left: r.left - PAD, width: r.width + PAD * 2, height: r.height + PAD * 2 };
+    const k = rectScale();
+    return { top: r.top / k - PAD, left: r.left / k - PAD, width: r.width / k + PAD * 2, height: r.height / k + PAD * 2 };
 }
 
 /**
@@ -43,12 +48,14 @@ function measure(el: HTMLElement): Box {
  * the viewport is lined up under the top bar instead, so its start is seen.
  */
 function reveal(el: HTMLElement) {
+    // Screen pixels throughout, as scrolling works in those.
     const r = el.getBoundingClientRect();
     const vh = window.innerHeight;
+    const header = HEADER * pageZoom();
 
-    if (r.height > vh - HEADER - MARGIN) {
-        window.scrollTo({ top: window.scrollY + r.top - HEADER, behavior: 'auto' });
-    } else if (r.top < HEADER || r.bottom > vh - MARGIN) {
+    if (r.height > vh - header - MARGIN) {
+        window.scrollTo({ top: window.scrollY + r.top - header, behavior: 'auto' });
+    } else if (r.top < header || r.bottom > vh - MARGIN) {
         el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'auto' });
     }
 }
@@ -108,8 +115,7 @@ export default function TourOverlay({ step, index, count, onNext, onBack, onClos
 
         const cw = card.offsetWidth;
         const ch = card.offsetHeight;
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
+        const { width: vw, height: vh } = viewportSize();
 
         if (!box) {
             setPlacement({ top: (vh - ch) / 2, left: (vw - cw) / 2, side: 'center', arrow: 0 });
@@ -169,8 +175,8 @@ export default function TourOverlay({ step, index, count, onNext, onBack, onClos
     // With no anchor the cut-out shrinks to a point mid-screen, so the same
     // shadow dims the whole page and the move to the next anchor animates.
     const hole: Box = box ?? {
-        top: typeof window === 'undefined' ? 0 : window.innerHeight / 2,
-        left: typeof window === 'undefined' ? 0 : window.innerWidth / 2,
+        top: typeof window === 'undefined' ? 0 : viewportSize().height / 2,
+        left: typeof window === 'undefined' ? 0 : viewportSize().width / 2,
         width: 0,
         height: 0,
     };

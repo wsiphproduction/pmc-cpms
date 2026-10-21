@@ -70,6 +70,9 @@ Route::middleware(['auth'])->group(function () {
     // The first-login guided-tour offer has been answered; don't show it again.
     Route::patch('tour/seen', [AccountController::class, 'markTourSeen'])->name('tour.seen');
 
+    // The text size picked from the top bar's font size control.
+    Route::patch('account/font-scale', [AccountController::class, 'updateFontScale'])->name('account.font-scale');
+
     // ── User Manual ───────────────────────────────────────────────────────
     // The PDFs themselves are static files under public/manuals; this page is
     // the reader, and decides which booklets a given role is offered.

@@ -64,6 +64,7 @@ class HandleInertiaRequests extends Middleware
                         'is_admin' => $request->user()->isAdmin(),
                         // Null until the first-login guided-tour offer is answered.
                         'tour_seen_at' => $request->user()->tour_seen_at?->toIso8601String(),
+                        'font_scale' => (int) ($request->user()->font_scale ?: 100),
                     ]
                 ) : null,
                 // Set while the IT account is signed in as someone else, so

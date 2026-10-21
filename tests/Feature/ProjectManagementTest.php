@@ -284,6 +284,41 @@ it('filters the project index by the engineer in charge', function () {
             ->has('engineers', 2));
 });
 
+it('badges a project in the list by its project type, not its class', function () {
+    $user = makeApproverUser();
+
+    // The hidden Class field is usually blank; the type toggle is what counts.
+    foreach ([['PRJ-2026-0001', 'major', ''], ['PRJ-2026-0002', 'minor', 'Major']] as [$projectNo, $type, $class]) {
+        Project::create([
+            'project_no'   => $projectNo,
+            'title'        => 'Warehouse Rehab',
+            'project_type' => $type,
+            'site'         => 'Main Plant',
+            'asset_id'     => 'Asset A',
+            'class_name'   => $class,
+            'priority'     => 'P1 - Urgent',
+            'status_key'   => 'PLANNING',
+            'work_force'   => 'In-house Team',
+            'wr_no'        => 'WR-1',
+            'wr_date'      => '2026-05-04',
+            'dept_owner'   => 'Engineering',
+            'cost_code'    => 'CC-001',
+            'category'     => 'Renovation',
+            'service_type' => 'Design-Build',
+            'deadline'     => '2026-06-04',
+            'created_by'   => $user->id,
+        ]);
+    }
+
+    $rows = collect($this->actingAs($user)
+        ->get(route('projects.index'))
+        ->assertOk()
+        ->inertiaPage()['props']['projects']['data'])->keyBy('project_no');
+
+    expect($rows['PRJ-2026-0001']['type'])->toBe('Major')
+        ->and($rows['PRJ-2026-0002']['type'])->toBe('Minor');
+});
+
 it('leaves the cost code list off the project index, which never filters by it', function () {
     $user = makeApproverUser();
     seedProjectMasterData();
