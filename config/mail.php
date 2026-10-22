@@ -126,6 +126,6 @@ return [
     |
     */
 
-    'procurement_cc' => env('MAIL_PROCUREMENT_CC', 'jatano@philsagamining.com'),
+    'procurement_cc' => env('MAIL_PROCUREMENT_CC', ''),
 
 ];
