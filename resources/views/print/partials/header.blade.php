@@ -1,7 +1,8 @@
 {{--
     The controlled-document banner: crest | corporate block | crest | doc control.
 
-    `sheet` is omitted on the forms that carry no sheet count. The two crests
+    `sheet` is omitted on the forms that carry no sheet count; `titleSize`
+    ('lg') enlarges the title bar on a form that asks for it. The two crests
     are different marks — the company's on the left, the department's on the
     right — inlined as data URIs so the document is self-contained and
     rendering never depends on the app being reachable from the machine
@@ -28,4 +29,4 @@
         @endisset
     </div>
 </div>
-<div class="titlebar">{{ $title }}</div>
+<div class="titlebar {{ $titleSize ?? '' }}">{{ $title }}</div>

@@ -28,7 +28,7 @@
     @include('print.partials.header', [
         'docNo' => 'PMD-PRJ-FRM-04', 'rev' => '00',
         'effective' => 'October 05, 2025', 'sheet' => 'Page 1 of 1',
-        'title' => 'NOTICE TO PROCEED',
+        'title' => 'NOTICE TO PROCEED', 'titleSize' => 'lg',
     ])
 
     <div class="secrow">

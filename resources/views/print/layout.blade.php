@@ -36,6 +36,8 @@
     .hdr .doc div { padding: 3px 8px; border-bottom: 1px solid #000; }
     .hdr .doc div:last-child { border-bottom: none; }
     .titlebar { border: 1.5px solid #000; border-top: none; text-align: center; font-weight: 800; font-size: 14px; padding: 6px; letter-spacing: .5px; }
+    /* A form whose title has to read from across the desk (the NTP). */
+    .titlebar.lg { font-size: 21px; padding: 8px 6px; letter-spacing: 1.5px; }
 
     /* Label / value detail block */
     h3.sec { font-size: 12.5px; margin: 16px 0 6px; }
