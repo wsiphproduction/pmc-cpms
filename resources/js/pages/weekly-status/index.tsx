@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Field, Modal, downloadCsv, inputStyle } from '@/pages/project-management/hub/Common';
@@ -169,6 +169,7 @@ function ReportModal({ projects, report, checklist, issueRowCount, statuses, def
             forceFormData: true,
             preserveScroll: true,
             onSuccess: onClose,
+            onError: (errs: Record<string, string>) => setError(Object.values(errs)[0] ?? 'Could not save the report.'),
             onFinish: () => setSaving(false),
         };
 
@@ -368,10 +369,13 @@ function BulkUploadModal({ projects, checklist, issueRowCount, statuses, default
         if (!file) { setError('Please choose a file first.'); return; }
         setError('');
         setSaving(true);
+        // The import's outcome (filed / skipped / nothing matched) comes back as a
+        // flash message, shown on the page once the modal closes.
         router.post(route('weekly-status.import'), { file }, {
             preserveScroll: true,
             forceFormData: true,
             onSuccess: onClose,
+            onError: errs => setError(errs.file ?? Object.values(errs)[0] ?? 'Upload failed.'),
             onFinish: () => setSaving(false),
         });
     };
@@ -480,6 +484,7 @@ export default function WeeklyStatusIndex({
     const [projectFilter, setProjectFilter] = useState('');
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+    const { flash } = usePage<{ flash?: { success?: string; error?: string } }>().props;
 
     const weekOptions = useMemo(
         () => Array.from(new Set(reports.map(r => r.week_code))).sort(),
@@ -555,6 +560,17 @@ export default function WeeklyStatusIndex({
                     onEdit={viewing.can_manage ? () => { setEditing(viewing); setViewing(null); } : undefined}
                     onClose={() => setViewing(null)}
                 />
+            )}
+
+            {flash?.success && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 16px', marginBottom: '14px', color: '#15803d', fontSize: '13px', fontWeight: 500 }}>
+                    {flash.success}
+                </div>
+            )}
+            {flash?.error && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 16px', marginBottom: '14px', color: '#b91c1c', fontSize: '13px', fontWeight: 500 }}>
+                    {flash.error}
+                </div>
             )}
 
             {/* Page title */}

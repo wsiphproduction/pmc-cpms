@@ -1,4 +1,4 @@
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 import { Button, DataTable, Field, HubProject, HubShell, Modal, downloadCsv, inputStyle } from './Common';
 import {
@@ -194,10 +194,13 @@ function ImportModal({ project, checklist, issueRowCount, statuses, onClose }: {
         if (!file) { setError('Please choose a file first.'); return; }
         setError('');
         setSaving(true);
+        // The import's outcome comes back as a flash message, shown above the
+        // summary card once the modal closes.
         router.post(route('hub.psr.import', project.id), { file }, {
             preserveScroll: true,
             forceFormData: true,
             onSuccess: onClose,
+            onError: errs => setError(errs.file ?? Object.values(errs)[0] ?? 'Upload failed.'),
             onFinish: () => setSaving(false),
         });
     };
@@ -308,6 +311,7 @@ export default function PsrHub({ project, reports, ntps = [], checklist = [], is
     const filteredReports = reports.filter(r => !ntpFilter || r.ntp_no === ntpFilter);
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
+    const { flash } = usePage<{ flash?: { success?: string; error?: string } }>().props;
 
     const handleDelete = (r: PsrRow) => {
         showConfirm(`Delete report ${r.week_code}?`, () => {
@@ -321,6 +325,17 @@ export default function PsrHub({ project, reports, ntps = [], checklist = [], is
             {showModal  && <ReportModal project={project} ntps={ntps} checklist={checklist} issueRowCount={issueRows} statuses={statuses} onClose={() => setShowModal(false)} />}
             {showImport && <ImportModal project={project} checklist={checklist} issueRowCount={issueRows} statuses={statuses} onClose={() => setShowImport(false)} />}
             {viewing    && <ViewReportModal report={viewing} checklist={checklist} issueRowCount={issueRows} onClose={() => setViewing(null)} />}
+
+            {flash?.success && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '10px 16px', marginBottom: '14px', color: '#15803d', fontSize: '13px', fontWeight: 500 }}>
+                    {flash.success}
+                </div>
+            )}
+            {flash?.error && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 16px', marginBottom: '14px', color: '#b91c1c', fontSize: '13px', fontWeight: 500 }}>
+                    {flash.error}
+                </div>
+            )}
 
             {/* Summary card */}
             <div style={{ border: '1px solid #e2e8f0', borderRadius: '16px', padding: '22px', marginBottom: '22px', display: 'grid', gridTemplateColumns: '180px 190px 1fr', gap: '22px', alignItems: 'center' }}>

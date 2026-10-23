@@ -189,10 +189,14 @@ class WeeklyReportSheet
         }
 
         try {
-            return \Carbon\Carbon::parse($raw)->toDateString();
+            $date = \Carbon\Carbon::parse($raw);
         } catch (\Throwable $e) {
             return null;
         }
+
+        // A date cell cleared to 0 in Excel renders as the 1970 epoch; treat it
+        // as blank rather than filing a report decades in the past.
+        return $date->year < 2000 ? null : $date->toDateString();
     }
 
     private function cell(array $row, ?int $idx): ?string

@@ -287,6 +287,18 @@ describe('import', function () {
         // The first issue row doubles as the headline issue.
         expect($report->identified_issues)->toBe('Rain delays');
     });
+
+    it('treats an epoch submitted_date as blank', function () {
+        $engineer = makeWeeklyStatusEngineer();
+        $project  = makeWeeklyStatusProject($engineer);
+
+        // A date cell cleared to 0 in Excel reads back as 1970-01-01.
+        $this->actingAs($engineer)->post(route('weekly-status.import'), [
+            'file' => weeklyStatusCsv(["{$project->project_no},W3-OCT,,0,1970-01-01,For contract"]),
+        ])->assertRedirect()->assertSessionHas('success');
+
+        expect(ProjectWeeklyReport::first()->submitted_date->toDateString())->toBe(now()->toDateString());
+    });
 });
 
 // -------------------------------------------------
