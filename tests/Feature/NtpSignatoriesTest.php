@@ -271,3 +271,66 @@ it('prints the named signatory on the ntp form', function () {
         ->assertOk()
         ->assertSee('Earl Mine');
 });
+
+it('emails the department user once the ntp reaches their step, and no one else in the department', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $colleague = User::factory()->create(['department' => 'MET']);
+    $ntp = sigRaiseNtp($this);
+
+    foreach ([$this->pmdAsst, $this->pmdManager] as $approver) {
+        $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+    }
+
+    // The PMD steps are signed from the approvals portal and stay bell-only.
+    \Illuminate\Support\Facades\Mail::assertNothingQueued();
+
+    $this->actingAs($this->division)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, 1);
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->requestor->email)
+        && $mail->stepLabel === 'Department User'
+        && str_contains($mail->reviewUrl, 'ntp-reviews'));
+    \Illuminate\Support\Facades\Mail::assertNotQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($colleague->email));
+});
+
+it('emails the division manager user over the department once the department user signs', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $ntp = sigRaiseNtp($this);
+
+    foreach ([$this->pmdAsst, $this->pmdManager, $this->division] as $approver) {
+        $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+    }
+    $this->actingAs($this->requestor)->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
+
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->millManager->email)
+        && $mail->stepLabel === 'Division Manager User');
+    \Illuminate\Support\Facades\Mail::assertNotQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->mineManager->email));
+});
+
+it('emails the site manager when the division manager step falls to them', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $this->mineManager->update(['sites' => ['Mine']]);
+    $ntp = sigRaiseNtp($this);
+
+    foreach ([$this->pmdAsst, $this->pmdManager] as $approver) {
+        $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+    }
+
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->mineManager->email));
+    \Illuminate\Support\Facades\Mail::assertNotQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->division->email));
+});
+
+it('renders the review email with the ntp details and a link to ntp reviews', function () {
+    $ntp = sigRaiseNtp($this);
+    foreach ([$this->pmdAsst, $this->pmdManager, $this->division] as $approver) {
+        $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp));
+    }
+
+    $html = (new \App\Mail\NtpAwaitingReview($ntp->fresh(), $this->requestor))->render();
+
+    expect($html)->toContain($ntp->ntp_no)
+        ->toContain('Acme Builders')
+        ->toContain($this->project->project_no)
+        ->toContain('Dina Dept')
+        ->toContain('ntp-reviews');
+});

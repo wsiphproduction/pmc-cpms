@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Mail\NtpAwaitingReview;
 use App\Models\AuditTrail;
 use App\Models\Notification;
 use App\Models\Project;
@@ -10,6 +11,9 @@ use App\Models\ProjectRequest;
 use App\Models\ProjectRfq;
 use App\Models\RosterBreak;
 use App\Models\User;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 /**
  * Drives the sequential sign-off chains.
@@ -300,14 +304,17 @@ class ApprovalFlow
         // A step the project names somebody for goes to them alone (and to
         // their OIC while they are away), on whichever page they sign from.
         if ($record instanceof ProjectNtp && ($named = $record->project?->ntpSignatoryFor($role))) {
-            Notification::notify(
-                RosterBreak::activeOn()->where('user_id', $named->id)->where('role', $role)
-                    ->pluck('oic_user_id')
-                    ->prepend($named->id)
-                    ->unique(),
-                $message,
-                route($named->signsFromApprovalsPortal() ? 'approvals.index' : 'ntp-reviews.index', absolute: false)
-            );
+            $recipients = RosterBreak::activeOn()->where('user_id', $named->id)->where('role', $role)
+                ->pluck('oic_user_id')
+                ->prepend($named->id)
+                ->unique();
+
+            if ($named->signsFromApprovalsPortal()) {
+                Notification::notify($recipients, $message, route('approvals.index', absolute: false));
+            } else {
+                Notification::notify($recipients, $message, route('ntp-reviews.index', absolute: false));
+                $this->mailNtpReviewers($record, $recipients);
+            }
 
             return;
         }
@@ -317,6 +324,7 @@ class ApprovalFlow
         if ($record instanceof ProjectNtp && $role === User::ROLE_DIVISION_MANAGER
             && ($onSite = $record->project?->siteManagers() ?? collect())->isNotEmpty()) {
             Notification::notify($onSite->pluck('id'), $message, route('ntp-reviews.index', absolute: false));
+            $this->mailNtpReviewers($record, $onSite->pluck('id'));
 
             return;
         }
@@ -326,19 +334,38 @@ class ApprovalFlow
         // and from their own review page, not the PMD portal.
         if ($record instanceof ProjectNtp && in_array($role, ProjectNtp::REVIEW_ROLES, true)) {
             $project = $record->project;
+            $recipients = $role === User::ROLE_DIVISION_MANAGER_USER
+                ? $project->divisionAudience()
+                : $project->departmentAudience();
 
-            Notification::notify(
-                $role === User::ROLE_DIVISION_MANAGER_USER
-                    ? $project->divisionAudience()
-                    : $project->departmentAudience(),
-                $message,
-                route('ntp-reviews.index', absolute: false)
-            );
+            Notification::notify($recipients, $message, route('ntp-reviews.index', absolute: false));
+            $this->mailNtpReviewers($record, $recipients);
 
             return;
         }
 
         $this->notifyRoles([$role], $message, $link);
+    }
+
+    /**
+     * Email the project-side reviewers an NTP now waits on, so they hear of it
+     * without signing in. The bell reaches the whole department; the mail only
+     * goes to those who can actually sign the step. A queue or mail outage
+     * must not undo the signature already recorded.
+     */
+    private function mailNtpReviewers(ProjectNtp $ntp, Collection $recipients): void
+    {
+        User::whereIn('id', $recipients)
+            ->whereNotNull('email')
+            ->get()
+            ->filter(fn (User $reviewer) => $ntp->awaitingApprovalFrom($reviewer))
+            ->each(function (User $reviewer) use ($ntp) {
+                try {
+                    Mail::to($reviewer->email)->send(new NtpAwaitingReview($ntp, $reviewer));
+                } catch (\Throwable $e) {
+                    Log::error("NTP review email to {$reviewer->email} could not be queued for NTP #{$ntp->id}: " . $e->getMessage());
+                }
+            });
     }
 
     /**
