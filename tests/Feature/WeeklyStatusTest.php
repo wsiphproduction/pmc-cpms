@@ -123,6 +123,23 @@ describe('index', function () {
                 ->where('projects.1.is_sub', true));
     });
 
+    it('offers edit and delete on reports for the engineer\'s own projects', function () {
+        $engineer = makeWeeklyStatusEngineer();
+        $project  = makeWeeklyStatusProject($engineer);
+
+        $project->weeklyReports()->create([
+            'week_code'      => 'W2-AUG',
+            'completion_pct' => 40,
+            'submitted_date' => '2026-08-05',
+            'created_by'     => $engineer->id,
+        ]);
+
+        $this->actingAs($engineer)->get(route('weekly-status.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('reports', 1)
+                ->where('reports.0.can_manage', true));
+    });
+
     it('shows admins every project', function () {
         Role::firstOrCreate(['name' => 'admin']);
         $admin = User::factory()->create();

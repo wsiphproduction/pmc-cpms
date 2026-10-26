@@ -30,7 +30,9 @@ class WeeklyStatusController extends Controller
         $projects = $this->scopedProjects($request)->with('ntps:id,project_id,ntp_no,contractor_name')->get();
 
         $reports = ProjectWeeklyReport::whereIn('project_id', $projects->pluck('id'))
-            ->with(['ntp:id,ntp_no,contractor_name', 'project:id,project_no,title', 'creator:id,name'])
+            // created_by is read by the project-update policy behind can_manage;
+            // without it every engineer's row reads as not theirs.
+            ->with(['ntp:id,ntp_no,contractor_name', 'project:id,project_no,title,created_by', 'creator:id,name'])
             ->latest('submitted_date')
             ->latest('id')
             ->limit(200)
