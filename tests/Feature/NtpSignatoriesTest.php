@@ -277,20 +277,47 @@ it('emails the department user once the ntp reaches their step, and no one else 
     $colleague = User::factory()->create(['department' => 'MET']);
     $ntp = sigRaiseNtp($this);
 
-    foreach ([$this->pmdAsst, $this->pmdManager] as $approver) {
+    foreach ([$this->pmdAsst, $this->pmdManager, $this->division] as $approver) {
         $this->actingAs($approver)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
     }
 
-    // The PMD steps are signed from the approvals portal and stay bell-only.
-    \Illuminate\Support\Facades\Mail::assertNothingQueued();
-
-    $this->actingAs($this->division)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
-
-    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, 1);
     \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->requestor->email)
         && $mail->stepLabel === 'Department User'
         && str_contains($mail->reviewUrl, 'ntp-reviews'));
     \Illuminate\Support\Facades\Mail::assertNotQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($colleague->email));
+});
+
+it('emails each pmd and division manager signatory as the ntp reaches their step', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    $ntp = sigRaiseNtp($this);
+
+    // Raising the NTP calls on both PMD Assistant Managers, and only them.
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, 2);
+    foreach ([$this->pmdAsst, $this->pmdAsst2] as $assistant) {
+        \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($assistant->email)
+            && $mail->stepLabel === User::roleLabel(User::ROLE_PMD_ASST_MANAGER)
+            && $mail->pageLabel === 'For Approval'
+            && str_contains($mail->reviewUrl, 'approvals'));
+    }
+
+    $this->actingAs($this->pmdAsst)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->pmdManager->email));
+
+    $this->actingAs($this->pmdManager)->patch(route('approvals.ntps.approve', $ntp))->assertRedirect();
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->division->email)
+        && $mail->pageLabel === 'For Approval');
+
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, 4);
+});
+
+it('emails only the named signatory when the project names one for a pmd step', function () {
+    \Illuminate\Support\Facades\Mail::fake();
+    sigSave($this, [User::ROLE_PMD_ASST_MANAGER => $this->pmdAsst2->id])->assertRedirect();
+
+    sigRaiseNtp($this);
+
+    \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->pmdAsst2->email));
+    \Illuminate\Support\Facades\Mail::assertNotQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->pmdAsst->email));
 });
 
 it('emails the division manager user over the department once the department user signs', function () {

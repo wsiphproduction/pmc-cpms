@@ -1,5 +1,5 @@
 {{--
-    Notice to Proceed — PMD-PRJ-FRM-04.
+    Notice to Proceed — PMD-PRJ-FRM-04, Rev 01.
 
     Built from the record, never from the screen, so the print matches the
     controlled form rather than the hub layout. Signature blocks carry an
@@ -25,46 +25,83 @@
 @endphp
 
 @section('form')
+    {{-- Rev 01 differs from the shared look: a boxed, two-column details
+         panel and bright-yellow table headings in place of gold. --}}
+    <style>
+        .ntp-meta { display: flex; justify-content: space-between; align-items: baseline; margin: 12px 0 5px; padding: 0 40px 0 60px; font-size: 13px; }
+        .ntp-meta b { font-size: 13px; }
+        table.ntp-details { border-collapse: collapse; width: 100%; border: 1px solid #000; }
+        table.ntp-details td { padding: 3px 8px; vertical-align: top; font-size: 12.5px; }
+        table.ntp-details td.title { text-align: center; font-weight: 800; font-size: 14px; border-bottom: 1px solid #000; padding: 5px; }
+        table.ntp-details td.k { width: 140px; white-space: nowrap; }
+        table.ntp-details td.k2 { width: 170px; white-space: nowrap; }
+        table.ntp-details td.c { width: 16px; }
+        /* The schedule panel is boxed off on the right of the lower rows. */
+        table.ntp-details td.rp { border-left: 1px solid #000; }
+        table.ntp-details tr.rp-top td.rt { border-top: 1px solid #000; }
+        table.ntp-details td.remarks { font-style: italic; font-size: 10.5px; height: 40px; }
+        table.box th.hd, table.box td.band { background: #ffff00; }
+        /* Seven signature blocks have to share the page with the full form. */
+        table.box td, table.box th { padding-top: 3px; padding-bottom: 3px; }
+        table.box tr.blank td { height: 19px; }
+    </style>
+
     @include('print.partials.header', [
-        'docNo' => 'PMD-PRJ-FRM-04', 'rev' => '00',
-        'effective' => 'October 05, 2025', 'sheet' => 'Page 1 of 1',
+        'docNo' => 'PMD-PRJ-FRM-04', 'rev' => '01',
+        'effective' => 'July 27, 2026', 'sheet' => 'Page 1 of 1',
         'title' => 'NOTICE TO PROCEED', 'titleSize' => 'lg',
     ])
 
-    <div class="secrow">
-        <h3 class="sec" style="margin:0;">PROJECT DETAILS</h3>
-        <div class="refno">N.T.P. Number: <b>{{ $ntp->ntp_no }}</b></div>
+    <div class="ntp-meta">
+        <div>Date Prepared: <b>{{ optional($ntp->created_at)->format('M d, Y') }}</b></div>
+        <div>N.T.P. Number: <b>{{ $ntp->ntp_no }}</b></div>
     </div>
 
-    <table class="kv">
+    <table class="ntp-details">
+        <tr><td colspan="6" class="title">PROJECT DETAILS</td></tr>
         @foreach ([
-            ['Project Number',            $orBlank($project->project_no)],
-            ['Project Title',             $orBlank($project->title)],
-            ['Sub-Project Title',         $orBlank($subProjectNo) ?: 'N/A'],
-            ['Job Site / Location',       $orBlank($project->site)],
-            ['Service Contractor',        $orBlank($ntp->contractor_name)],
-            ['Project Owner',             $orBlank($project->dept_owner)],
-            ['Cost Code',                 $orBlank($project->cost_code)],
-            ['Baseline Project Duration', $ntp->rfq?->duration_days ? $ntp->rfq->duration_days . ' WORKING DAYS' : ''],
-            ['Baseline Start Date',       optional($ntp->baseline_start)->format('M d, Y') ?? ''],
-            ['Baseline End Date',         optional($ntp->baseline_end)->format('M d, Y') ?? ''],
-            ['Project Cost',              'Php ' . number_format((float) $ntp->approved_cost, 2)],
+            ['Project Number',    $orBlank($project->project_no)],
+            ['Project Title',     $orBlank($project->title)],
+            ['Sub-Project Title', $orBlank($subProjectNo) ?: 'N/A'],
         ] as [$label, $value])
             <tr>
                 <td class="k">{{ $label }}</td>
                 <td class="c">:</td>
-                <td>{{ $value }}</td>
+                <td colspan="4">{{ $value }}</td>
             </tr>
         @endforeach
+        <tr class="rp-top">
+            <td class="k">Job Site / Location</td><td class="c">:</td><td>{{ $orBlank($project->site) }}</td>
+            <td class="k2 rp rt">Baseline Project Duration</td><td class="c rt">:</td>
+            <td class="rt">{{ $ntp->rfq?->duration_days ? $ntp->rfq->duration_days . ' WORKING DAYS' : '' }}</td>
+        </tr>
+        <tr>
+            <td class="k">Service Contractor</td><td class="c">:</td><td>{{ $orBlank($ntp->contractor_name) }}</td>
+            {{-- Left for a hand-written note on the schedule. --}}
+            <td colspan="3" rowspan="2" class="rp remarks">Remarks:</td>
+        </tr>
+        <tr>
+            <td class="k">Project Owner</td><td class="c">:</td><td>{{ $orBlank($project->dept_owner) }}</td>
+        </tr>
+        <tr>
+            <td class="k">Project Cost (PhP)</td><td class="c">:</td><td>{{ number_format((float) $ntp->approved_cost, 2) }}</td>
+            <td class="k2 rp">Baseline Start Date</td><td class="c">:</td>
+            <td>{{ optional($ntp->baseline_start)->format('M d, Y') }}</td>
+        </tr>
+        <tr>
+            <td class="k">Cost Code</td><td class="c">:</td><td>{{ $orBlank($project->cost_code) }}</td>
+            <td class="k2 rp">Baseline End Date</td><td class="c">:</td>
+            <td>{{ optional($ntp->baseline_end)->format('M d, Y') }}</td>
+        </tr>
     </table>
 
-    <table class="box" style="margin-top:12px;">
+    <table class="box" style="margin-top:14px;">
         <thead>
             <tr>
                 <th class="hd" style="width:44px;">Item</th>
                 <th class="hd">Scope of Work</th>
-                <th class="hd" style="width:90px;">Quantity</th>
-                <th class="hd" style="width:90px;">UOM</th>
+                <th class="hd" style="width:100px;">Quantity</th>
+                <th class="hd" style="width:150px;">UOM</th>
             </tr>
         </thead>
         <tbody>
@@ -109,19 +146,27 @@
             'name' => $named['pmd_asst_manager'] ?? $signatories['pmd_assistant_manager'] ?? '', 'approval' => $stamp('pmd_asst_manager'),
         ])
         @include('print.partials.signature', [
-            'role' => 'Noted by:', 'title' => 'PMD Manager',
+            'role' => 'Endorsed by:', 'title' => 'PMD Manager',
             'name' => $named['pmd_dept_manager'] ?? $signatories['pmd_manager'] ?? '', 'approval' => $stamp('pmd_dept_manager'),
         ])
     </div>
     <div class="sig tight">
         @include('print.partials.signature', [
-            'role' => 'Noted by:', 'title' => 'Mine Division Manager',
+            'role' => 'Noted by:', 'title' => 'ECS / Mines Division Manager',
             'name' => $named['division_manager'] ?? '', 'approval' => $stamp('division_manager'),
         ])
         @include('print.partials.signature', [
-            'role' => 'Checked by:', 'title' => 'Project Owner Representative',
+            'role' => 'Concurred by:', 'title' => 'Project Owner Representative',
             'name' => $named['requestor'] ?? '', 'approval' => $stamp('requestor'),
         ])
+        @include('print.partials.signature', [
+            'role' => 'Noted by:', 'title' => 'Project Owner Division Manager',
+            'name' => $named['division_manager_user'] ?? '', 'approval' => $stamp('division_manager_user'),
+        ])
+    </div>
+    {{-- The contractor signs on receipt, alone in the last column. --}}
+    <div class="sig tight">
+        <div></div><div></div>
         @include('print.partials.signature', [
             'role' => 'Received by:', 'title' => 'Service Contractor Representative',
             'name' => '', 'approval' => null,

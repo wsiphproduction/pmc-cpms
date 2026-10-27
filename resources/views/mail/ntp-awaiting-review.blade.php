@@ -41,8 +41,8 @@
                     <td style="padding:32px 36px 0;">
                         <p style="margin:0;font-size:13.5px;color:#475569;line-height:1.7;">
                             Hi <strong style="color:#0f172a;">{{ $reviewer->name }}</strong>,
-                            a Notice to Proceed on your project has been endorsed by PMD and is now waiting on your
-                            approval as <strong style="color:#0f172a;">{{ $stepLabel }}</strong>.
+                            a Notice to Proceed is now waiting on your approval as
+                            <strong style="color:#0f172a;">{{ $stepLabel }}</strong>.
                         </p>
                     </td>
                 </tr>
@@ -83,7 +83,7 @@
                     <td align="center" style="padding:0 36px 32px;">
                         <a href="{{ $reviewUrl }}"
                            style="display:inline-block;background:#059669;color:#ffffff;font-size:13.5px;font-weight:800;text-decoration:none;padding:12px 30px;border-radius:8px;">
-                            Review in NTP Reviews
+                            Review in {{ $pageLabel }}
                         </a>
                     </td>
                 </tr>

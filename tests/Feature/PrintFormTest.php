@@ -116,7 +116,14 @@ it('stamps only the prepared-by block before anyone has approved', function () {
         ->toContain('NOTICE TO PROCEED')
         ->toContain($this->ntp->ntp_no)
         ->toContain('Acme Builders')
-        ->toContain('Php 2,000.00')
+        ->toContain('Project Cost (PhP)')
+        ->toContain('2,000.00')
+        // Rev 01 adds the project owner's division manager to the signatories.
+        ->toContain('Endorsed by:')
+        ->toContain('Concurred by:')
+        ->toContain('ECS / Mines Division Manager')
+        ->toContain('Project Owner Division Manager')
+        ->toContain('Service Contractor Representative')
         // Preparing the NTP is the engineer's own sign-off, so that block is
         // stamped from the start; every approval step is still blank.
         ->toContain('APPROVED');

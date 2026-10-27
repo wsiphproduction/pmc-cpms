@@ -309,12 +309,12 @@ class ApprovalFlow
                 ->prepend($named->id)
                 ->unique();
 
-            if ($named->signsFromApprovalsPortal()) {
-                Notification::notify($recipients, $message, route('approvals.index', absolute: false));
-            } else {
-                Notification::notify($recipients, $message, route('ntp-reviews.index', absolute: false));
-                $this->mailNtpReviewers($record, $recipients);
-            }
+            Notification::notify(
+                $recipients,
+                $message,
+                route($named->signsFromApprovalsPortal() ? 'approvals.index' : 'ntp-reviews.index', absolute: false)
+            );
+            $this->mailNtpReviewers($record, $recipients);
 
             return;
         }
@@ -344,14 +344,19 @@ class ApprovalFlow
             return;
         }
 
+        // The PMD and Division Manager steps go to the office-wide holders.
+        if ($record instanceof ProjectNtp) {
+            $this->mailNtpReviewers($record, $this->roleHolders([$role]));
+        }
+
         $this->notifyRoles([$role], $message, $link);
     }
 
     /**
-     * Email the project-side reviewers an NTP now waits on, so they hear of it
-     * without signing in. The bell reaches the whole department; the mail only
-     * goes to those who can actually sign the step. A queue or mail outage
-     * must not undo the signature already recorded.
+     * Email whoever an NTP now waits on, so they hear of it without signing
+     * in. The bell may reach a whole department; the mail only goes to those
+     * who can actually sign the step. A queue or mail outage must not undo the
+     * signature already recorded.
      */
     private function mailNtpReviewers(ProjectNtp $ntp, Collection $recipients): void
     {
@@ -376,12 +381,20 @@ class ApprovalFlow
      */
     private function notifyRoles(array $roles, string $message, string $link, ?User $except = null): void
     {
-        $recipients = User::whereHas('roles', fn ($q) => $q->whereIn('name', $roles))
-            ->pluck('id')
-            ->merge(RosterBreak::oicIdsCovering($roles))
-            ->unique()
+        $recipients = $this->roleHolders($roles)
             ->reject(fn ($id) => $except && (int) $id === $except->id);
 
         Notification::notify($recipients, $message, $link);
+    }
+
+    /**
+     * @param  array<int, string>  $roles
+     */
+    private function roleHolders(array $roles): Collection
+    {
+        return User::whereHas('roles', fn ($q) => $q->whereIn('name', $roles))
+            ->pluck('id')
+            ->merge(RosterBreak::oicIdsCovering($roles))
+            ->unique();
     }
 }

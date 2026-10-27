@@ -12,9 +12,10 @@ use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
 /**
- * Tells a project-side reviewer — the department user, or the division manager
- * user over them — that an NTP has reached their step. They seldom sit in the
- * system, so the in-app bell alone can leave an NTP waiting unseen.
+ * Tells a signatory — from the PMD Assistant Manager through to the division
+ * manager user over the project's department — that an NTP has reached their
+ * step. Most seldom sit in the system, so the in-app bell alone can leave an
+ * NTP waiting unseen.
  */
 class NtpAwaitingReview extends Mailable implements ShouldQueue
 {
@@ -23,15 +24,21 @@ class NtpAwaitingReview extends Mailable implements ShouldQueue
     /** The office this reviewer signs for, fixed now — the chain may move before the mail goes out. */
     public readonly string $stepLabel;
 
-    /** Absolute link to NTP Reviews, built from the current request's host. */
+    /** The page the reviewer signs from: the For Approval portal, or NTP Reviews. */
+    public readonly string $pageLabel;
+
+    /** Absolute link to that page, built from the current request's host. */
     public readonly string $reviewUrl;
 
     public function __construct(
         public readonly ProjectNtp $ntp,
         public readonly User       $reviewer,
     ) {
+        $portal = $reviewer->signsFromApprovalsPortal();
+
         $this->stepLabel = User::roleLabel($ntp->currentApprovalRole());
-        $this->reviewUrl = route('ntp-reviews.index');
+        $this->pageLabel = $portal ? 'For Approval' : 'NTP Reviews';
+        $this->reviewUrl = route($portal ? 'approvals.index' : 'ntp-reviews.index');
     }
 
     public function envelope(): Envelope
