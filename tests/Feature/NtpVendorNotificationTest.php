@@ -183,6 +183,22 @@ it('lists the ntp on the division manager user\'s review page once it is their t
     expect($others->pluck('id'))->not->toContain($this->ntp->id);
 });
 
+it('shows the reviewer where the work is, who it is for, and its cost code', function () {
+    $project = fn ($user) => listedFor($this, $user)->firstWhere('id', $this->ntp->id)['project'];
+
+    expect($project($this->requestor))->toMatchArray([
+        'site'      => 'Main Plant',
+        'end_user'  => NTP_DEPARTMENT,
+        'cost_code' => 'CC-001',
+    ]);
+
+    // The PMD portal renders the same card.
+    $portal = collect($this->actingAs($this->pmdAsst)->get(route('approvals.index'))->inertiaPage()['props']['ntps'])
+        ->firstWhere('id', $this->ntp->id)['project'];
+
+    expect($portal)->toMatchArray(['site' => 'Main Plant', 'end_user' => NTP_DEPARTMENT, 'cost_code' => 'CC-001']);
+});
+
 /**
  * A manager user of another division who has taken the mine-side sites, as
  * the Mine division's does for the Mill division's work at the mine.

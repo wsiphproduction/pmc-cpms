@@ -1236,7 +1236,8 @@ class ProjectController extends Controller
      */
     private function subProjectTitle(Project $parent, string $projectNo): string
     {
-        $suffix = ' — Sub-Project ' . substr($projectNo, -2);
+        // In capitals, as every title is stored (see Project::title()).
+        $suffix = ' — SUB-PROJECT ' . substr($projectNo, -2);
 
         // Titles are capped at 255; trim the parent's so the suffix always fits
         // and the prefill can never be rejected by its own validation.

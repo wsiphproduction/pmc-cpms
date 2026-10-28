@@ -38,6 +38,12 @@ class NtpPresenter
                 'id'         => $ntp->project->id,
                 'project_no' => $ntp->project->project_no,
                 'title'      => $ntp->project->title,
+                // Where, for whom, and charged to what — the same three lines
+                // the printed FRM-04 carries, so approvers needn't open it.
+                'site'       => $ntp->project->site ?: null,
+                'end_user'   => $ntp->project->dept_owner ?: null,
+                'requester'  => $ntp->project->projectRequest?->requester?->name,
+                'cost_code'  => $ntp->project->cost_code ?: null,
             ],
             // Full quotation detail from the linked RFQ so the reviewer sees
             // exactly what they are approving.

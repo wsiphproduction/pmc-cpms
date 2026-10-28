@@ -123,7 +123,8 @@ it('stores and shows a project', function () {
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->component('project-management/show')
-            ->where('project.title', 'Cooling Tower Upgrade')
+            // Stored in capitals, however it was typed.
+            ->where('project.title', 'COOLING TOWER UPGRADE')
             ->where('project.status_key', 'PLANNING')
         );
 });

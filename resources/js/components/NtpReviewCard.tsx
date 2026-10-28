@@ -42,7 +42,15 @@ export interface NtpReview {
     scope_of_work: string | null;
     approvals: ApprovalStep[];
     awaiting_role: string | null;
-    project: { id: number; project_no: string; title: string };
+    project: {
+        id: number;
+        project_no: string;
+        title: string;
+        site: string | null;
+        end_user: string | null;
+        requester: string | null;
+        cost_code: string | null;
+    };
     rfq: RfqDetail | null;
     can_act?: boolean;
 }
@@ -203,6 +211,21 @@ export default function NtpReviewCard({ ntp, canAct, approveLabel, onApprove, on
                     )}
 
                     <div data-tour="ntp-card-details" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
+                        {[
+                            ['Project Location / Site', ntp.project.site ?? '—'],
+                            ['End-User', ntp.project.end_user
+                                ? (ntp.project.requester ? `${ntp.project.end_user} — ${ntp.project.requester}` : ntp.project.end_user)
+                                : (ntp.project.requester ?? '—')],
+                            ['Cost Code', ntp.project.cost_code ?? '—'],
+                        ].map(([label, value]) => (
+                            <div key={label}>
+                                <div style={sectionLabel}>{label}</div>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: '#1e293b' }}>{value}</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', marginTop: '14px' }}>
                         {[
                             ['Contractor', ntp.contractor],
                             ['Approved Cost', peso(ntp.approved_cost)],

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Models\Concerns\HasApprovalChain;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -50,6 +51,16 @@ class ProjectRequest extends Model
         'capex'        => 'boolean',
         'for_budgeting'=> 'boolean',
     ];
+
+    /**
+     * Titles are kept in capitals. Requesters type them in any case, and PMD
+     * was retyping each one by hand; the project raised from the request
+     * copies this title too.
+     */
+    protected function title(): Attribute
+    {
+        return Attribute::make(set: fn (?string $value) => $value === null ? null : mb_strtoupper(trim($value)));
+    }
 
     // ── Relationships ──────────────────────────────────────────────────────
 

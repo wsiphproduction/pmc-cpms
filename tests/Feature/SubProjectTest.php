@@ -113,7 +113,7 @@ it('opens the sub-project form with the title already written', function () {
         ->get(route('projects.create', ['parent' => $this->project->id]))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('project.title', 'Root Project — Sub-Project 01'));
+            ->where('project.title', 'ROOT PROJECT — SUB-PROJECT 01'));
 
     // The second one carries the number it will actually be given.
     makeChildOf($this->project, $this->engineer);
@@ -122,7 +122,7 @@ it('opens the sub-project form with the title already written', function () {
         ->get(route('projects.create', ['parent' => $this->project->id]))
         ->assertOk()
         ->assertInertia(fn ($page) => $page
-            ->where('project.title', 'Root Project — Sub-Project 02'));
+            ->where('project.title', 'ROOT PROJECT — SUB-PROJECT 02'));
 });
 
 it('creates a sub-project without an ntp', function () {

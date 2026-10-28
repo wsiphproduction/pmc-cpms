@@ -210,7 +210,7 @@ class ApprovalController extends Controller
         // `signableBy` keeps out NTPs whose project was deleted: the presenter
         // dereferences the project, and one soft-deleted project would take
         // down the whole portal.
-        return self::ntpsAwaiting($user, $roles, ['creator', 'reviewer', 'rfq.items', 'approvals.user', 'approvals.onBehalfOf'])
+        return self::ntpsAwaiting($user, $roles, ['project.projectRequest.requester', 'creator', 'reviewer', 'rfq.items', 'approvals.user', 'approvals.onBehalfOf'])
             ->map(fn (ProjectNtp $ntp) => NtpPresenter::row($ntp))
             ->values()->all();
     }

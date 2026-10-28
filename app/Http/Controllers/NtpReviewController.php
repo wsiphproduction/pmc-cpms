@@ -32,7 +32,7 @@ class NtpReviewController extends Controller
 
         // Show the full history — records for review, issued, and rejected — not
         // just those pending review. Ordered so pending-review surfaces first.
-        $query = ProjectNtp::with(['project.projectRequest', 'creator', 'reviewer', 'rfq.items', 'approvals.user'])
+        $query = ProjectNtp::with(['project.projectRequest.requester', 'creator', 'reviewer', 'rfq.items', 'approvals.user'])
             ->orderByRaw("CASE WHEN status = 'pending_review' THEN 0 ELSE 1 END")
             ->latest();
 

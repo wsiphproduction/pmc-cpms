@@ -105,7 +105,7 @@ describe('index', function () {
             ->assertInertia(fn (Assert $page) => $page
                 ->component('requests/index')
                 ->has('requests.data', 1)
-                ->where('requests.data.0.title', 'XQZTEST_Electrical_XQZTEST')
+                ->where('requests.data.0.title', 'XQZTEST_ELECTRICAL_XQZTEST')
             );
     });
 
@@ -201,6 +201,10 @@ describe('store', function () {
             'requester_id' => $user->id,
             'status'       => 'pending',
         ]);
+
+        // Stored in capitals, so PMD no longer retypes it. Compared in PHP: the
+        // database's own comparison ignores case.
+        expect(ProjectRequest::where('requester_id', $user->id)->value('title'))->toBe('NEW ROAD CONSTRUCTION');
     });
 
     it('sets status to pending on creation', function () {
