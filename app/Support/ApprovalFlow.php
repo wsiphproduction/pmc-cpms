@@ -224,6 +224,42 @@ class ApprovalFlow
         );
     }
 
+    /**
+     * Remind whoever an NTP has been waiting on for a week or more, and again
+     * each week it stays with them, so an approval doesn't stall the work.
+     * Goes to the same people, the same way, as the notice that first called
+     * on them. Returns whether a reminder went out.
+     */
+    public function remindStalledNtp(ProjectNtp $ntp, int $afterDays = 7): bool
+    {
+        $step = $ntp->currentApproval();
+
+        if ($ntp->status !== 'pending_review' || $step === null || $ntp->project === null) {
+            return false;
+        }
+
+        $reachedAt = $ntp->currentApprovalReachedAt();
+
+        // By calendar day, so a step reached mid-morning is still due when the
+        // reminders run at the start of the same weekday a week on.
+        if (($step->reminded_at ?? $reachedAt)->gt(now()->subDays($afterDays)->endOfDay())) {
+            return false;
+        }
+
+        $days = (int) $reachedAt->copy()->startOfDay()->diffInDays(now()->startOfDay());
+
+        $this->notifyNextApprover(
+            $ntp,
+            "Reminder: NTP {$ntp->ntp_no} for {$ntp->contractor_name} on project {$ntp->project->project_no} has been awaiting your approval for {$days} days.",
+            route('approvals.index', absolute: false),
+            $days,
+        );
+
+        $step->update(['reminded_at' => now()]);
+
+        return true;
+    }
+
     /** The final signature: the NTP takes effect. */
     private function issueNtp(ProjectNtp $ntp, Project $project): void
     {
@@ -293,7 +329,8 @@ class ApprovalFlow
             : in_array($record->status, ['approved', 'rejected'], true);
     }
 
-    private function notifyNextApprover(ProjectRequest|ProjectNtp $record, string $message, string $link): void
+    /** `$waitingDays` marks the call as a reminder of a step already that old. */
+    private function notifyNextApprover(ProjectRequest|ProjectNtp $record, string $message, string $link, ?int $waitingDays = null): void
     {
         $role = $record->currentApprovalRole();
 
@@ -314,7 +351,7 @@ class ApprovalFlow
                 $message,
                 route($named->signsFromApprovalsPortal() ? 'approvals.index' : 'ntp-reviews.index', absolute: false)
             );
-            $this->mailNtpReviewers($record, $recipients);
+            $this->mailNtpReviewers($record, $recipients, $waitingDays);
 
             return;
         }
@@ -324,7 +361,7 @@ class ApprovalFlow
         if ($record instanceof ProjectNtp && $role === User::ROLE_DIVISION_MANAGER
             && ($onSite = $record->project?->siteManagers() ?? collect())->isNotEmpty()) {
             Notification::notify($onSite->pluck('id'), $message, route('ntp-reviews.index', absolute: false));
-            $this->mailNtpReviewers($record, $onSite->pluck('id'));
+            $this->mailNtpReviewers($record, $onSite->pluck('id'), $waitingDays);
 
             return;
         }
@@ -339,14 +376,14 @@ class ApprovalFlow
                 : $project->departmentAudience();
 
             Notification::notify($recipients, $message, route('ntp-reviews.index', absolute: false));
-            $this->mailNtpReviewers($record, $recipients);
+            $this->mailNtpReviewers($record, $recipients, $waitingDays);
 
             return;
         }
 
         // The PMD and Division Manager steps go to the office-wide holders.
         if ($record instanceof ProjectNtp) {
-            $this->mailNtpReviewers($record, $this->roleHolders([$role]));
+            $this->mailNtpReviewers($record, $this->roleHolders([$role]), $waitingDays);
         }
 
         $this->notifyRoles([$role], $message, $link);
@@ -358,15 +395,15 @@ class ApprovalFlow
      * who can actually sign the step. A queue or mail outage must not undo the
      * signature already recorded.
      */
-    private function mailNtpReviewers(ProjectNtp $ntp, Collection $recipients): void
+    private function mailNtpReviewers(ProjectNtp $ntp, Collection $recipients, ?int $waitingDays = null): void
     {
         User::whereIn('id', $recipients)
             ->whereNotNull('email')
             ->get()
             ->filter(fn (User $reviewer) => $ntp->awaitingApprovalFrom($reviewer))
-            ->each(function (User $reviewer) use ($ntp) {
+            ->each(function (User $reviewer) use ($ntp, $waitingDays) {
                 try {
-                    Mail::to($reviewer->email)->send(new NtpAwaitingReview($ntp, $reviewer));
+                    Mail::to($reviewer->email)->send(new NtpAwaitingReview($ntp, $reviewer, $waitingDays));
                 } catch (\Throwable $e) {
                     Log::error("NTP review email to {$reviewer->email} could not be queued for NTP #{$ntp->id}: " . $e->getMessage());
                 }

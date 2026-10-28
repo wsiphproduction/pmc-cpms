@@ -30,9 +30,14 @@ class NtpAwaitingReview extends Mailable implements ShouldQueue
     /** Absolute link to that page, built from the current request's host. */
     public readonly string $reviewUrl;
 
+    /**
+     * @param  int|null  $waitingDays  Set when this is a reminder: how long the
+     *                                 NTP has already waited at this step.
+     */
     public function __construct(
         public readonly ProjectNtp $ntp,
         public readonly User       $reviewer,
+        public readonly ?int       $waitingDays = null,
     ) {
         $portal = $reviewer->signsFromApprovalsPortal();
 
@@ -45,8 +50,12 @@ class NtpAwaitingReview extends Mailable implements ShouldQueue
     {
         $project = $this->ntp->project;
 
+        $prefix = $this->waitingDays !== null
+            ? "Reminder ({$this->waitingDays} days pending)"
+            : 'For your approval';
+
         return new Envelope(
-            subject: "For your approval: NTP {$this->ntp->ntp_no} – {$project->project_no} – {$project->title}",
+            subject: "{$prefix}: NTP {$this->ntp->ntp_no} – {$project->project_no} – {$project->title}",
         );
     }
 

@@ -15,3 +15,11 @@ Schedule::command('queue:work --stop-when-empty --max-time=50 --tries=3')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground();
+
+// Nudge NTP approvers who have sat on one for a week. Weekdays only, so a
+// reminder that falls due on the weekend goes out on Monday morning.
+Schedule::command('ntps:remind-stalled')
+    ->weekdays()
+    ->dailyAt('08:00')
+    ->timezone('Asia/Manila')
+    ->withoutOverlapping();

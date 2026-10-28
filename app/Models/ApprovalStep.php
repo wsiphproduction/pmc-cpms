@@ -21,6 +21,7 @@ class ApprovalStep extends Model
         'user_id',
         'on_behalf_of_user_id',
         'acted_at',
+        'reminded_at',
         'remarks',
     ];
 
@@ -29,6 +30,7 @@ class ApprovalStep extends Model
         'user_id'  => 'integer',
         'on_behalf_of_user_id' => 'integer',
         'acted_at' => 'datetime',
+        'reminded_at' => 'datetime',
     ];
 
     public function approvable(): MorphTo

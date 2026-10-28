@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { useConfirm } from '@/components/useConfirm';
 import ApprovalTimeline, { ApprovalStep } from '@/components/ApprovalTimeline';
@@ -55,7 +55,14 @@ interface Props {
     oic_for: { manager: string | null; role_label: string; ends_on: string; notes: string | null } | null;
     /** Set while the signed-in user is away on a roster break themselves. */
     on_break: { oic: string | null; ends_on: string } | null;
+    /** The search the history was fetched with. */
+    search: string;
 }
+
+// The queues come down whole, so they are filtered here; the history is
+// searched on the server, which reaches past the latest decisions.
+const matches = (query: string, fields: (string | null | undefined)[]) =>
+    fields.some(f => f?.toLowerCase().includes(query));
 
 const sectionLabel: React.CSSProperties = { fontSize: '10px', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '3px' };
 
@@ -207,12 +214,45 @@ function RequestCard({ row, onApprove, onReject }: {
 // ── Portal ───────────────────────────────────────────────────────────────────
 type TabKey = 'requests' | 'ntps' | 'history';
 
-export default function ApprovalsIndex({ role, role_label, requests, ntps, history, shows_requests, engineers, oic_for, on_break }: Props) {
+export default function ApprovalsIndex({ role, role_label, requests: allRequests, ntps: allNtps, history, shows_requests, engineers, oic_for, on_break, search: searchedFor }: Props) {
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
     const [rejectRequest, setRejectRequest] = useState<RequestRow | null>(null);
     const [finalApprove, setFinalApprove] = useState<RequestRow | null>(null);
     const [rejectNtp, setRejectNtp] = useState<NtpReview | null>(null);
-    const [tab, setTab] = useState<TabKey>(shows_requests && requests.length > 0 ? 'requests' : 'ntps');
+    const [tab, setTab] = useState<TabKey>(shows_requests && allRequests.length > 0 ? 'requests' : 'ntps');
+    const [search, setSearch] = useState(searchedFor ?? '');
+
+    const query = search.trim().toLowerCase();
+
+    const requests = query === '' ? allRequests : allRequests.filter(r => matches(query, [
+        r.request_no, r.title, r.job_type, r.job_location, r.costcode, r.requester.name, r.requester.department,
+    ]));
+
+    const ntps = query === '' ? allNtps : allNtps.filter(n => matches(query, [
+        n.ntp_no, n.contractor, n.prepared_by, n.project.project_no, n.project.title,
+        n.project.site, n.project.end_user, n.project.requester, n.project.cost_code,
+    ]));
+
+    // Refetch the history once typing pauses; the queues above have already
+    // filtered as each key went in.
+    useEffect(() => {
+        const term = search.trim();
+
+        if (term === (searchedFor ?? '')) {
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            router.get(route('approvals.index'), term ? { search: term } : {}, {
+                only: ['history', 'search'],
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+            });
+        }, 350);
+
+        return () => clearTimeout(timer);
+    }, [search, searchedFor]);
 
     const tabs: { key: TabKey; label: string; count: number }[] = [
         ...(shows_requests ? [{ key: 'requests' as TabKey, label: 'Requests', count: requests.length }] : []),
@@ -312,22 +352,41 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
                 </div>
             )}
 
-            <div style={{ display: 'flex', gap: '6px', marginBottom: '18px', flexWrap: 'wrap' }}>
-                {tabs.map(t => {
-                    const active = tab === t.key;
-                    return (
-                        <button key={t.key} type="button" onClick={() => setTab(t.key)}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 14px', borderRadius: '8px', border: `1px solid ${active ? '#2563eb' : '#e2e8f0'}`, background: active ? '#2563eb' : '#fff', color: active ? '#fff' : '#475569', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>
-                            {t.label}
-                            <span style={{ padding: '1px 7px', borderRadius: '999px', background: active ? 'rgba(255,255,255,0.25)' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontSize: '11px', fontWeight: 700 }}>{t.count}</span>
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '18px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {tabs.map(t => {
+                        const active = tab === t.key;
+                        return (
+                            <button key={t.key} type="button" onClick={() => setTab(t.key)}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '7px 14px', borderRadius: '8px', border: `1px solid ${active ? '#2563eb' : '#e2e8f0'}`, background: active ? '#2563eb' : '#fff', color: active ? '#fff' : '#475569', fontSize: '12.5px', fontWeight: 600, cursor: 'pointer' }}>
+                                {t.label}
+                                <span style={{ padding: '1px 7px', borderRadius: '999px', background: active ? 'rgba(255,255,255,0.25)' : '#f1f5f9', color: active ? '#fff' : '#64748b', fontSize: '11px', fontWeight: 700 }}>{t.count}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', border: '1.5px solid #e5e7eb', borderRadius: '8px', padding: '7px 12px', flex: '1 1 220px', maxWidth: '340px' }}>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                    <input
+                        type="text"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                        placeholder="Search NTP, request, project, contractor…"
+                        style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '13px', color: '#374151', width: '100%', fontFamily: 'inherit' }}
+                    />
+                    {search && (
+                        <button type="button" title="Clear search" onClick={() => setSearch('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', display: 'flex', padding: 0 }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                         </button>
-                    );
-                })}
+                    )}
+                </div>
             </div>
 
             {tab === 'requests' && (
                 requests.length === 0
-                    ? emptyState('📥', 'Nothing awaiting your approval', 'Project requests endorsed by the project engineer will appear here.')
+                    ? (query
+                        ? emptyState('🔍', 'No matching requests', `Nothing in your request queue matches “${search.trim()}”.`)
+                        : emptyState('📥', 'Nothing awaiting your approval', 'Project requests endorsed by the project engineer will appear here.'))
                     : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                             {requests.map(row => (
@@ -339,7 +398,9 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
 
             {tab === 'ntps' && (
                 ntps.length === 0
-                    ? emptyState('📄', 'No NTPs awaiting your approval', 'Notices to Proceed reach you once the earlier approvers have signed.')
+                    ? (query
+                        ? emptyState('🔍', 'No matching NTPs', `Nothing in your NTP queue matches “${search.trim()}”.`)
+                        : emptyState('📄', 'No NTPs awaiting your approval', 'Notices to Proceed reach you once the earlier approvers have signed.'))
                     : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                             {ntps.map(ntp => (
@@ -358,7 +419,9 @@ export default function ApprovalsIndex({ role, role_label, requests, ntps, histo
 
             {tab === 'history' && (
                 history.length === 0
-                    ? emptyState('🗂️', 'No decisions yet', 'Everything you approve or reject is recorded here.')
+                    ? (searchedFor
+                        ? emptyState('🔍', 'No matching decisions', `None of your past decisions match “${searchedFor}”.`)
+                        : emptyState('🗂️', 'No decisions yet', 'Everything you approve or reject is recorded here.'))
                     : (
                         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', minWidth: '620px' }}>

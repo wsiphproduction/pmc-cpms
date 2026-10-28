@@ -7,6 +7,7 @@ use App\Models\RosterBreak;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Support\Carbon;
 
 /**
  * A fixed, sequential approval chain for a record.
@@ -54,6 +55,23 @@ trait HasApprovalChain
     public function currentApprovalRole(): ?string
     {
         return $this->currentApproval()?->role;
+    }
+
+    /**
+     * When the chain reached its current step: the signature before it, or
+     * the record's creation for the first step. Null once the chain settles.
+     */
+    public function currentApprovalReachedAt(): ?Carbon
+    {
+        $step = $this->currentApproval();
+
+        if ($step === null) {
+            return null;
+        }
+
+        return $this->approvalSteps()
+            ->where('sequence', '<', $step->sequence)
+            ->max('acted_at') ?? $this->created_at;
     }
 
     public function approvalChainStarted(): bool

@@ -7,6 +7,7 @@ use App\Models\ProjectRequest;
 use App\Models\User;
 use App\Support\ApprovalFlow;
 use App\Support\NtpPresenter;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -44,12 +45,17 @@ class ApprovalController extends Controller
         $duty = $user->activeOicDuty();
         $away = $user->activeRosterBreak();
 
+        $search = trim((string) $request->query('search', ''));
+
         return Inertia::render('approvals/index', [
             'role'       => $role,
             'role_label' => User::roleLabel($role),
             'requests'   => $this->pendingRequests($roles),
             'ntps'       => $this->pendingNtps($user, $roles),
-            'history'    => $this->history($user),
+            'history'    => $this->history($user, $search),
+            // The queues are small and filtered on the page; only the history
+            // is searched here, since it shows just the latest decisions.
+            'search'     => $search,
             // A Division Manager only signs NTPs; hide the request queue entirely
             // rather than showing them a tab that can never hold anything.
             'shows_requests' => array_intersect($roles, ProjectRequest::APPROVAL_CHAIN) !== [],
@@ -215,12 +221,31 @@ class ApprovalController extends Controller
             ->values()->all();
     }
 
-    /** What this user has already settled, newest first. */
-    private function history(User $user): array
+    /**
+     * What this user has already settled, newest first. A search reaches past
+     * the latest 30 to every decision whose record, project, contractor or
+     * remarks match.
+     */
+    private function history(User $user, string $search = ''): array
     {
+        $like = '%' . $search . '%';
+
         return $user->approvalSteps()
             ->with(['approvable', 'onBehalfOf'])
             ->where('status', '!=', 'pending')
+            ->when($search !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
+                ->where('remarks', 'like', $like)
+                ->orWhereHasMorph('approvable', [ProjectNtp::class], fn (Builder $ntp) => $ntp
+                    ->where(fn (Builder $q) => $q
+                        ->where('ntp_no', 'like', $like)
+                        ->orWhere('contractor_name', 'like', $like)
+                        ->orWhereHas('project', fn (Builder $p) => $p
+                            ->where('project_no', 'like', $like)
+                            ->orWhere('title', 'like', $like))))
+                ->orWhereHasMorph('approvable', [ProjectRequest::class], fn (Builder $req) => $req
+                    ->where(fn (Builder $q) => $q
+                        ->where('request_no', 'like', $like)
+                        ->orWhere('title', 'like', $like)))))
             ->latest('acted_at')
             ->take(30)
             ->get()

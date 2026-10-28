@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NTP for Your Approval</title>
+    <title>{{ $waitingDays !== null ? 'Reminder: NTP Still Awaiting Approval' : 'NTP for Your Approval' }}</title>
 </head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
 
@@ -22,7 +22,7 @@
                                         {{ config('app.name') }}
                                     </div>
                                     <div style="font-size:22px;font-weight:800;color:#ffffff;line-height:1.2;">
-                                        NTP for Your Approval
+                                        {{ $waitingDays !== null ? 'Reminder: NTP Still Awaiting Approval' : 'NTP for Your Approval' }}
                                     </div>
                                 </td>
                                 <td align="right">
@@ -41,8 +41,15 @@
                     <td style="padding:32px 36px 0;">
                         <p style="margin:0;font-size:13.5px;color:#475569;line-height:1.7;">
                             Hi <strong style="color:#0f172a;">{{ $reviewer->name }}</strong>,
-                            a Notice to Proceed is now waiting on your approval as
-                            <strong style="color:#0f172a;">{{ $stepLabel }}</strong>.
+                            @if ($waitingDays !== null)
+                                this Notice to Proceed has been waiting on your approval as
+                                <strong style="color:#0f172a;">{{ $stepLabel }}</strong>
+                                for <strong style="color:#b45309;">{{ $waitingDays }} days</strong>.
+                                Please review it so the work is not delayed.
+                            @else
+                                a Notice to Proceed is now waiting on your approval as
+                                <strong style="color:#0f172a;">{{ $stepLabel }}</strong>.
+                            @endif
                         </p>
                     </td>
                 </tr>
