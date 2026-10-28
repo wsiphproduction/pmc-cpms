@@ -12,9 +12,63 @@ interface LoginForm {
     remember: boolean;
 }
 
+interface DeployedUpdate {
+    sha: string;
+    type: 'New' | 'Fix';
+    text: string;
+    date: string;
+}
+
 interface LoginProps {
     status?: string;
     canResetPassword: boolean;
+    /** The latest updates to reach the live site, newest first. */
+    updates?: DeployedUpdate[];
+}
+
+const UPDATE_TAG: Record<DeployedUpdate['type'], { bg: string; color: string }> = {
+    New: { bg: '#dbeafe', color: '#1d4ed8' },
+    Fix: { bg: '#dcfce7', color: '#15803d' },
+};
+
+// ── What's new ─────────────────────────────────────────────────────────────
+function WhatsNew({ updates }: { updates: DeployedUpdate[] }) {
+    return (
+        <section aria-label="Recent updates" style={{
+            marginTop: '28px', border: '1px solid #e5e7eb', borderRadius: '10px',
+            background: '#fff', overflow: 'hidden', fontFamily: "'Inter', sans-serif",
+        }}>
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: '7px', padding: '10px 14px',
+                borderBottom: '1px solid #f1f5f9', background: '#f8fafc',
+            }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.2">
+                    <path d="M12 3l1.9 5.8H20l-4.9 3.6 1.9 5.8L12 14.6l-5 3.6 1.9-5.8L4 8.8h6.1z"/>
+                </svg>
+                <span style={{ fontSize: '11px', fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    What's new
+                </span>
+            </div>
+            <ul style={{ listStyle: 'none', margin: 0, padding: '4px 0' }}>
+                {updates.map(u => (
+                    <li key={u.sha} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '8px 14px' }}>
+                        <span style={{
+                            // One width for every tag, so the update text lines up.
+                            flexShrink: 0, marginTop: '1px', padding: '1px 0', borderRadius: '999px',
+                            fontSize: '10px', fontWeight: 700, width: '36px', textAlign: 'center',
+                            background: UPDATE_TAG[u.type].bg, color: UPDATE_TAG[u.type].color,
+                        }}>
+                            {u.type}
+                        </span>
+                        <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: '12.5px', color: '#334155', lineHeight: 1.45 }}>{u.text}</div>
+                            <div style={{ fontSize: '11px', color: '#9ca3af', marginTop: '1px' }}>{u.date}</div>
+                        </div>
+                    </li>
+                ))}
+            </ul>
+        </section>
+    );
 }
 
 // ── Reusable styled field wrapper ──────────────────────────────────────────
@@ -37,7 +91,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
     );
 }
 
-export default function Login({ status, canResetPassword }: LoginProps) {
+export default function Login({ status, canResetPassword, updates = [] }: LoginProps) {
     const { data, setData, post, processing, errors, reset } = useForm<LoginForm>({
         email: '',
         password: '',
@@ -244,6 +298,8 @@ export default function Login({ status, canResetPassword }: LoginProps) {
                     </TextLink>
                 </p>
             </form>
+
+            {updates.length > 0 && <WhatsNew updates={updates} />}
         </AuthLayout>
     );
 }
