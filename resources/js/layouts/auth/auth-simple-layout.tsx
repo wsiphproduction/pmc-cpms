@@ -1,4 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
+import WhatsNew, { DeployedUpdate } from '@/components/WhatsNew';
 
 interface AuthLayoutProps {
     children: React.ReactNode;
@@ -8,7 +9,8 @@ interface AuthLayoutProps {
 }
 
 export default function AuthSimpleLayout({ children, title, description }: AuthLayoutProps) {
-    const { logo_url } = usePage<{ logo_url: string }>().props;
+    // Only the login page sends `updates`; the other auth pages show none.
+    const { logo_url, updates = [] } = usePage<{ logo_url: string; updates?: DeployedUpdate[] }>().props;
 
     return (
         <div className="auth-simple-root" style={{
@@ -18,9 +20,11 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
             background: '#f8fafc',
         }}>
             <style>{`
+                .auth-whats-new-mobile { display: none; }
                 @media (max-width: 900px) {
                     .auth-simple-brand { display: none !important; }
                     .auth-simple-form { padding: 32px 20px !important; }
+                    .auth-whats-new-mobile { display: block; }
                 }
                 @media (max-width: 480px) {
                     .auth-simple-form { padding: 24px 16px !important; }
@@ -34,7 +38,9 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                 background: 'linear-gradient(160deg, #1d4ed8 0%, #1e40af 50%, #1e3a8a 100%)',
                 display: 'flex',
                 flexDirection: 'column',
-                justifyContent: 'space-between',
+                // Copy sits under the logo rather than centred, leaving room
+                // for the What's New card; the footer is pushed to the bottom.
+                justifyContent: 'flex-start',
                 padding: '48px 44px',
                 position: 'relative',
                 overflow: 'hidden',
@@ -74,8 +80,8 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                     </Link>
                 </div>
 
-                {/* Center copy */}
-                <div style={{ position: 'relative', zIndex: 1 }}>
+                {/* Copy */}
+                <div style={{ position: 'relative', zIndex: 1, marginTop: '56px' }}>
                     <div style={{
                         display: 'inline-block', padding: '5px 12px', borderRadius: '99px',
                         background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)',
@@ -112,10 +118,12 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                             </div>
                         ))}
                     </div>
+
+                    <WhatsNew updates={updates} variant="dark" style={{ marginTop: '22px' }} />
                 </div>
 
                 {/* Footer note */}
-                <div style={{ position: 'relative', zIndex: 1, fontSize: '11px', color: 'rgba(255,255,255,0.35)' }}>
+                <div style={{ position: 'relative', zIndex: 1, fontSize: '11px', color: 'rgba(255,255,255,0.35)', marginTop: 'auto', paddingTop: '32px' }}>
                     © {new Date().getFullYear()} Philsaga Mining Corporation · All rights reserved
                 </div>
             </div>
