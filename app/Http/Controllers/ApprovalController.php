@@ -91,7 +91,10 @@ class ApprovalController extends Controller
                 $projectRequest,
                 $request->user(),
                 $data['remarks'] ?? null,
-                isset($data['engineer_id']) ? (int) $data['engineer_id'] : null,
+                // Left out, the engineer named ahead of the signature stands.
+                $request->has('engineer_id')
+                    ? (isset($data['engineer_id']) ? (int) $data['engineer_id'] : null)
+                    : $projectRequest->assigned_engineer_id,
             ),
             403,
             'This request is not awaiting your approval.'
@@ -203,6 +206,8 @@ class ApprovalController extends Controller
                 'approvals'    => $projectRequest->approvalTimeline(),
                 // The final signature, where an engineer may be assigned.
                 'assigns_engineer' => $projectRequest->currentApprovalRole() === User::ROLE_PMD_DEPT_MANAGER,
+                // Named ahead of the signature, so the modal opens on them.
+                'assigned_engineer_id' => $projectRequest->assigned_engineer_id,
             ])->values()->all();
     }
 

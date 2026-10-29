@@ -66,7 +66,7 @@ export default function NtpReviewsIndex({ ntps }: Props) {
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>NTP Reviews</h1>
                 <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
                     Notices to Proceed and their review history. Each NTP reaches you after the PMD Assistant Manager,
-                    PMD Department Manager and Division Manager have signed; the department user signs first, then the
+                    PMD Department Manager and Division Manager have signed; the department manager signs first, then the
                     division manager user issues it.
                 </p>
             </div>

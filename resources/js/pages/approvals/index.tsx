@@ -23,6 +23,8 @@ interface RequestRow {
     approvals: ApprovalStep[];
     /** The final signature, where a project engineer may be assigned. */
     assigns_engineer: boolean;
+    /** Already named ahead of the final signature, if anyone. */
+    assigned_engineer_id: number | null;
 }
 
 interface SelectOption {
@@ -75,7 +77,7 @@ function AssignEngineerApproveModal({ row, engineers, onClose }: {
     engineers: SelectOption[];
     onClose: () => void;
 }) {
-    const [engineerId, setEngineerId] = useState('');
+    const [engineerId, setEngineerId] = useState(row.assigned_engineer_id ? String(row.assigned_engineer_id) : '');
     const [saving, setSaving] = useState(false);
 
     const submit = () => {

@@ -70,7 +70,7 @@ class UserController extends Controller
             'email'      => 'required|email|max:255|unique:users,email',
             'password'   => ['required', Password::min(8)],
             'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule()],
-            'department' => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_REQUESTOR), 'nullable', 'string', 'max:191'],
+            'department' => [Rule::requiredIf(fn () => in_array($request->input('role'), User::DEPARTMENT_ROLES, true)), 'nullable', 'string', 'max:191'],
             'division'   => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_DIVISION_MANAGER_USER), 'nullable', 'string', 'max:191', 'exists:divisions,name'],
             ...$this->siteRules(),
         ]);
@@ -79,7 +79,7 @@ class UserController extends Controller
             'name'       => $data['name'],
             'email'      => $data['email'],
             'password'   => Hash::make($data['password']),
-            'department' => $data['role'] === User::ROLE_REQUESTOR ? ($data['department'] ?? null) : null,
+            'department' => in_array($data['role'], User::DEPARTMENT_ROLES, true) ? ($data['department'] ?? null) : null,
             'division'   => $data['role'] === User::ROLE_DIVISION_MANAGER_USER ? ($data['division'] ?? null) : null,
             'sites'      => $this->sitesFor($data),
         ]);
@@ -95,7 +95,7 @@ class UserController extends Controller
             'name'       => 'required|string|max:255',
             'email'      => 'required|email|max:255|unique:users,email,' . $user->id,
             'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule($user)],
-            'department' => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_REQUESTOR), 'nullable', 'string', 'max:191'],
+            'department' => [Rule::requiredIf(fn () => in_array($request->input('role'), User::DEPARTMENT_ROLES, true)), 'nullable', 'string', 'max:191'],
             'division'   => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_DIVISION_MANAGER_USER), 'nullable', 'string', 'max:191', 'exists:divisions,name'],
             ...$this->siteRules(),
         ]);
@@ -103,7 +103,7 @@ class UserController extends Controller
         $user->update([
             'name'       => $data['name'],
             'email'      => $data['email'],
-            'department' => $data['role'] === User::ROLE_REQUESTOR ? ($data['department'] ?? null) : null,
+            'department' => in_array($data['role'], User::DEPARTMENT_ROLES, true) ? ($data['department'] ?? null) : null,
             'division'   => $data['role'] === User::ROLE_DIVISION_MANAGER_USER ? ($data['division'] ?? null) : null,
             'sites'      => $this->sitesFor($data),
         ]);

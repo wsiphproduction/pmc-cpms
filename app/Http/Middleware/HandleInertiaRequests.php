@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Http\Controllers\ApprovalController;
 use App\Models\Notification;
 use App\Models\ProjectNtp;
+use App\Models\ProjectRequest;
 use App\Models\User;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Http\Request;
@@ -93,6 +94,10 @@ class HandleInertiaRequests extends Middleware
             // open chain), so the badge matches what they can act on.
             'ntp_reviews_count' => $request->user()
                 ? ProjectNtp::awaitingReviewFrom($request->user())->count()
+                : 0,
+            // Supervisors' requests waiting on the signed-in department user.
+            'request_reviews_count' => $request->user()
+                ? ProjectRequest::awaitingDepartmentReviewBy($request->user())->count()
                 : 0,
             // Items sitting in the signed-in approval role's queue.
             'approvals_count' => $request->user()

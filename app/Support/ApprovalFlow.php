@@ -41,15 +41,48 @@ class ApprovalFlow
         $step = $projectRequest->recordApproval($user, $remarks);
         $link = route('requests.show', $projectRequest->id, absolute: false);
         $label = $step->officeLabel();
+        $engineerBefore = $projectRequest->assigned_engineer_id;
 
         if ($step->role === User::ROLE_PMD_DEPT_MANAGER) {
             $projectRequest->update(['assigned_engineer_id' => $engineerId]);
         }
 
+        // The department's review only lets the request into PMD: it is
+        // "For Approval", now with the engineers, as if raised just now — even
+        // if the department manager approves it while it is on their hold.
+        if ($step->sequence === ProjectRequest::DEPARTMENT_REVIEW_SEQUENCE) {
+            $projectRequest->update(['status' => 'pending', 'status_before_hold' => null]);
+
+            Notification::notifyAboutRequest(
+                $projectRequest,
+                $projectRequest->requester_id,
+                "Project Request #{$projectRequest->request_no} was approved by the {$label} and is now with the "
+                    . User::roleLabel($projectRequest->currentApprovalRole()) . '.',
+                $link
+            );
+
+            Notification::notifyAboutRequest(
+                $projectRequest,
+                $projectRequest->reviewAudience(),
+                "New Project Request from {$projectRequest->requester?->name}, approved by the {$label}",
+                $link
+            );
+
+            $this->announceToPmdManager(
+                $projectRequest,
+                "Project Request #{$projectRequest->request_no} was approved by the {$label}"
+                    . ($projectRequest->requester?->department ? " of {$projectRequest->requester->department}." : '.'),
+                $user
+            );
+
+            return true;
+        }
+
         if ($projectRequest->approvalChainComplete()) {
             $projectRequest->update(['status' => 'approved', 'status_before_hold' => null]);
 
-            Notification::notify(
+            Notification::notifyAboutRequest(
+                $projectRequest,
                 $projectRequest->requester_id,
                 "Project Request #{$projectRequest->request_no} has been fully approved.",
                 $link
@@ -64,13 +97,18 @@ class ApprovalFlow
                     : [User::ROLE_ENGINEER, User::ROLE_ASSISTANT_MANAGER],
                 "Project Request #{$projectRequest->request_no} is fully approved and ready to be registered as a project.",
                 $link,
-                $user
+                $user,
+                $projectRequest
             );
 
             if ($projectRequest->assigned_engineer_id && $projectRequest->assigned_engineer_id !== $user->id) {
-                Notification::notify(
+                // One named ahead of the signature already knows they have it.
+                Notification::notifyAboutRequest(
+                    $projectRequest,
                     $projectRequest->assigned_engineer_id,
-                    "You were assigned as project engineer for Project Request #{$projectRequest->request_no}.",
+                    $projectRequest->assigned_engineer_id === $engineerBefore
+                        ? "Project Request #{$projectRequest->request_no}, assigned to you, is fully approved and ready to be registered as a project."
+                        : "You were assigned as project engineer for Project Request #{$projectRequest->request_no}.",
                     $link
                 );
             }
@@ -81,7 +119,8 @@ class ApprovalFlow
         // Still climbing: park it in "in approval" and call on the next office.
         $projectRequest->update(['status' => 'in_approval', 'status_before_hold' => null]);
 
-        Notification::notify(
+        Notification::notifyAboutRequest(
+            $projectRequest,
             $projectRequest->requester_id,
             "Project Request #{$projectRequest->request_no} was approved by the {$label} and is now with the "
                 . User::roleLabel($projectRequest->currentApprovalRole()) . '.',
@@ -91,6 +130,22 @@ class ApprovalFlow
         $this->notifyNextApprover($projectRequest, "Project Request #{$projectRequest->request_no} is awaiting your approval.", route('approvals.index', absolute: false));
 
         return true;
+    }
+
+    /**
+     * Tell the PMD Department Manager — and their OIC — that a request has
+     * reached PMD with its department manager's approval, so they may assign
+     * its engineer without waiting for it to reach their signature.
+     */
+    public function announceToPmdManager(ProjectRequest $projectRequest, string $message, ?User $except = null): void
+    {
+        $this->notifyRoles(
+            [User::ROLE_PMD_DEPT_MANAGER],
+            "{$message} You can now assign a project engineer.",
+            route('requests.show', $projectRequest->id, absolute: false),
+            $except,
+            $projectRequest
+        );
     }
 
     public function rejectRequest(ProjectRequest $projectRequest, User $user, ?string $remarks = null): bool
@@ -105,7 +160,8 @@ class ApprovalFlow
         $reason = $remarks ? " Reason: {$remarks}" : '';
         $link = route('requests.show', $projectRequest->id, absolute: false);
 
-        Notification::notify(
+        Notification::notifyAboutRequest(
+            $projectRequest,
             $projectRequest->requester_id,
             "Project Request #{$projectRequest->request_no} was rejected by the " . $step->officeLabel() . ".{$reason}",
             $link
@@ -118,7 +174,8 @@ class ApprovalFlow
             ->pluck('user_id')
             ->reject(fn ($id) => (int) $id === $user->id);
 
-        Notification::notify(
+        Notification::notifyAboutRequest(
+            $projectRequest,
             $signatories,
             "Project Request #{$projectRequest->request_no}, which you approved, was rejected by the " . $step->officeLabel() . ".{$reason}",
             $link
@@ -371,9 +428,12 @@ class ApprovalFlow
         // and from their own review page, not the PMD portal.
         if ($record instanceof ProjectNtp && in_array($role, ProjectNtp::REVIEW_ROLES, true)) {
             $project = $record->project;
+            // The department's supervisors share its department but sign nothing.
             $recipients = $role === User::ROLE_DIVISION_MANAGER_USER
                 ? $project->divisionAudience()
-                : $project->departmentAudience();
+                : User::whereIn('id', $project->departmentAudience())
+                    ->whereHas('roles', fn ($q) => $q->where('name', User::ROLE_REQUESTOR))
+                    ->pluck('id');
 
             Notification::notify($recipients, $message, route('ntp-reviews.index', absolute: false));
             $this->mailNtpReviewers($record, $recipients, $waitingDays);
@@ -386,7 +446,7 @@ class ApprovalFlow
             $this->mailNtpReviewers($record, $this->roleHolders([$role]), $waitingDays);
         }
 
-        $this->notifyRoles([$role], $message, $link);
+        $this->notifyRoles([$role], $message, $link, about: $record instanceof ProjectRequest ? $record : null);
     }
 
     /**
@@ -416,12 +476,16 @@ class ApprovalFlow
      *
      * @param  array<int, string>  $roles
      */
-    private function notifyRoles(array $roles, string $message, string $link, ?User $except = null): void
+    private function notifyRoles(array $roles, string $message, string $link, ?User $except = null, ?ProjectRequest $about = null): void
     {
         $recipients = $this->roleHolders($roles)
             ->reject(fn ($id) => $except && (int) $id === $except->id);
 
-        Notification::notify($recipients, $message, $link);
+        // A project request's notices are mailed too; an NTP's mail goes out
+        // separately, only to those who can sign it.
+        $about
+            ? Notification::notifyAboutRequest($about, $recipients, $message, $link)
+            : Notification::notify($recipients, $message, $link);
     }
 
     /**

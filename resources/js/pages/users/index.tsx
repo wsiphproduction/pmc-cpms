@@ -63,8 +63,12 @@ const ROLE_LABELS: Record<string, string> = {
     pmd_dept_manager:  'PMD Department Manager',
     division_manager:  'Division Manager',
     division_manager_user: 'Division Manager User',
-    requestor:         'Department User',
+    requestor:         'Department Manager',
+    dept_supervisor:   'Dept Asst Manager/Supervisor',
 };
+
+// Roles tied to one department, which they must be given. Mirrors User::DEPARTMENT_ROLES.
+const DEPARTMENT_ROLES = ['requestor', 'dept_supervisor'];
 
 const roleLabel = (role: string): string =>
     ROLE_LABELS[role] ?? (role.charAt(0).toUpperCase() + role.slice(1));
@@ -79,6 +83,7 @@ function RoleBadge({ role }: { role: string | null }) {
         division_manager:  { bg: '#fce7f3', color: '#9d174d' },
         division_manager_user: { bg: '#ffe4e6', color: '#9f1239' },
         requestor:         { bg: '#fef9c3', color: '#854d0e' },
+        dept_supervisor:   { bg: '#ffedd5', color: '#9a3412' },
     };
     const s = map[role ?? ''] ?? { bg: '#f3f4f6', color: '#374151' };
     return (
@@ -453,7 +458,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                     { label: 'Admins',       value: users.filter(u => u.role === 'admin').length,     color: '#7c3aed' },
                     { label: 'Project Engineers', value: users.filter(u => u.role === 'approver').length,  color: '#16a34a' },
                     { label: 'Assistant Managers', value: users.filter(u => u.role === 'assistant_manager').length, color: '#5b21b6' },
-                    { label: 'Department Users',  value: users.filter(u => u.role === 'requestor').length, color: '#92400e' },
+                    { label: 'Department Managers',  value: users.filter(u => u.role === 'requestor').length, color: '#92400e' },
                 ].map(stat => (
                     <div key={stat.label} style={{
                         background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px',
@@ -734,7 +739,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                             )}
                             {errors.role && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.role}</p>}
                         </div>
-                        {addForm.role === 'requestor' && (
+                        {DEPARTMENT_ROLES.includes(addForm.role) && (
                             <div style={fieldStyle}>
                                 <label style={labelStyle}>Department</label>
                                 <DepartmentSelect
@@ -805,7 +810,7 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                             )}
                             {errors.role && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.role}</p>}
                         </div>
-                        {editForm.role === 'requestor' && (
+                        {DEPARTMENT_ROLES.includes(editForm.role) && (
                             <div style={fieldStyle}>
                                 <label style={labelStyle}>Department</label>
                                 <DepartmentSelect

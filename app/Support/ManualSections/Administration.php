@@ -68,11 +68,11 @@ class Administration
                         'Enter their name and email address. The address must be unique — it is what they sign in with.',
                         'Set a password of at least eight characters.',
                         'Choose the role.',
-                        'If the role is Department User, choose their department. If it is Division Manager User, choose their division. Either is required for that role.',
+                        'If the role is Department Manager, choose their department. If it is Division Manager User, choose their division. Either is required for that role.',
                         'For a Division Manager User, optionally tick Sites Covered. For every project on those sites they then sign two NTP steps: the Division Manager\'s (third) step in place of the Division Manager, and the last signature, whichever division owns the project. Projects on other sites go to the Division Manager and the owning division\'s manager user as before.',
                         'Save, then pass the password to the user and ask them to change it from their Account page.',
                     ]],
-                    ['warn', 'The department on a Department User account is what decides which projects they see and which NTPs they are called on to sign. Getting it wrong sends NTPs to the wrong people, and the chain stalls.'],
+                    ['warn', 'The department on a Department Manager account is what decides which projects they see and which NTPs they are called on to sign. Getting it wrong sends NTPs to the wrong people, and the chain stalls.'],
 
                     ['h', 'The singleton roles'],
                     ['p', 'PMD Department Manager and Division Manager may each be held by only one active user at a time, because each is a single office whose signature a chain waits on. Assigning one to a second user is refused, and so is restoring a deleted user whose role has since been given to somebody else.'],
@@ -166,7 +166,7 @@ class Administration
                     ['p', 'Check three things: that an earlier step has not still to be settled — steps go strictly in order; that you are on the right page — PMD offices sign from For Approval, department and division manager users from NTP Reviews; and that the record has not already been settled by somebody else.'],
 
                     ['h', 'A request or project has disappeared from my list'],
-                    ['p', 'Department users see only their own requests and their department’s projects. If a project you expect is missing, the likely cause is that its department owner is set to another department, or that your account is registered against the wrong one.'],
+                    ['p', 'Department managers see only their own requests and their department’s projects. If a project you expect is missing, the likely cause is that its department owner is set to another department, or that your account is registered against the wrong one.'],
 
                     ['h', 'The system will not let me send a second RFQ to a contractor'],
                     ['p', 'One RFQ per contractor per project. Add another quotation to the RFQ already there instead — that is how a revised offer is recorded.'],

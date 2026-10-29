@@ -129,10 +129,11 @@ class ProjectNtp extends Model
         }
 
         // The person who raised the request signs for it, whatever else they
-        // hold. Otherwise the step falls to the owning department's users —
+        // hold — unless they are a supervisor, whose department user signs
+        // instead. Otherwise the step falls to the owning department's users —
         // and only its department users: matching on department name alone let
         // any account carrying that department value sign for it.
-        return $project->projectRequest?->requester_id === $user->id
+        return ($project->projectRequest?->requester_id === $user->id && ! $user->hasRole(User::ROLE_DEPT_SUPERVISOR))
             || ($user->hasRole(User::ROLE_REQUESTOR) && $project->belongsToDepartmentOf($user));
     }
 

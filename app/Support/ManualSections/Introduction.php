@@ -25,7 +25,7 @@ class Introduction
 
                     ['h', 'The shape of the flow'],
                     ['ol', [
-                        'A department user raises a project request describing the work needed.',
+                        'A department’s supervisor (or its department manager) raises a project request describing the work needed. One raised by a supervisor is reviewed by their department manager first.',
                         'A PMD project engineer reviews it, may hold it for more information, and endorses it.',
                         'The PMD Assistant Manager and then the PMD Department Manager sign it. The request is now approved.',
                         'An engineer registers the approved request as a project, which gets a project number and a Project Hub.',
@@ -89,12 +89,13 @@ class Introduction
             'roles' => [
                 'title' => 'Roles and What Each One Can Do',
                 'blocks' => [
-                    ['p', 'CPMS has eight roles. A user holds exactly one. The role decides three things: which menu items appear, which records are visible, and which buttons are live on a record you can see.'],
+                    ['p', 'CPMS has nine roles. A user holds exactly one. The role decides three things: which menu items appear, which records are visible, and which buttons are live on a record you can see.'],
 
                     ['table',
                         ['Role', 'Belongs to', 'Chiefly responsible for'],
                         [
-                            ['Department User', 'A requesting department', 'Raising project requests; the fourth signature on their department’s NTPs.'],
+                            ['Department Manager', 'A requesting department', 'Raising project requests; reviewing their supervisors’ requests; the fourth signature on their department’s NTPs.'],
+                            ['Dept Asst Manager/Supervisor', 'A requesting department', 'Raising project requests for their Department Manager to review.'],
                             ['Project Engineer', 'PMD', 'Reviewing requests, registering projects, procurement, weekly reporting.'],
                             ['Assistant Manager', 'PMD (engineering side)', 'Covering for project engineers; may edit any project.'],
                             ['PMD Assistant Manager', 'PMD (sign-off)', 'Second signature on a request; first on an NTP.'],
@@ -106,9 +107,11 @@ class Introduction
                     ],
 
                     ['h', 'Who sees what'],
-                    ['p', 'Everyone inside PMD — project engineers, assistant managers, the three sign-off offices and the administrator — sees every request and every project, unscoped. Department users and Division Manager Users are the ones held to a narrower view:'],
+                    ['p', 'Everyone inside PMD — project engineers, assistant managers, the three sign-off offices and the administrator — sees every request and every project, unscoped. Department managers and Division Manager Users are the ones held to a narrower view:'],
                     ['ul', [
-                        'A Department User sees the requests they themselves raised, and the projects owned by their department or descended from a request they raised.',
+                        'A Department Manager sees the requests they themselves raised and those their department’s supervisors raised, and the projects owned by their department or descended from a request they raised.',
+                        'A Dept Asst Manager/Supervisor sees the requests they raised and the same projects as their Department Manager.',
+                        'PMD does not see a supervisor’s request until the Department Manager has approved it.',
                         'A Division Manager User sees the projects of every department inside their division.',
                     ]],
 
@@ -118,7 +121,8 @@ class Introduction
                         [
                             ['Raise a project request', 'Anyone except the three PMD/division sign-off offices.'],
                             ['Edit or delete a request', 'The requester who raised it, and only while it is For Approval or on Hold.'],
-                            ['Endorse or reject a request', 'Project Engineer, Assistant Manager, Admin — at the first step only.'],
+                            ['Approve or reject a supervisor’s request', 'The Department Manager of the supervisor’s department, before it reaches PMD.'],
+                            ['Endorse or reject a request','Project Engineer, Assistant Manager, Admin — at the first step only.'],
                             ['Register a project', 'Project Engineer, Assistant Manager, Admin.'],
                             ['Edit a project and its hub', 'Admin and Assistant Manager on any project; a Project Engineer on projects they registered.'],
                             ['Change a billing’s status', 'The assigned project manager or the engineer who registered the project, plus Admin and Assistant Manager.'],
@@ -148,7 +152,7 @@ class Introduction
                     ]],
                     ['p', 'Below the counters sits the completion KPI: the target the administrator has set, against the average effective completion of every top-level project. "Effective" means a parent project’s figure rolls up the progress of its sub-projects, so a parent is never reported as finished while its parts are not.'],
 
-                    ['h', 'If you are a department user'],
+                    ['h', 'If you are a department manager'],
                     ['p', 'You see three counters instead — Active Projects, unread comment notifications, and the number of requests you have raised — followed by a list of the NTPs on your department’s projects that are waiting for your signature.'],
 
                     ['h', 'The tables below'],

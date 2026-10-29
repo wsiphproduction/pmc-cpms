@@ -740,7 +740,7 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
                 </div>
             )}
             <div style={{ padding: '10px 14px', background: '#e0f2fe', border: '1px solid #bae6fd', borderRadius: '8px', marginBottom: '18px', fontSize: '12.5px', color: '#075985' }}>
-                This NTP will be sent to the department user for review before it is issued.<br />
+                This NTP will be sent to the department manager for review before it is issued.<br />
                 For: <strong>{row.contractor}</strong>
                 {calendarDays != null && <> · Duration: <strong>{calendarDays} calendar day{calendarDays === 1 ? '' : 's'}</strong></>}
             </div>

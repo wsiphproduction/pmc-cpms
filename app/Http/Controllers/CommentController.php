@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\Comment;
 use App\Models\Notification;
 use App\Models\ProjectRequest;
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -38,22 +37,22 @@ class CommentController extends Controller
         $message = "New Comment was added to project request #{$projectRequest->request_no}";
 
         if (auth()->id() === $projectRequest->requester_id) {
-            Notification::notify(
-                User::whereHas('roles', fn ($q) => $q->whereIn('name', ['approver', 'assistant_manager']))->pluck('id'),
-                $message,
-                $link
-            );
+            Notification::notifyAboutRequest($projectRequest, $projectRequest->reviewAudience(), $message, $link);
         } else {
-            Notification::notify($projectRequest->requester_id, $message, $link);
+            Notification::notifyAboutRequest($projectRequest, $projectRequest->requester_id, $message, $link);
         }
 
-        // Whenever a Project Engineer (approver role) comments, put the request
+        // Whenever a Project Engineer (approver role) comments — or the
+        // department manager reviewing a supervisor's request — put the request
         // ON HOLD so the requester knows action is needed — except when it is
         // already fully approved (approved/ongoing), in a final state
         // (completed/rejected) or already on hold. Holding an approved request
         // would also reopen it to the requester for editing and deletion.
+        $reviewing = $projectRequest->awaitingDepartmentReview()
+            && $projectRequest->raisedBySupervisorOf(auth()->user());
+
         if (
-            auth()->user()->hasRole('approver')
+            (auth()->user()->hasRole('approver') || $reviewing)
             && !in_array($projectRequest->status, ['approved', 'ongoing', 'completed', 'rejected', 'hold'], true)
         ) {
             $projectRequest->update([
@@ -61,9 +60,11 @@ class CommentController extends Controller
                 'status'             => 'hold',
             ]);
 
-            Notification::notify(
+            Notification::notifyAboutRequest(
+                $projectRequest,
                 $projectRequest->requester_id,
-                "Project Request #{$projectRequest->request_no} was put ON HOLD after a comment from the Project Engineer.",
+                "Project Request #{$projectRequest->request_no} was put ON HOLD after a comment from the "
+                    . ($reviewing ? 'Department Manager' : 'Project Engineer') . '.',
                 $link
             );
         }

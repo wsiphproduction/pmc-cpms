@@ -57,7 +57,7 @@ class Projects
                     ['ul', [
                         'The administrator and the assistant manager may edit any project.',
                         'A project engineer may edit projects they registered.',
-                        'The three PMD and division sign-off offices, department users and division manager users have a read-only view.',
+                        'The three PMD and division sign-off offices, department managers and division manager users have a read-only view.',
                     ]],
                 ],
             ],
@@ -88,7 +88,7 @@ class Projects
                         ['Status', 'Where the project starts — normally For Planning.'],
                         ['Work Force', 'Who will carry out the work.'],
                         ['WR No. and WR Date', 'The work request reference and its date.'],
-                        ['Department Owner', 'The department the work is for. This is what decides which department users review its NTPs.'],
+                        ['Department Owner', 'The department the work is for. This is what decides which department managers review its NTPs.'],
                         ['Owner’s Email', 'Where notices about the project are copied.'],
                         ['Cost Code', 'The code the spending is booked against.'],
                         ['Project Cost', 'The budget. This is set here by hand — issuing an NTP does not change it.'],
@@ -102,7 +102,7 @@ class Projects
                     ['warn', 'A major project will not save without its approved proposal document attached. Sub-projects are exempt — they inherit the proposal already approved for their parent.'],
 
                     ['h', 'The department owner matters'],
-                    ['p', 'The department owner is not just a label. It decides who sees the project, and which department users are called on for the fourth signature when an NTP is raised against it. Getting it wrong means the NTP chain stalls on the wrong people.'],
+                    ['p', 'The department owner is not just a label. It decides who sees the project, and which department managers are called on for the fourth signature when an NTP is raised against it. Getting it wrong means the NTP chain stalls on the wrong people.'],
 
                     ['h', 'Editing and deleting'],
                     ['p', 'Open the project and click Edit to change its details. Deleting a project is possible for whoever may edit it, but it removes the work from the register — confirm it is really a mistaken entry and not a project that should instead be marked Canceled.'],
@@ -113,13 +113,13 @@ class Projects
                 'title' => 'NTP Reviews',
                 'blocks' => [
                     ['path', 'Top bar > NTP Reviews'],
-                    ['p', 'This is where the owning side of the business signs a Notice to Proceed. Department users give the fourth signature; the Division Manager User gives the fifth and last. Both work from this page rather than from the PMD For Approval portal, because these two steps are held per project — they belong to whoever is behind that particular project’s department or division, not to a single office.'],
+                    ['p', 'This is where the owning side of the business signs a Notice to Proceed. Department managers give the fourth signature; the Division Manager User gives the fifth and last. Both work from this page rather than from the PMD For Approval portal, because these two steps are held per project — they belong to whoever is behind that particular project’s department or division, not to a single office.'],
                     ['note', 'These steps only come round once PMD has signed: the PMD Assistant Manager, the PMD Department Manager and the Division Manager sign first, in that order.'],
 
                     ['h', 'What the page shows'],
                     ['p', 'Every NTP you follow, with those awaiting review listed first, then the issued and rejected ones as history. Each row carries the NTP number, the contractor, the project, who prepared it, the approval timeline so far, and the RFQ line items behind it.'],
                     ['ul', [
-                        'A department user follows NTPs on the projects they requested and on the projects their department owns.',
+                        'A department manager follows NTPs on the projects they requested and on the projects their department owns.',
                         'A Division Manager User follows every department inside their division, plus every project on the sites they cover. The last signature on a project at a covered site is theirs, whichever division owns it.',
                     ]],
                     ['p', 'Only the step that is actually yours is actionable. Rows further up or down the chain are there so you can see the whole picture, not so you can sign them.'],
@@ -131,7 +131,7 @@ class Projects
                         'Click Approve.',
                         'Confirm.',
                     ]],
-                    ['p', 'If you are the department user, the NTP moves on to the Division Manager User, who is notified. If you are the Division Manager User, yours is the final signature and three things happen at once:'],
+                    ['p', 'If you are the department manager, the NTP moves on to the Division Manager User, who is notified. If you are the Division Manager User, yours is the final signature and three things happen at once:'],
                     ['ul', [
                         'The NTP is issued, stamped with today’s date.',
                         'The RFQ it was priced from is marked Awarded.',

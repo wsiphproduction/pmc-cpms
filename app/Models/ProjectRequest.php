@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
 class ProjectRequest extends Model
 {
@@ -27,6 +28,15 @@ class ProjectRequest extends Model
         User::ROLE_PMD_ASST_MANAGER,
         User::ROLE_PMD_DEPT_MANAGER,
     ];
+
+    /**
+     * A request a Dept Asst Manager/Supervisor raises is reviewed by their
+     * department user (the department manager) before the engineer sees it.
+     * That step is numbered 0, ahead of the chain, so the chain's own steps
+     * keep the sequence `awaitingRole` finds them by — and a request raised
+     * without it starts at the engineer as it always has.
+     */
+    public const DEPARTMENT_REVIEW_SEQUENCE = 0;
 
     protected $fillable = [
         'request_no',
@@ -103,15 +113,29 @@ class ProjectRequest extends Model
     // ── Scopes ─────────────────────────────────────────────────────────────
 
     /**
-     * Requests a user may see. Department users see their own. Inside PMD
-     * everyone sees everything, except that once the PMD Department Manager
-     * assigns a request to an engineer, the other engineers no longer see it.
+     * Requests a user may see. Department users see their own, and a
+     * department user also sees those their department's supervisors raise.
+     * Inside PMD everyone sees everything once it is past the department's
+     * review — admins even before — except that once the PMD Department
+     * Manager assigns a request to an engineer, the other engineers no longer
+     * see it.
      */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
         if ($user->isDepartmentUser()) {
-            return $query->where('requester_id', $user->id);
+            return $query->where(fn (Builder $q) => $q
+                ->where('requester_id', $user->id)
+                ->when($user->hasRole(User::ROLE_REQUESTOR) && filled($user->department), fn (Builder $q) => $q
+                    ->orWhereHas('requester', fn (Builder $r) => $r
+                        ->where('department', $user->department)
+                        ->whereHas('roles', fn (Builder $role) => $role->where('name', User::ROLE_DEPT_SUPERVISOR)))));
         }
+
+        if ($user->isAdmin()) {
+            return $query;
+        }
+
+        $query->clearedDepartmentReview();
 
         if ($user->hasRole(User::ROLE_ENGINEER)) {
             return $query->where(fn (Builder $q) => $q
@@ -126,7 +150,11 @@ class ProjectRequest extends Model
     public function isVisibleTo(User $user): bool
     {
         if ($user->isDepartmentUser()) {
-            return $this->requester_id === $user->id;
+            return $this->requester_id === $user->id || $this->raisedBySupervisorOf($user);
+        }
+
+        if (! $user->isAdmin() && ! $this->clearedDepartmentReview()) {
+            return false;
         }
 
         if ($user->hasRole(User::ROLE_ENGINEER)) {
@@ -152,10 +180,116 @@ class ProjectRequest extends Model
      */
     public function approvalStepAuthorizes(ApprovalStep $step, User $user): bool
     {
+        // The department's review is held by the supervisor's own department
+        // users, not by everyone carrying the role.
+        if ($step->role === User::ROLE_REQUESTOR) {
+            return $this->raisedBySupervisorOf($user);
+        }
+
+        // Once an engineer is assigned, the other engineers can no longer see
+        // the request, and so cannot endorse it either.
         return $step->role === User::ROLE_ENGINEER
-            ? $user->hasRole(User::DELIVERY_ROLES)
+            ? $user->hasRole(User::DELIVERY_ROLES) && $this->isVisibleTo($user)
             // Holding the role, or covering it as OIC during a roster break.
             : $user->actsAs($step->role);
+    }
+
+    // ── Department review ─────────────────────────────────────────────────
+
+    /** Put the department's review in front of the chain. Call after `startApprovalChain`. */
+    public function startDepartmentReview(): void
+    {
+        if ($this->approvals()->where('sequence', self::DEPARTMENT_REVIEW_SEQUENCE)->exists()) {
+            return;
+        }
+
+        $this->approvals()->create([
+            'role'     => User::ROLE_REQUESTOR,
+            'sequence' => self::DEPARTMENT_REVIEW_SEQUENCE,
+            'status'   => 'pending',
+        ]);
+
+        $this->unsetRelation('approvals');
+    }
+
+    /** Still with the department, waiting on its review. */
+    public function awaitingDepartmentReview(): bool
+    {
+        return $this->currentApproval()?->sequence === self::DEPARTMENT_REVIEW_SEQUENCE;
+    }
+
+    /** Raised without a department review, or the department has approved it. */
+    public function clearedDepartmentReview(): bool
+    {
+        return ! $this->approvalSteps()->contains(fn (ApprovalStep $step) => $step->sequence === self::DEPARTMENT_REVIEW_SEQUENCE
+            && $step->status !== 'approved');
+    }
+
+    public function scopeClearedDepartmentReview(Builder $query): Builder
+    {
+        return $query->whereDoesntHave('approvals', fn (Builder $q) => $q
+            ->where('sequence', self::DEPARTMENT_REVIEW_SEQUENCE)
+            ->where('status', '!=', 'approved'));
+    }
+
+    /**
+     * Whether the user is a department user over the supervisor who raised
+     * this request — the ones who review it, and who see it on their list.
+     */
+    public function raisedBySupervisorOf(User $user): bool
+    {
+        $requester = $this->requester;
+
+        return $user->hasRole(User::ROLE_REQUESTOR)
+            && filled($user->department)
+            && $requester !== null
+            && $requester->id !== $user->id
+            && $requester->hasRole(User::ROLE_DEPT_SUPERVISOR)
+            && strcasecmp((string) $requester->department, (string) $user->department) === 0;
+    }
+
+    /** Supervisors' requests waiting on this department user's review — the Requests badge. */
+    public function scopeAwaitingDepartmentReviewBy(Builder $query, User $user): Builder
+    {
+        if (! $user->hasRole(User::ROLE_REQUESTOR)) {
+            return $query->whereRaw('1 = 0');
+        }
+
+        return $query->visibleTo($user)
+            ->where('requester_id', '!=', $user->id)
+            ->where('status', 'pending')
+            ->whereHas('approvals', fn (Builder $q) => $q
+                ->where('sequence', self::DEPARTMENT_REVIEW_SEQUENCE)
+                ->where('status', 'pending'));
+    }
+
+    /** The department users who review this request. */
+    public function departmentReviewers(): Collection
+    {
+        $department = $this->requester?->department;
+
+        if (blank($department)) {
+            return collect();
+        }
+
+        return User::where('department', $department)
+            ->where('id', '!=', $this->requester_id)
+            ->whereHas('roles', fn (Builder $q) => $q->where('name', User::ROLE_REQUESTOR))
+            ->pluck('id');
+    }
+
+    /**
+     * Who hears of the requester's changes: the department users while the
+     * request is with them, the engineers once it has reached PMD.
+     */
+    public function reviewAudience(): Collection
+    {
+        if ($this->awaitingDepartmentReview()) {
+            return $this->departmentReviewers();
+        }
+
+        return User::whereHas('roles', fn (Builder $q) => $q->whereIn('name', [User::ROLE_ENGINEER, User::ROLE_ASSISTANT_MANAGER]))
+            ->pluck('id');
     }
 
     public function scopeInApproval($query)

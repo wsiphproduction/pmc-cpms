@@ -282,7 +282,7 @@ it('emails the department user once the ntp reaches their step, and no one else 
     }
 
     \Illuminate\Support\Facades\Mail::assertQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($this->requestor->email)
-        && $mail->stepLabel === 'Department User'
+        && $mail->stepLabel === 'Department Manager'
         && str_contains($mail->reviewUrl, 'ntp-reviews'));
     \Illuminate\Support\Facades\Mail::assertNotQueued(\App\Mail\NtpAwaitingReview::class, fn ($mail) => $mail->hasTo($colleague->email));
 });

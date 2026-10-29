@@ -99,7 +99,7 @@ export default function NtpSignatoriesHub({ project, steps, canEdit = true }: { 
                                             : (
                                                 <span style={{ color: '#b45309' }}>
                                                     {step.role === 'requestor'
-                                                        ? `None — no Department User account for ${project.dept_owner || 'this project\'s department'}.`
+                                                        ? `None — no Department Manager account for ${project.dept_owner || 'this project\'s department'}.`
                                                         : `None — no user account has the ${step.role_label} role yet.`}
                                                     <span style={{ display: 'block', fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
                                                         Pick someone here, or the NTP will wait at this step.

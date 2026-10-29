@@ -25,6 +25,7 @@ class User extends Authenticatable
     // covers for project engineers — distinct from the PMD approval roles.
 
     public const ROLE_REQUESTOR = 'requestor';
+    public const ROLE_DEPT_SUPERVISOR = 'dept_supervisor';
     public const ROLE_ENGINEER = 'approver';
     public const ROLE_ASSISTANT_MANAGER = 'assistant_manager';
     public const ROLE_PMD_ASST_MANAGER = 'pmd_asst_manager';
@@ -34,7 +35,8 @@ class User extends Authenticatable
     public const ROLE_ADMIN = 'admin';
 
     public const ROLE_LABELS = [
-        self::ROLE_REQUESTOR => 'Department User',
+        self::ROLE_REQUESTOR => 'Department Manager',
+        self::ROLE_DEPT_SUPERVISOR => 'Dept Asst Manager/Supervisor',
         self::ROLE_ENGINEER => 'Project Engineer',
         self::ROLE_ASSISTANT_MANAGER => 'Assistant Manager',
         self::ROLE_PMD_ASST_MANAGER => 'PMD Assistant Manager',
@@ -42,6 +44,16 @@ class User extends Authenticatable
         self::ROLE_DIVISION_MANAGER => 'Division Manager',
         self::ROLE_DIVISION_MANAGER_USER => 'Division Manager User',
         self::ROLE_ADMIN => 'Admin',
+    ];
+
+    /**
+     * The roles tied to one department. The department user (the department
+     * manager) reviews the requests their supervisors raise before PMD sees
+     * them, and signs the department's NTPs; the supervisor only raises.
+     */
+    public const DEPARTMENT_ROLES = [
+        self::ROLE_REQUESTOR,
+        self::ROLE_DEPT_SUPERVISOR,
     ];
 
     /** Roles only one active user may hold at a time. */

@@ -37,7 +37,7 @@ class Hub
                     ],
 
                     ['h', 'Who can change what here'],
-                    ['p', 'Editing anything in the hub needs edit rights on the project: the administrator and the assistant manager on any project, a project engineer on projects they registered. Everyone else who can see the project — the sign-off offices, department users, division manager users — sees the same tabs read-only.'],
+                    ['p', 'Editing anything in the hub needs edit rights on the project: the administrator and the assistant manager on any project, a project engineer on projects they registered. Everyone else who can see the project — the sign-off offices, department managers, division manager users — sees the same tabs read-only.'],
                     ['note', 'Billing status is the one exception. It can also be set by the project manager assigned to the project, even where they did not register it.'],
 
                     ['h', 'Files in the hub'],
@@ -143,7 +143,7 @@ class Hub
                             ['1', 'PMD Assistant Manager', 'For Approval'],
                             ['2', 'PMD Department Manager', 'For Approval'],
                             ['3', 'Division Manager', 'For Approval'],
-                            ['4', 'Department User of the owning department', 'NTP Reviews'],
+                            ['4', 'Department Manager of the owning department', 'NTP Reviews'],
                             ['5', 'Division Manager User of that division', 'NTP Reviews'],
                         ],
                     ],

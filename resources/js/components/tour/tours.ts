@@ -431,12 +431,12 @@ export const TOURS: Record<string, Tour> = {
         steps: [
             {
                 title: 'NTP Reviews',
-                body: 'A Notice to Proceed is PMD\'s go-ahead to a contractor. After PMD\'s three signatures it comes to you, the department user, to sign; the division manager user then issues it.',
+                body: 'A Notice to Proceed is PMD\'s go-ahead to a contractor. After PMD\'s three signatures it comes to you, the department manager, to sign; the division manager user then issues it.',
                 roles: ['requestor'],
             },
             {
                 title: 'NTP Reviews',
-                body: 'A Notice to Proceed is PMD\'s go-ahead to a contractor. After PMD\'s three signatures and the department user\'s, it comes to you to issue — yours is the final signature.',
+                body: 'A Notice to Proceed is PMD\'s go-ahead to a contractor. After PMD\'s three signatures and the department manager\'s, it comes to you to issue — yours is the final signature.',
                 roles: ['division_manager_user'],
             },
             {

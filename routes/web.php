@@ -82,6 +82,10 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('requests', ProjectRequestController::class)
         ->parameters(['requests' => 'projectRequest']);
 
+    // The PMD Department Manager naming the engineer, at any point before registration.
+    Route::patch('requests/{projectRequest}/engineer', [ProjectRequestController::class, 'assignEngineer'])
+        ->name('requests.assign-engineer');
+
     // Replacing an attachment's file keeps the attachment and adds a version.
     Route::post('requests/{projectRequest}/attachments/{attachment}/replace', [ProjectRequestController::class, 'replaceAttachment'])
         ->name('requests.attachments.replace');

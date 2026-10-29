@@ -31,7 +31,8 @@ class TechnicalFeedbackController extends Controller
             'remarks'            => $data['remarks'],
         ]);
 
-        Notification::notify(
+        Notification::notifyAboutRequest(
+            $projectRequest,
             $projectRequest->requester_id,
             "Technical feedback was added to project request #{$projectRequest->request_no}",
             route('requests.show', $projectRequest->id, absolute: false)

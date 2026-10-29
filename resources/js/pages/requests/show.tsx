@@ -47,6 +47,7 @@ interface ProjectRequestData {
     requester: User | null;
     /** Named by the PMD Department Manager on the final approval. */
     assigned_engineer: string | null;
+    assigned_engineer_id: number | null;
     project: { id: number; project_no: string } | null;
     attachments: Attachment[];
     created_at: string | null;
@@ -54,8 +55,15 @@ interface ProjectRequestData {
         update: boolean;
         delete: boolean;
         decide: boolean;
+        /** The PMD Department Manager naming the engineer, before or at their signature. */
+        assignEngineer: boolean;
         canCreateProject: boolean;
     };
+}
+
+interface SelectOption {
+    value: string;
+    label: string;
 }
 
 interface FeedbackEntry {
@@ -75,6 +83,8 @@ const PERMIT_OPTIONS = ['Building Permit', 'Safety Permit', 'Environmental Permi
 interface Props {
     projectRequest: ProjectRequestData;
     feedbacks: FeedbackEntry[];
+    /** Offered only to whoever may assign the engineer. */
+    engineers?: SelectOption[];
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -584,8 +594,58 @@ function CommentsSection({ projectRequestId }: { projectRequestId: number }) {
     );
 }
 
+// ── Assign engineer ────────────────────────────────────────────────────────
+// The PMD Department Manager may name who runs the work at any point before
+// it is registered; the final approval then keeps that choice.
+function AssignEngineerModal({ projectRequest, engineers, onClose }: {
+    projectRequest: ProjectRequestData;
+    engineers: SelectOption[];
+    onClose: () => void;
+}) {
+    const [engineerId, setEngineerId] = useState(projectRequest.assigned_engineer_id ? String(projectRequest.assigned_engineer_id) : '');
+    const [saving, setSaving] = useState(false);
+
+    const submit = () => {
+        setSaving(true);
+        router.patch(route('requests.assign-engineer', projectRequest.id), { engineer_id: engineerId || null }, {
+            preserveScroll: true,
+            onSuccess: onClose,
+            onFinish: () => setSaving(false),
+        });
+    };
+
+    return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '460px', overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}>
+                <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9', background: '#eff6ff' }}>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: '#1e40af' }}>Assign Project Engineer</h3>
+                </div>
+                <div style={{ padding: '22px' }}>
+                    <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#475569', lineHeight: 1.55 }}>
+                        Only the engineer you name will see this request, and they are pre-selected as Project Manager when it is registered.
+                    </p>
+                    <select
+                        value={engineerId}
+                        onChange={e => setEngineerId(e.target.value)}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '9px 12px', border: '1.5px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', fontFamily: 'inherit', outline: 'none', background: '#fff' }}
+                    >
+                        <option value="">— Not assigned —</option>
+                        {engineers.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </select>
+                </div>
+                <div style={{ padding: '14px 22px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                    <button type="button" onClick={onClose} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Cancel</button>
+                    <button type="button" onClick={submit} disabled={saving} style={{ padding: '8px 22px', borderRadius: '7px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
+                        {saving ? 'Saving…' : 'Save'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Show Page ──────────────────────────────────────────────────────────────
-export default function Show({ projectRequest, feedbacks = [] }: Props) {
+export default function Show({ projectRequest, feedbacks = [], engineers = [] }: Props) {
     if (!projectRequest) return null;
 
     const { auth } = usePage().props as unknown as { auth: { user: { id: number; role: string | null; is_admin?: boolean } | null } };
@@ -595,6 +655,7 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
     const canGiveFeedback = role === 'approver' || role === 'assistant_manager' || !!auth?.user?.is_admin;
 
     const [showFeedback, setShowFeedback] = useState(false);
+    const [assigning, setAssigning] = useState(false);
     const [editingFeedback, setEditingFeedback] = useState<FeedbackEntry | null>(null);
 
     const attachments = projectRequest.attachments ?? [];
@@ -642,6 +703,9 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
             <Head title={`View Request — ${projectRequest.title}`} />
 
             {confirmDialog}
+            {assigning && (
+                <AssignEngineerModal projectRequest={projectRequest} engineers={engineers} onClose={() => setAssigning(false)} />
+            )}
             {showFeedback && (
                 <FeedbackModal
                     projectRequestId={projectRequest.id}
@@ -774,6 +838,11 @@ export default function Show({ projectRequest, feedbacks = [] }: Props) {
                                 <InfoValue>
                                     {projectRequest.assigned_engineer
                                         ?? <span style={{ color: '#9ca3af', fontStyle: 'italic' }}>Not assigned</span>}
+                                    {projectRequest.can.assignEngineer && (
+                                        <button onClick={() => setAssigning(true)} style={{ marginLeft: '10px', padding: '2px 10px', borderRadius: '6px', border: '1px solid #bfdbfe', background: '#eff6ff', color: '#1d4ed8', fontSize: '11.5px', fontWeight: 600, cursor: 'pointer' }}>
+                                            {projectRequest.assigned_engineer ? 'Change' : 'Assign'}
+                                        </button>
+                                    )}
                                 </InfoValue>
                             </div>
                         </div>

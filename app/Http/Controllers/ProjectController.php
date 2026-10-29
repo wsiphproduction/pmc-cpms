@@ -248,7 +248,8 @@ class ProjectController extends Controller
         ]);
 
         if ($sourceRequest && $sourceRequest->requester_id !== auth()->id()) {
-            Notification::notify(
+            Notification::notifyAboutRequest(
+                $sourceRequest,
                 $sourceRequest->requester_id,
                 "A Project has been created from your Project Request #{$sourceRequest->request_no}",
                 route('projects.show', $project->id, absolute: false)
@@ -273,7 +274,7 @@ class ProjectController extends Controller
 
         // Department users (requesters) get a read-only summary with the RFQ and
         // NTP lists only — the rest of the operations hub is hidden from them.
-        $deptView = auth()->user()->hasRole('requestor');
+        $deptView = auth()->user()->hasRole(User::DEPARTMENT_ROLES);
 
         return Inertia::render('project-management/show', [
             'project'        => $this->projectDetailData($project->load(['manager', 'creator', 'statusLogs.user', 'completion', 'parent', 'children'])),
@@ -467,7 +468,7 @@ class ProjectController extends Controller
 
         // Department users only ever see the read-only RFQ and NTP lists, never
         // the rest of the hub — force that regardless of which URL they hit.
-        $deptView = auth()->user()->hasRole('requestor');
+        $deptView = auth()->user()->hasRole(User::DEPARTMENT_ROLES);
 
         return Inertia::render('project-management/show', [
             'project'        => $this->projectDetailData($project),

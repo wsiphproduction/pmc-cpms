@@ -64,6 +64,7 @@ class NtpSignatories
             $role === User::ROLE_DIVISION_MANAGER_USER => $project->divisionAudience(),
             $role === User::ROLE_REQUESTOR => collect([$project->projectRequest?->requester_id])
                 ->filter()
+                ->reject(fn ($id) => $project->projectRequest?->requester?->hasRole(User::ROLE_DEPT_SUPERVISOR))
                 ->merge(User::role(User::ROLE_REQUESTOR)->whereIn('id', $project->departmentAudience())->pluck('id')),
             default => User::role($role)->pluck('id'),
         };

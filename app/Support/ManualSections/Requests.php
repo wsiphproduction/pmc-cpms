@@ -25,6 +25,7 @@ class Requests
                         ],
                     ],
                     ['note', 'Steps settle strictly in order, and only the first unsettled step can be acted on. A rejection at any step stops the chain there — it does not skip to the next office. The Assistant Manager may also settle step 1, covering for the project engineer.'],
+                    ['p', 'A request raised by a Dept Asst Manager/Supervisor has one more step in front: the Department Manager of the supervisor’s department reviews it first. Until they approve it, PMD does not see it at all.'],
 
                     ['h', 'What the statuses mean'],
                     ['table',
@@ -63,7 +64,7 @@ class Requests
                 'title' => 'Raising a Project Request',
                 'blocks' => [
                     ['path', 'Top bar > Requests > New Request'],
-                    ['p', 'This is the department user’s main task in CPMS. A request that is clear and complete gets endorsed quickly; one that leaves the engineer guessing comes back on Hold.'],
+                    ['p', 'This is the requesting department’s main task in CPMS — usually the Dept Asst Manager/Supervisor’s, though the Department Manager may raise one too. A request that is clear and complete gets endorsed quickly; one that leaves the engineer guessing comes back on Hold.'],
 
                     ['h', 'Filling in the form'],
                     ['kv', [
@@ -105,6 +106,24 @@ class Requests
 
                     ['h', 'Deleting a request'],
                     ['p', 'You may delete a request you raised, while it is still For Approval or on Hold. Once it has been endorsed it is part of PMD’s record and can no longer be removed.'],
+                ],
+            ],
+
+            'requests-department-review' => [
+                'title' => 'Reviewing a Supervisor’s Request',
+                'blocks' => [
+                    ['path', 'Top bar > Requests > open a request'],
+                    ['p', 'When a Dept Asst Manager/Supervisor in your department raises a request, it comes to you before it goes anywhere else. You are notified, and the Requests menu shows a count of the requests waiting on you.'],
+
+                    ['h', 'Approving or rejecting'],
+                    ['ol', [
+                        'Open the request from the notification or from the Requests list. Its row says it is with the Department Manager.',
+                        'Read it as PMD will — the description, the attachments, the funding and the cost code.',
+                        'If something needs fixing, say so in the comments. Your comment puts the request On Hold and tells the supervisor; it comes back to you as For Approval as soon as they edit it. You may also lift the hold yourself with Resume.',
+                        'Click Approve Request to send it on, or Reject to stop it. Both work while it is on hold too.',
+                    ]],
+                    ['p', 'Once you approve, the request is For Approval with the project engineers, exactly like a request you raised yourself, and the usual chain runs from there. A request you reject never reaches PMD.'],
+                    ['note', 'Only a Department Manager of the supervisor’s own department can review it. A request you raise yourself skips this step and goes straight to the engineers.'],
                 ],
             ],
 
@@ -184,6 +203,15 @@ class Requests
                         'Confirm.',
                     ]],
                     ['p', 'The chain stops. The requester or the preparing engineer is notified with your reason, and so is every office that had already signed.'],
+
+                    ['h', 'Assigning the project engineer'],
+                    ['p', 'The PMD Department Manager names the engineer who will run the work. You need not wait for the request to reach your signature: you are notified as soon as a request reaches PMD with its department manager’s approval, and you may assign from then on.'],
+                    ['ol', [
+                        'Open the request from the notification or from the Requests list.',
+                        'Next to Assigned Engineer, click Assign (or Change).',
+                        'Pick the engineer and save. They are notified.',
+                    ]],
+                    ['p', 'From then on only that engineer sees the request among the engineers, and they are pre-selected as Project Manager when it is registered. Your final approval keeps the choice unless you pick someone else there. Until the request is registered as a project you may change or clear it.'],
 
                     ['h', 'What you may not do here'],
                     ['ul', [

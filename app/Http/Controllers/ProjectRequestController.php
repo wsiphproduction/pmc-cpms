@@ -105,15 +105,31 @@ class ProjectRequestController extends Controller
             'status'        => 'pending',
         ]);
 
-        // Engineer → PMD Assistant Manager → PMD Department Manager.
+        // Engineer → PMD Assistant Manager → PMD Department Manager, with the
+        // department user's review in front when a supervisor raised it.
         $projectRequest->startApprovalChain();
+
+        if ($request->user()->hasRole(User::ROLE_DEPT_SUPERVISOR)) {
+            $projectRequest->startDepartmentReview();
+        }
 
         $this->storeAttachments($request, $projectRequest);
 
         $this->notifyApprovers(
-            "New Project Request from {$request->user()->name}",
+            $projectRequest->awaitingDepartmentReview()
+                ? "New Project Request from {$request->user()->name} is awaiting your review"
+                : "New Project Request from {$request->user()->name}",
             $projectRequest
         );
+
+        // A department manager's own request carries their approval already.
+        if ($request->user()->hasRole(User::ROLE_REQUESTOR)) {
+            $this->flow->announceToPmdManager(
+                $projectRequest,
+                "New Project Request #{$projectRequest->request_no} from {$request->user()->name}"
+                    . ($request->user()->department ? ", Department Manager of {$request->user()->department}." : '.')
+            );
+        }
 
         return redirect()->route('requests.index')
             ->with('success', 'Project request submitted successfully.');
@@ -133,6 +149,11 @@ class ProjectRequestController extends Controller
                 'assigned_engineer' => $projectRequest->assignedEngineer?->name,
                 'can' => $this->abilities($projectRequest),
             ],
+            // Who the PMD Department Manager may name to run it.
+            'engineers' => auth()->user()->can('assignEngineer', $projectRequest)
+                ? User::role(User::ROLE_ENGINEER)->orderBy('name')->get(['id', 'name'])
+                    ->map(fn (User $engineer) => ['value' => (string) $engineer->id, 'label' => $engineer->name])
+                : [],
             'feedbacks' => $projectRequest->technicalFeedback()->with('user')->latest()->get()
                 ->map(fn (\App\Models\TechnicalFeedback $f) => [
                     'id'          => $f->id,
@@ -167,6 +188,14 @@ class ProjectRequestController extends Controller
 
             $link = route('requests.show', $projectRequest->id, absolute: false);
 
+            // The department manager reviewing a supervisor's request may
+            // approve or reject it, or lift the hold their comment put on it;
+            // the other statuses stay with delivery.
+            abort_unless(
+                in_array($request->status, ['approved', 'rejected', 'resume'], true) || $request->user()->hasRole(User::DELIVERY_ROLES),
+                403
+            );
+
             // "resume" lifts a hold and restores the status the request had before it.
             if ($request->status === 'resume') {
                 $restored = $projectRequest->status_before_hold ?: 'pending';
@@ -176,7 +205,8 @@ class ProjectRequestController extends Controller
                     'status_before_hold' => null,
                 ]);
 
-                Notification::notify(
+                Notification::notifyAboutRequest(
+                    $projectRequest,
                     $projectRequest->requester_id,
                     "Project Request #{$projectRequest->request_no} was taken OFF HOLD (status: " . ucfirst($restored) . ").",
                     $link
@@ -218,7 +248,8 @@ class ProjectRequestController extends Controller
                     : null,
             ]);
 
-            Notification::notify(
+            Notification::notifyAboutRequest(
+                $projectRequest,
                 $projectRequest->requester_id,
                 "Project Request #{$projectRequest->request_no} status was changed to: " . ucfirst($request->status),
                 $link
@@ -296,6 +327,43 @@ class ProjectRequestController extends Controller
 
         return redirect()->route('requests.index')
             ->with('success', 'Project request updated successfully.');
+    }
+
+    /**
+     * Name (or clear) the engineer who will run the request, ahead of the PMD
+     * Department Manager's signature if need be. The final approval keeps
+     * whoever is named here unless it names someone else.
+     */
+    public function assignEngineer(Request $request, ProjectRequest $projectRequest): RedirectResponse
+    {
+        $this->authorize('assignEngineer', $projectRequest);
+
+        $data = $request->validate([
+            'engineer_id' => ['nullable', 'integer', Rule::exists('users', 'id')->where(
+                fn ($q) => $q->whereIn('id', User::role(User::ROLE_ENGINEER)->select('id'))
+            )],
+        ]);
+
+        $engineerId = isset($data['engineer_id']) ? (int) $data['engineer_id'] : null;
+
+        if ($engineerId === $projectRequest->assigned_engineer_id) {
+            return back();
+        }
+
+        $projectRequest->update(['assigned_engineer_id' => $engineerId]);
+
+        if ($engineerId !== null && $engineerId !== $request->user()->id) {
+            Notification::notifyAboutRequest(
+                $projectRequest,
+                $engineerId,
+                "You were assigned as project engineer for Project Request #{$projectRequest->request_no}.",
+                route('requests.show', $projectRequest->id, absolute: false)
+            );
+        }
+
+        return back()->with('success', $engineerId === null
+            ? 'Assigned engineer removed.'
+            : 'Project engineer assigned.');
     }
 
     public function destroy(ProjectRequest $projectRequest): RedirectResponse
@@ -436,8 +504,9 @@ class ProjectRequestController extends Controller
 
     private function notifyApprovers(string $message, ProjectRequest $projectRequest): void
     {
-        Notification::notify(
-            User::whereHas('roles', fn ($q) => $q->whereIn('name', ['approver', 'assistant_manager']))->pluck('id'),
+        Notification::notifyAboutRequest(
+            $projectRequest,
+            $projectRequest->reviewAudience(),
             $message,
             route('requests.show', $projectRequest->id, absolute: false)
         );
@@ -502,6 +571,7 @@ class ProjectRequestController extends Controller
             'update' => $user->can('update', $projectRequest),
             'delete' => $user->can('delete', $projectRequest),
             'decide' => $user->can('decide', $projectRequest),
+            'assignEngineer' => $user->can('assignEngineer', $projectRequest),
             'canCreateProject' => $user->can('create', Project::class),
         ];
     }

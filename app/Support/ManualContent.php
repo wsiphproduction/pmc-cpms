@@ -46,13 +46,13 @@ class ManualContent
                 'role' => null,
                 'audience' => 'Everyone who uses CPMS, and anyone who needs the whole picture of how a request becomes a finished project.',
                 'at_a_glance' => [
-                    'Covers all eight roles and every module of the system, end to end.',
+                    'Covers all nine roles and every module of the system, end to end.',
                     'Use the table of contents to jump to the part of the flow you are in.',
                     'Each role also has a shorter booklet holding only the parts that role uses.',
                 ],
                 'sections' => [
                     'about', 'getting-started', 'roles', 'dashboard',
-                    'requests-overview', 'requests-raise', 'requests-review', 'approvals-portal',
+                    'requests-overview', 'requests-raise', 'requests-department-review', 'requests-review', 'approvals-portal',
                     'projects-overview', 'projects-register', 'hub-overview',
                     'hub-rfq', 'supplier-portal', 'hub-ntp', 'ntp-reviews', 'hub-subprojects',
                     'hub-permits', 'hub-vof', 'hub-qpp', 'hub-mtr', 'hub-rfp', 'hub-ioc',
@@ -65,19 +65,38 @@ class ManualContent
 
             'department-user' => [
                 'title' => 'CPMS User Manual',
-                'subtitle' => 'For the Department User',
+                'subtitle' => 'For the Department Manager',
                 'role' => User::ROLE_REQUESTOR,
                 'audience' => 'Staff in a requesting department who raise project requests and sign off the Notices to Proceed for work done for their department.',
                 'at_a_glance' => [
                     'You raise project requests and attach the drawings, pictures and reports that explain them.',
-                    'You answer the project engineer while a request is on Hold, and you may edit it until it is endorsed.',
+                    'You review the requests your department’s supervisors raise before they reach PMD.',
                     'You give the fourth signature on every NTP for your department, from the NTP Reviews page.',
+                    'You see your own and your supervisors’ requests and your department’s projects — never another department’s.',
+                ],
+                'sections' => [
+                    'about', 'getting-started', 'dashboard',
+                    'requests-overview', 'requests-raise', 'requests-department-review', 'files',
+                    'projects-overview', 'ntp-reviews', 'hub-ntp',
+                    'notifications', 'account', 'printing', 'troubleshooting', 'glossary',
+                ],
+            ],
+
+            'dept-supervisor' => [
+                'title' => 'CPMS User Manual',
+                'subtitle' => 'For the Dept Asst Manager/Supervisor',
+                'role' => User::ROLE_DEPT_SUPERVISOR,
+                'audience' => 'Assistant managers and supervisors in a requesting department who raise project requests for their department manager to review.',
+                'at_a_glance' => [
+                    'You raise project requests and attach the drawings, pictures and reports that explain them.',
+                    'Your Department Manager reviews each one first; PMD sees it only once they approve it.',
+                    'You answer the project engineer while a request is on Hold, and you may edit it until it is endorsed.',
                     'You see your own requests and your department’s projects — never another department’s.',
                 ],
                 'sections' => [
                     'about', 'getting-started', 'dashboard',
                     'requests-overview', 'requests-raise', 'files',
-                    'projects-overview', 'ntp-reviews', 'hub-ntp',
+                    'projects-overview',
                     'notifications', 'account', 'printing', 'troubleshooting', 'glossary',
                 ],
             ],
@@ -218,7 +237,7 @@ class ManualContent
                 ],
                 'sections' => [
                     'about', 'getting-started', 'roles', 'dashboard',
-                    'requests-overview', 'requests-raise', 'requests-review', 'approvals-portal',
+                    'requests-overview', 'requests-raise', 'requests-department-review', 'requests-review', 'approvals-portal',
                     'projects-overview', 'projects-register', 'hub-overview',
                     'hub-rfq', 'supplier-portal', 'hub-ntp', 'ntp-reviews', 'hub-subprojects',
                     'hub-permits', 'hub-vof', 'hub-qpp', 'hub-mtr', 'hub-rfp', 'hub-ioc',

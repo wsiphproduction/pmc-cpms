@@ -115,6 +115,7 @@ interface PageProps {
     notifications: NotificationRow[];
     unread_notifications_count: number;
     ntp_reviews_count?: number;
+    request_reviews_count?: number;
     approvals_count?: number;
     [key: string]: unknown;
 }
@@ -225,6 +226,10 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     const ntpReviewsCount = props.ntp_reviews_count ?? 0;
     const approvalsCount = props.approvals_count ?? 0;
     const isRequestor = role === 'requestor';
+    // Raises requests for their department, which its department user then
+    // reviews; signs no NTPs.
+    const isSupervisor = role === 'dept_supervisor';
+    const requestReviewsCount = props.request_reviews_count ?? 0;
     // Tied to one division rather than one department; otherwise sees the
     // same portal a department user does.
     const isDivisionUser = role === 'division_manager_user';
@@ -257,6 +262,8 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
         {
             label: 'Requests',
             href: route('requests.index'),
+            // A department user's supervisors' requests awaiting their review.
+            badge: requestReviewsCount,
             icon: (
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -323,7 +330,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 </svg>
             ),
         }] : []),
-        ...(isRequestor || isDivisionUser || isApprovalRole ? [] : [{
+        ...(isRequestor || isSupervisor || isDivisionUser || isApprovalRole ? [] : [{
             label: 'Master Data',
             href: route('master.index'),
             icon: (
