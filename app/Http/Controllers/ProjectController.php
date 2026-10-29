@@ -1184,8 +1184,11 @@ class ProjectController extends Controller
     private function nextProjectNo(): string
     {
         $year = now()->format('Y');
+        // Exactly four characters after the year: a plain "%" would also match
+        // sub-project numbers (PRJ-2026-0017-01), whose last four characters
+        // ("7-01") read back as 7 and hand out a number that is already taken.
         $latest = Project::withTrashed()
-            ->where('project_no', 'like', "PRJ-{$year}-%")
+            ->where('project_no', 'like', "PRJ-{$year}-____")
             ->orderByDesc('project_no')
             ->value('project_no');
 

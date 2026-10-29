@@ -129,6 +129,42 @@ it('stores and shows a project', function () {
         );
 });
 
+it('numbers a new project after the highest top-level number, ignoring sub-project numbers', function () {
+    $user = makeApproverUser();
+    $manager = User::factory()->create();
+    seedProjectMasterData();
+    $year = now()->format('Y');
+
+    // The last project has a sub-project, whose number sorts above it and ends
+    // in "7-01" — the case that once handed out PRJ-YYYY-0008 a second time.
+    foreach (["PRJ-{$year}-0008", "PRJ-{$year}-0017", "PRJ-{$year}-0017-01"] as $projectNo) {
+        Project::create([
+            'project_no'   => $projectNo,
+            'title'        => 'Existing',
+            'site'         => 'Main Plant',
+            'asset_id'     => 'Asset A',
+            'class_name'   => 'Major',
+            'priority'     => 'P1 - Urgent',
+            'status_key'   => 'PLANNING',
+            'work_force'   => 'In-house Team',
+            'wr_no'        => 'WR-1',
+            'wr_date'      => '2026-05-04',
+            'dept_owner'   => 'Engineering',
+            'cost_code'    => 'CC-001',
+            'category'     => 'Renovation',
+            'service_type' => 'Design-Build',
+            'deadline'     => '2026-06-04',
+            'created_by'   => $user->id,
+        ]);
+    }
+
+    $this->actingAs($user)
+        ->post(route('projects.store'), projectPayload($manager))
+        ->assertRedirect();
+
+    expect(Project::latest('id')->value('project_no'))->toBe("PRJ-{$year}-0018");
+});
+
 it('updates project status and writes a log', function () {
     $user = makeApproverUser();
     $manager = User::factory()->create();
