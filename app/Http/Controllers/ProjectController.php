@@ -21,6 +21,7 @@ use App\Models\Structure;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\WorkForce;
+use App\Support\EmsReportPresenter;
 use App\Support\NtpSignatories;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -458,7 +459,7 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
-        $validSections = ['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'at', 'todo'];
+        $validSections = ['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'ems', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
         // Sub-projects run their own procurement now, so no section is off
@@ -519,6 +520,7 @@ class ProjectController extends Controller
             'psr'         => $countAcross('weeklyReports'),
             'mom'         => $countAcross('meetingMinutes'),
             'photos'      => $countAcross('photoAlbums'),
+            'ems'         => $countAcross('emsSurveyReports'),
             'at'          => AuditTrail::where('reference_type', Project::class)->whereIn('reference_id', $ids)->count(),
             'todo'        => $countAcross('tasks'),
         ];
@@ -608,6 +610,33 @@ class ProjectController extends Controller
 
             'photos' => [
                 'albums' => $this->collectHubRows($project, fn ($p) => $p->photoAlbums()->with('creator', 'photos.uploader')->get(), fn ($a, $sub) => $this->photoAlbumRow($a, $sub)),
+            ],
+
+            'ems' => [
+                // Only the project's assigned engineer raises and sends these.
+                'can_manage' => auth()->user()->can('manageEmsReports', $project),
+                'reports'    => $this->collectHubRows(
+                    $project,
+                    fn ($p) => $p->emsSurveyReports()->with('project', 'creator', 'mepeoRep', 'approvals.user', 'approvals.onBehalfOf')->get(),
+                    fn ($r, $sub) => EmsReportPresenter::row($r, $sub),
+                ),
+                'options'    => EmsReportPresenter::options(),
+                'mepeo_reps' => User::role(User::ROLE_MEPEO_REP)->orderBy('name')->get(['id', 'name'])
+                    ->map(fn (User $rep) => ['value' => (string) $rep->id, 'label' => $rep->name])
+                    ->values(),
+                // A new report's header starts from the project and its latest
+                // live NTP, which names the contractor and the schedule.
+                'defaults'   => (function () use ($project) {
+                    $ntp = $project->ntps()->where('status', '!=', 'rejected')->latest('id')->first();
+
+                    return [
+                        'date_requested' => now()->toDateString(),
+                        'location'       => $project->site,
+                        'contractor'     => $ntp?->contractor_name,
+                        'target_start'   => $ntp?->baseline_start?->toDateString(),
+                        'target_end'     => $ntp?->baseline_end?->toDateString() ?? $project->deadline?->toDateString(),
+                    ];
+                })(),
             ],
 
             'rfp' => [

@@ -65,6 +65,8 @@ const ROLE_LABELS: Record<string, string> = {
     division_manager_user: 'Division Manager User',
     requestor:         'Department Manager',
     dept_supervisor:   'Dept Asst Manager/Supervisor',
+    mepeo_rep:         'MEPEO Representative',
+    mepeo_manager:     'MEPEO Manager',
 };
 
 // Roles tied to one department, which they must be given. Mirrors User::DEPARTMENT_ROLES.
@@ -84,6 +86,8 @@ function RoleBadge({ role }: { role: string | null }) {
         division_manager_user: { bg: '#ffe4e6', color: '#9f1239' },
         requestor:         { bg: '#fef9c3', color: '#854d0e' },
         dept_supervisor:   { bg: '#ffedd5', color: '#9a3412' },
+        mepeo_rep:         { bg: '#dcfce7', color: '#166534' },
+        mepeo_manager:     { bg: '#bbf7d0', color: '#14532d' },
     };
     const s = map[role ?? ''] ?? { bg: '#f3f4f6', color: '#374151' };
     return (

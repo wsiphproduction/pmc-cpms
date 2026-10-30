@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\EmsSurveyReport;
 use App\Models\ProjectNtp;
 use App\Models\ProjectRequest;
 use App\Models\User;
 use App\Support\ApprovalFlow;
+use App\Support\EmsReportPresenter;
 use App\Support\NtpPresenter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -52,6 +54,8 @@ class ApprovalController extends Controller
             'role_label' => User::roleLabel($role),
             'requests'   => $this->pendingRequests($roles),
             'ntps'       => $this->pendingNtps($user, $roles),
+            'ems_reports' => $this->pendingEmsReports($roles),
+            'ems_options' => EmsReportPresenter::options(),
             'history'    => $this->history($user, $search),
             // The queues are small and filtered on the page; only the history
             // is searched here, since it shows just the latest decisions.
@@ -155,7 +159,37 @@ class ApprovalController extends Controller
         }
 
         return ProjectRequest::awaitingAnyRole($roles)->count()
-            + self::ntpsAwaiting($user, $roles)->count();
+            + self::ntpsAwaiting($user, $roles)->count()
+            + self::emsReportsAwaiting($roles)->count();
+    }
+
+    /**
+     * EMS Survey Reports at one of these roles' signatures — the PMD
+     * Assistant Manager's review or the Department Manager's note. The MEPEO
+     * Manager's approval comes first and is given from the MEPEO page.
+     *
+     * @param  array<int, string>  $roles
+     */
+    private static function emsReportsAwaiting(array $roles): Builder
+    {
+        return EmsSurveyReport::where('status', EmsSurveyReport::STATUS_FOR_APPROVAL)
+            ->whereHas('project')
+            ->awaitingAnyRole($roles);
+    }
+
+    /** @param  array<int, string>  $roles */
+    private function pendingEmsReports(array $roles): array
+    {
+        if ($roles === []) {
+            return [];
+        }
+
+        return self::emsReportsAwaiting($roles)
+            ->with(['project', 'creator', 'mepeoRep', 'approvals.user', 'approvals.onBehalfOf'])
+            ->latest('submitted_at')
+            ->get()
+            ->map(fn (EmsSurveyReport $report) => EmsReportPresenter::row($report))
+            ->values()->all();
     }
 
     /**
@@ -250,7 +284,13 @@ class ApprovalController extends Controller
                 ->orWhereHasMorph('approvable', [ProjectRequest::class], fn (Builder $req) => $req
                     ->where(fn (Builder $q) => $q
                         ->where('request_no', 'like', $like)
-                        ->orWhere('title', 'like', $like)))))
+                        ->orWhere('title', 'like', $like)))
+                ->orWhereHasMorph('approvable', [EmsSurveyReport::class], fn (Builder $ems) => $ems
+                    ->where(fn (Builder $q) => $q
+                        ->where('control_no', 'like', $like)
+                        ->orWhereHas('project', fn (Builder $p) => $p
+                            ->where('project_no', 'like', $like)
+                            ->orWhere('title', 'like', $like))))))
             ->latest('acted_at')
             ->take(30)
             ->get()
@@ -259,10 +299,16 @@ class ApprovalController extends Controller
 
                 return [
                     'id'       => $step->id,
-                    'type'     => $record instanceof ProjectNtp ? 'NTP' : 'Request',
-                    'label'    => $record instanceof ProjectNtp
-                        ? ($record->ntp_no . ' — ' . $record->contractor_name)
-                        : ($record?->request_no . ' — ' . $record?->title),
+                    'type'     => match (true) {
+                        $record instanceof ProjectNtp      => 'NTP',
+                        $record instanceof EmsSurveyReport => 'EMS',
+                        default                            => 'Request',
+                    },
+                    'label'    => match (true) {
+                        $record instanceof ProjectNtp      => $record->ntp_no . ' — ' . $record->contractor_name,
+                        $record instanceof EmsSurveyReport => $record->control_no . ' — ' . $record->project?->title,
+                        default                            => $record?->request_no . ' — ' . $record?->title,
+                    },
                     'status'   => $step->status,
                     'remarks'  => $step->remarks,
                     // Named when this decision was given as OIC for that manager.
@@ -271,7 +317,7 @@ class ApprovalController extends Controller
                     // The page builds the href with Ziggy so it carries the same base
                     // URL as every other link — a server-side relative route drops
                     // the app's path prefix and 404s on a sub-path deployment.
-                    'link_id'  => $record instanceof ProjectNtp ? $record->project_id : $record?->id,
+                    'link_id'  => $record instanceof ProjectNtp || $record instanceof EmsSurveyReport ? $record->project_id : $record?->id,
                 ];
             })->values()->all();
     }

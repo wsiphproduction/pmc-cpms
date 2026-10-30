@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Http\Controllers\ApprovalController;
+use App\Http\Controllers\MepeoController;
 use App\Models\Notification;
 use App\Models\ProjectNtp;
 use App\Models\ProjectRequest;
@@ -102,6 +103,10 @@ class HandleInertiaRequests extends Middleware
             // Items sitting in the signed-in approval role's queue.
             'approvals_count' => $request->user()
                 ? ApprovalController::pendingCountFor($request->user())
+                : 0,
+            // EMS Survey Reports for a MEPEO user to fill out or sign.
+            'mepeo_count' => $request->user()
+                ? MepeoController::pendingCountFor($request->user())
                 : 0,
         ]);
     }

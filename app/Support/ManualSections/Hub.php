@@ -411,6 +411,56 @@ class Hub
                 ],
             ],
 
+            'hub-ems' => [
+                'title' => 'EMS — EMS Survey Report',
+                'blocks' => [
+                    ['path', 'Open a project > EMS Survey Report'],
+                    ['p', 'The Environmental Impact Assessment (PMD-PRJ-FRM-19) for the work. The project engineer raises it blank, MEPEO fills it out, and it is signed off in this order:'],
+                    ['ol', [
+                        'MEPEO Representative — fills out the assessment and submits it (Inspected/Verified by).',
+                        'MEPEO Manager — approves it (Approved by).',
+                        'PMD Assistant Manager — reviews it (Reviewed by).',
+                        'PMD Department Manager — notes it (Noted by), which completes it.',
+                    ]],
+                    ['h', 'Creating and sending one'],
+                    ['p', 'Only the project engineer assigned to the project — the one who registered it, or the one named as its project manager — can create one, along with the Assistant Manager and the administrator. A project may have as many as it needs.'],
+                    ['ol', [
+                        'Click New EMS Survey Report. The header starts from the project and its latest NTP: date requested, location, contractor and target dates. Correct any of them, then click Create Blank Report.',
+                        'Click Send to MEPEO on the new row and choose the MEPEO Representative. They are notified in CPMS, and by email unless you untick it.',
+                    ]],
+                    ['p', 'Until the representative submits it, you can still edit the header, hand it to another representative (Reassign), or delete it. After that it is fixed.'],
+                    ['h', 'Following it'],
+                    ['p', 'The Sign-off column shows where it is. You are notified at each signature, and when anyone returns it to MEPEO for revision. View shows the whole report; Print opens the filled-in FRM-19, stamped for every signature given so far.'],
+                    ['h', 'Reviewing and noting it (PMD)'],
+                    ['p', 'Once the MEPEO Manager has approved it, the report reaches the PMD Assistant Manager, then the PMD Department Manager, in For Approval under EMS Survey Reports. Click the card to read the whole assessment, then Mark Reviewed (or Mark Noted), or Return to send it back to the representative with a reason. A returned report starts its sign-off again from the MEPEO Manager once it is resubmitted.'],
+                ],
+            ],
+
+            'mepeo' => [
+                'title' => 'The MEPEO Page — EMS Survey Reports',
+                'blocks' => [
+                    ['path', 'Top bar > EMS Survey Reports'],
+                    ['p', 'The MEPEO roles see this page and nothing else of CPMS: it opens when you sign in, and the badge on the menu counts the reports waiting on you. You are notified in CPMS and by email whenever one comes to you.'],
+                    ['ul', [
+                        'To Fill Out (or Needs Your Action, for the MEPEO Manager) — reports waiting on you.',
+                        'In Sign-off — reports submitted and on their way through the signatures.',
+                        'Completed — reports every office has signed.',
+                    ]],
+                    ['h', 'Filling one out (MEPEO Representative)'],
+                    ['ol', [
+                        'Click Fill Out. The header at the top is the project engineer’s; the rest is yours.',
+                        'Tick the Major Activities and the Environmental Aspects that apply, writing anything else in Others.',
+                        'Describe the Other Scope of Work, the Environmental Impacts and their Mitigation.',
+                        'Choose the Status: a Notice To Proceed, or that an Environmental Survey Report is needed first. Add any remarks.',
+                        'Click Save Draft to come back to it later, or Submit to MEPEO Manager when it is done.',
+                    ]],
+                    ['p', 'A report returned for revision shows why at the top. Correct it and submit it again.'],
+                    ['h', 'Approving one (MEPEO Manager)'],
+                    ['p', 'Click Review & Sign. Read the report, then Approve it to send it to PMD, or Return for Revision with a reason to send it back to the representative.'],
+                    ['tip', 'Print FRM-19 gives the paper form at any stage, stamped for every signature already given.'],
+                ],
+            ],
+
             'hub-at' => [
                 'title' => 'AT — Project Audit Trail',
                 'blocks' => [

@@ -32,6 +32,8 @@ class User extends Authenticatable
     public const ROLE_PMD_DEPT_MANAGER = 'pmd_dept_manager';
     public const ROLE_DIVISION_MANAGER = 'division_manager';
     public const ROLE_DIVISION_MANAGER_USER = 'division_manager_user';
+    public const ROLE_MEPEO_REP = 'mepeo_rep';
+    public const ROLE_MEPEO_MANAGER = 'mepeo_manager';
     public const ROLE_ADMIN = 'admin';
 
     public const ROLE_LABELS = [
@@ -43,7 +45,19 @@ class User extends Authenticatable
         self::ROLE_PMD_DEPT_MANAGER => 'PMD Department Manager',
         self::ROLE_DIVISION_MANAGER => 'Division Manager',
         self::ROLE_DIVISION_MANAGER_USER => 'Division Manager User',
+        self::ROLE_MEPEO_REP => 'MEPEO Representative',
+        self::ROLE_MEPEO_MANAGER => 'MEPEO Manager',
         self::ROLE_ADMIN => 'Admin',
+    ];
+
+    /**
+     * The environmental office. It fills in and approves the EMS Survey
+     * Reports the project engineers raise, and sees nothing else of the
+     * system — see RestrictMepeoUsers.
+     */
+    public const MEPEO_ROLES = [
+        self::ROLE_MEPEO_REP,
+        self::ROLE_MEPEO_MANAGER,
     ];
 
     /**
@@ -60,6 +74,7 @@ class User extends Authenticatable
     public const SINGLETON_ROLES = [
         self::ROLE_PMD_DEPT_MANAGER,
         self::ROLE_DIVISION_MANAGER,
+        self::ROLE_MEPEO_MANAGER,
     ];
 
     /** The PMD/division sign-off roles: they approve, and otherwise only look. */
@@ -164,6 +179,12 @@ class User extends Authenticatable
     public function isDepartmentUser(): bool
     {
         return ! $this->hasRole(self::INTERNAL_ROLES);
+    }
+
+    /** Belongs to the environmental office, which only works EMS Survey Reports. */
+    public function isMepeo(): bool
+    {
+        return $this->holdsRole(self::MEPEO_ROLES);
     }
 
     /** Holds one of the PMD/division sign-off roles. */

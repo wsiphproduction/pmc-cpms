@@ -56,6 +56,22 @@ class ProjectPolicy
     }
 
     /**
+     * EMS Survey Reports are raised by the project engineer assigned to the
+     * project: the one who registered it or the one named as its project
+     * manager. Admins and assistant managers keep the ability, as they cover
+     * for engineers everywhere else in the hub.
+     */
+    public function manageEmsReports(User $user, Project $project): bool
+    {
+        if ($user->hasRole(['admin', 'assistant_manager'])) {
+            return true;
+        }
+
+        return $user->hasRole('approver')
+            && in_array($user->id, [(int) $project->created_by, (int) $project->project_manager_id], true);
+    }
+
+    /**
      * Billing status may be changed by the assigned project manager or the
      * project engineer who created the project. Admins and assistant managers
      * administer / cover for engineers, so they retain the ability too.

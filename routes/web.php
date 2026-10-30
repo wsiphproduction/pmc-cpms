@@ -4,10 +4,12 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EmsSurveyReportController;
 use App\Http\Controllers\FileVersionController;
 use App\Http\Controllers\ImpersonationController;
 use App\Http\Controllers\ManualController;
 use App\Http\Controllers\MasterDataController;
+use App\Http\Controllers\MepeoController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NtpReviewController;
 use App\Http\Controllers\ProjectController;
@@ -136,7 +138,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('projects/{project}/completion', [ProjectController::class, 'saveCompletion'])
         ->middleware('can:update,project')->name('projects.completion.save');
 
-    foreach (['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'at', 'todo'] as $section) {
+    foreach (['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'ems', 'at', 'todo'] as $section) {
         Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])
             ->defaults('section', $section)
             ->middleware('can:view,project')
@@ -220,6 +222,30 @@ Route::middleware(['auth'])->group(function () {
         Route::post('todo',                    [ProjectHubController::class, 'storeTodo'])->name('hub.todo.store');
         Route::patch('todo/{task}/toggle',     [ProjectHubController::class, 'toggleTodo'])->name('hub.todo.toggle');
         Route::delete('todo/{task}',           [ProjectHubController::class, 'destroyTodo'])->name('hub.todo.destroy');
+    });
+
+    // EMS Survey Reports are raised by the project's assigned engineer — the
+    // one who registered it or its named project manager — which is narrower
+    // than the general hub-edit permission.
+    Route::prefix('projects/{project}/hub/ems')->middleware('can:manageEmsReports,project')->group(function () {
+        Route::post('/',               [EmsSurveyReportController::class, 'store'])->name('hub.ems.store');
+        Route::patch('{report}',       [EmsSurveyReportController::class, 'update'])->name('hub.ems.update');
+        Route::post('{report}/send',   [EmsSurveyReportController::class, 'send'])->name('hub.ems.send');
+        Route::delete('{report}',      [EmsSurveyReportController::class, 'destroy'])->name('hub.ems.destroy');
+    });
+
+    // Signed by the MEPEO Manager from the MEPEO page and by the PMD managers
+    // from For Approval; the flow checks the signer is the one waited on.
+    Route::get('ems-reports/{report}/print',     [EmsSurveyReportController::class, 'print'])->name('ems.print');
+    Route::patch('ems-reports/{report}/approve', [EmsSurveyReportController::class, 'approve'])->name('ems.approve');
+    Route::patch('ems-reports/{report}/return',  [EmsSurveyReportController::class, 'returnToRep'])->name('ems.return');
+
+    // ── MEPEO (the environmental office's own page) ───────────────────────
+    Route::middleware(['role:mepeo_rep|mepeo_manager|admin'])->group(function () {
+        Route::get('mepeo',                          [MepeoController::class, 'index'])->name('mepeo.index');
+        Route::get('mepeo/reports/{report}',         [MepeoController::class, 'show'])->name('mepeo.reports.show');
+        Route::patch('mepeo/reports/{report}',       [MepeoController::class, 'update'])->name('mepeo.reports.update');
+        Route::post('mepeo/reports/{report}/submit', [MepeoController::class, 'submit'])->name('mepeo.reports.submit');
     });
 
     // Billing status is editable by the assigned project manager or the

@@ -4,6 +4,7 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { useConfirm } from '@/components/useConfirm';
 import ApprovalTimeline, { ApprovalStep } from '@/components/ApprovalTimeline';
 import NtpReviewCard, { NtpReview, RejectModal } from '@/components/NtpReviewCard';
+import { EMS_SIGN_LABELS, EMS_TONE, EmsHeaderGrid, EmsOptions, EmsReportRow, EmsReportSheet, EmsSignModal, fmtDate } from '@/components/EmsReport';
 
 interface RequestRow {
     id: number;
@@ -34,14 +35,14 @@ interface SelectOption {
 
 interface HistoryRow {
     id: number;
-    type: 'NTP' | 'Request';
+    type: 'NTP' | 'Request' | 'EMS';
     label: string;
     status: string;
     remarks: string | null;
     /** The manager this decision was given for, when made as their OIC. */
     on_behalf_of: string | null;
     acted_at: string | null;
-    /** Project id for an NTP, request id for a request; null when the record is gone. */
+    /** Project id for an NTP or EMS report, request id for a request; null when the record is gone. */
     link_id: number | null;
 }
 
@@ -50,6 +51,9 @@ interface Props {
     role_label: string;
     requests: RequestRow[];
     ntps: NtpReview[];
+    /** EMS Survey Reports at the PMD Assistant Manager's review or the Department Manager's note. */
+    ems_reports: EmsReportRow[];
+    ems_options: EmsOptions;
     history: HistoryRow[];
     shows_requests: boolean;
     engineers: SelectOption[];
@@ -213,15 +217,85 @@ function RequestCard({ row, onApprove, onReject }: {
     );
 }
 
-// ── Portal ───────────────────────────────────────────────────────────────────
-type TabKey = 'requests' | 'ntps' | 'history';
+// ── EMS Survey Report card ───────────────────────────────────────────────────
+function EmsCard({ row, options, onSign, onReturn }: {
+    row: EmsReportRow;
+    options: EmsOptions;
+    onSign: (row: EmsReportRow) => void;
+    onReturn: (row: EmsReportRow) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const action = EMS_SIGN_LABELS[row.current_role ?? '']?.action ?? 'Approve';
 
-export default function ApprovalsIndex({ role, role_label, requests: allRequests, ntps: allNtps, history, shows_requests, engineers, oic_for, on_break, search: searchedFor }: Props) {
+    return (
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderLeft: `4px solid ${EMS_TONE}`, borderRadius: '12px', padding: '18px 22px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={open}
+                    onClick={() => setOpen(o => !o)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); } }}
+                    style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', flex: '1 1 260px', minWidth: 0, cursor: 'pointer', outline: 'none' }}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5"
+                        style={{ marginTop: '3px', flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+                        <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>{row.control_no}</span>
+                            <span style={{ padding: '2px 10px', borderRadius: '999px', background: '#dcfce7', color: '#166534', fontSize: '11px', fontWeight: 700 }}>EMS Survey Report</span>
+                            <span style={{ padding: '2px 10px', borderRadius: '999px', background: '#fef3c7', color: '#92400e', fontSize: '11px', fontWeight: 700 }}>Awaiting You</span>
+                        </div>
+                        <div style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>{row.project.project_no} — {row.project.title}</div>
+                        <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: '2px' }}>
+                            Requested {fmtDate(row.date_requested)}{row.prepared_by ? ` by ${row.prepared_by}` : ''}
+                            {row.mepeo_rep ? ` · Filled out by ${row.mepeo_rep.name} (MEPEO)` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <a href={row.print_url} target="_blank" rel="noreferrer" style={{ padding: '8px 14px', borderRadius: '7px', border: '1px solid #e2e8f0', background: '#fff', color: '#374151', fontSize: '12.5px', fontWeight: 700, textDecoration: 'none' }}>
+                        Print
+                    </a>
+                    <button type="button" onClick={() => onSign(row)} style={{ padding: '8px 18px', borderRadius: '7px', border: 'none', background: '#059669', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
+                        ✓ {action}
+                    </button>
+                    <button type="button" onClick={() => onReturn(row)} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
+                        Return
+                    </button>
+                </div>
+            </div>
+
+            <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
+                <div style={sectionLabel}>Sign-off</div>
+                <ApprovalTimeline steps={row.approvals} />
+            </div>
+
+            {open && (
+                <div style={{ marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <EmsHeaderGrid row={row} />
+                    <EmsReportSheet row={row} options={options} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Portal ───────────────────────────────────────────────────────────────────
+type TabKey = 'requests' | 'ntps' | 'ems' | 'history';
+
+export default function ApprovalsIndex({ role, role_label, requests: allRequests, ntps: allNtps, ems_reports: allEms = [], ems_options, history, shows_requests, engineers, oic_for, on_break, search: searchedFor }: Props) {
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
     const [rejectRequest, setRejectRequest] = useState<RequestRow | null>(null);
     const [finalApprove, setFinalApprove] = useState<RequestRow | null>(null);
     const [rejectNtp, setRejectNtp] = useState<NtpReview | null>(null);
-    const [tab, setTab] = useState<TabKey>(shows_requests && allRequests.length > 0 ? 'requests' : 'ntps');
+    const [emsSign, setEmsSign] = useState<{ row: EmsReportRow; mode: 'sign' | 'return' } | null>(null);
+    const [tab, setTab] = useState<TabKey>(
+        shows_requests && allRequests.length > 0 ? 'requests'
+            : allNtps.length === 0 && allEms.length > 0 ? 'ems'
+            : 'ntps',
+    );
     const [search, setSearch] = useState(searchedFor ?? '');
 
     const query = search.trim().toLowerCase();
@@ -233,6 +307,10 @@ export default function ApprovalsIndex({ role, role_label, requests: allRequests
     const ntps = query === '' ? allNtps : allNtps.filter(n => matches(query, [
         n.ntp_no, n.contractor, n.prepared_by, n.project.project_no, n.project.title,
         n.project.site, n.project.end_user, n.project.requester, n.project.cost_code,
+    ]));
+
+    const emsReports = query === '' ? allEms : allEms.filter(r => matches(query, [
+        r.control_no, r.project.project_no, r.project.title, r.location, r.contractor, r.prepared_by, r.mepeo_rep?.name,
     ]));
 
     // Refetch the history once typing pauses; the queues above have already
@@ -259,6 +337,7 @@ export default function ApprovalsIndex({ role, role_label, requests: allRequests
     const tabs: { key: TabKey; label: string; count: number }[] = [
         ...(shows_requests ? [{ key: 'requests' as TabKey, label: 'Requests', count: requests.length }] : []),
         { key: 'ntps', label: 'NTPs', count: ntps.length },
+        { key: 'ems', label: 'EMS Survey Reports', count: emsReports.length },
         { key: 'history', label: 'My Decisions', count: history.length },
     ];
 
@@ -316,6 +395,7 @@ export default function ApprovalsIndex({ role, role_label, requests: allRequests
                     onClose={() => setRejectNtp(null)}
                 />
             )}
+            {emsSign && <EmsSignModal report={emsSign.row} mode={emsSign.mode} onClose={() => setEmsSign(null)} />}
 
             <div style={{ marginBottom: '16px' }}>
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>For Approval</h1>
@@ -419,6 +499,26 @@ export default function ApprovalsIndex({ role, role_label, requests: allRequests
                     )
             )}
 
+            {tab === 'ems' && (
+                emsReports.length === 0
+                    ? (query
+                        ? emptyState('🔍', 'No matching reports', `Nothing in your EMS queue matches “${search.trim()}”.`)
+                        : emptyState('🌿', 'No EMS Survey Reports awaiting you', 'Reports reach you once MEPEO has filled them out and the MEPEO Manager has approved them.'))
+                    : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                            {emsReports.map(row => (
+                                <EmsCard
+                                    key={row.id}
+                                    row={row}
+                                    options={ems_options}
+                                    onSign={r => setEmsSign({ row: r, mode: 'sign' })}
+                                    onReturn={r => setEmsSign({ row: r, mode: 'return' })}
+                                />
+                            ))}
+                        </div>
+                    )
+            )}
+
             {tab === 'history' && (
                 history.length === 0
                     ? (searchedFor
@@ -440,7 +540,7 @@ export default function ApprovalsIndex({ role, role_label, requests: allRequests
                                             <td style={{ padding: '11px 14px', color: '#64748b' }}>{row.type}</td>
                                             <td style={{ padding: '11px 14px', color: '#1e293b', fontWeight: 600 }}>
                                                 {row.link_id
-                                                    ? <Link href={route(row.type === 'NTP' ? 'projects.hub.ntp' : 'requests.show', row.link_id)} style={{ color: '#2563eb', textDecoration: 'none' }}>{row.label}</Link>
+                                                    ? <Link href={route(row.type === 'NTP' ? 'projects.hub.ntp' : row.type === 'EMS' ? 'projects.hub.ems' : 'requests.show', row.link_id)} style={{ color: '#2563eb', textDecoration: 'none' }}>{row.label}</Link>
                                                     : row.label}
                                             </td>
                                             <td style={{ padding: '11px 14px' }}>

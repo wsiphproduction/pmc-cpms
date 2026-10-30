@@ -117,6 +117,7 @@ interface PageProps {
     ntp_reviews_count?: number;
     request_reviews_count?: number;
     approvals_count?: number;
+    mepeo_count?: number;
     [key: string]: unknown;
 }
 
@@ -247,8 +248,33 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     // Project engineers ("approver") own the weekly status; assistant managers
     // cover for them and admins administer, matching the project-update policy.
     const canSubmitWeeklyStatus = isAdmin || ['approver', 'assistant_manager'].includes(role ?? '');
+    // The environmental office sees its EMS Survey Reports and nothing else;
+    // the server keeps them off every other page too (RestrictMepeoUsers).
+    const isMepeo = ['mepeo_rep', 'mepeo_manager'].includes(role ?? '');
+    const homeHref = isMepeo ? route('mepeo.index') : route('dashboard');
 
-    const navItems: NavItem[] = [
+    const mepeoNav: NavItem[] = [{
+        label: 'EMS Survey Reports',
+        href: route('mepeo.index'),
+        badge: props.mepeo_count ?? 0,
+        icon: (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/>
+                <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>
+            </svg>
+        ),
+    }, {
+        label: 'Manual',
+        href: route('manual.index'),
+        icon: (
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+            </svg>
+        ),
+    }];
+
+    const fullNav: NavItem[] = [
         {
             label: 'Dashboard',
             href: route('dashboard'),
@@ -388,6 +414,8 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
         }] : []),
     ];
 
+    const navItems = isMepeo ? mepeoNav : fullNav;
+
     const isActive = (href: string) => {
         if (href === '#') return false;
         try {
@@ -438,7 +466,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 padding: isMobile ? '0 14px' : '0 24px',
             }}>
                 {/* Brand */}
-                <Link href={route('dashboard')} onClick={closeAll} style={{
+                <Link href={homeHref} onClick={closeAll} style={{
                     display: 'flex', alignItems: 'center', gap: '9px',
                     textDecoration: 'none', flexShrink: 0,
                 }}>

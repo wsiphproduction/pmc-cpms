@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Mail\EmsReportActivity;
 use App\Mail\ProjectRequestActivity;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -60,6 +61,35 @@ class Notification extends Model
                     Mail::to($user->email)->send(new ProjectRequestActivity($projectRequest, $user, $message, $url));
                 } catch (\Throwable $e) {
                     Log::error("Project request email to {$user->email} could not be queued for request #{$projectRequest->id}: " . $e->getMessage());
+                }
+            });
+    }
+
+    /**
+     * The bell notification for an EMS Survey Report, mailed as well — unless
+     * `$mail` is false, where the sender chose the bell alone. As with
+     * requests, a mail that cannot be queued is logged and the rest go on.
+     *
+     * @param int|array<int|User>|Collection<int, User|int> $recipients
+     */
+    public static function notifyAboutEmsReport(EmsSurveyReport $report, int|array|Collection $recipients, string $message, string $link, bool $mail = true): void
+    {
+        static::notify($recipients, $message, $link);
+
+        if (! $mail) {
+            return;
+        }
+
+        $url = url($link);
+
+        User::whereIn('id', self::recipientIds($recipients)->unique())
+            ->whereNotNull('email')
+            ->get()
+            ->each(function (User $user) use ($report, $message, $url) {
+                try {
+                    Mail::to($user->email)->send(new EmsReportActivity($report, $user, $message, $url));
+                } catch (\Throwable $e) {
+                    Log::error("EMS report email to {$user->email} could not be queued for report #{$report->id}: " . $e->getMessage());
                 }
             });
     }

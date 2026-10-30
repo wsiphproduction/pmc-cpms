@@ -247,6 +247,11 @@ class Project extends Model
         return $this->hasMany(ProjectPhotoAlbum::class)->orderByDesc('photo_date')->orderByDesc('id');
     }
 
+    public function emsSurveyReports(): HasMany
+    {
+        return $this->hasMany(EmsSurveyReport::class)->latest('id');
+    }
+
     public function billings(): HasMany
     {
         return $this->hasMany(ProjectBilling::class)->latest();

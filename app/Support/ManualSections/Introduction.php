@@ -89,7 +89,7 @@ class Introduction
             'roles' => [
                 'title' => 'Roles and What Each One Can Do',
                 'blocks' => [
-                    ['p', 'CPMS has nine roles. A user holds exactly one. The role decides three things: which menu items appear, which records are visible, and which buttons are live on a record you can see.'],
+                    ['p', 'CPMS has eleven roles. A user holds exactly one. The role decides three things: which menu items appear, which records are visible, and which buttons are live on a record you can see.'],
 
                     ['table',
                         ['Role', 'Belongs to', 'Chiefly responsible for'],
@@ -102,6 +102,8 @@ class Introduction
                             ['PMD Department Manager', 'PMD (sign-off)', 'Final signature on a request; second on an NTP.'],
                             ['Division Manager', 'ECS Division (sign-off)', 'Third signature on an NTP.'],
                             ['Division Manager User', 'The owning division', 'Fifth and final signature on an NTP.'],
+                            ['MEPEO Representative', 'MEPEO (environment)', 'Filling out the EMS Survey Reports project engineers send them.'],
+                            ['MEPEO Manager', 'MEPEO (environment)', 'Approving EMS Survey Reports, ahead of PMD’s review and note.'],
                             ['Admin', 'System administration', 'Accounts, master data, settings; may settle any approval step.'],
                         ],
                     ],
@@ -113,6 +115,7 @@ class Introduction
                         'A Dept Asst Manager/Supervisor sees the requests they raised and the same projects as their Department Manager.',
                         'PMD does not see a supervisor’s request until the Department Manager has approved it.',
                         'A Division Manager User sees the projects of every department inside their division.',
+                        'The MEPEO roles see only their EMS Survey Reports page — no requests, projects or other menus. A representative sees the reports sent to them; the MEPEO Manager sees every report sent to MEPEO.',
                     ]],
 
                     ['h', 'Who may change what'],
@@ -126,13 +129,14 @@ class Introduction
                             ['Register a project', 'Project Engineer, Assistant Manager, Admin.'],
                             ['Edit a project and its hub', 'Admin and Assistant Manager on any project; a Project Engineer on projects they registered.'],
                             ['Change a billing’s status', 'The assigned project manager or the engineer who registered the project, plus Admin and Assistant Manager.'],
+                            ['Create and send an EMS Survey Report', 'The Project Engineer assigned to the project (who registered it, or its project manager), plus Admin and Assistant Manager.'],
                             ['File a weekly status report', 'Project Engineer, Assistant Manager, Admin.'],
                             ['Maintain master data', 'Project Engineer, Assistant Manager, Admin.'],
                             ['Manage users and system settings', 'Admin only.'],
                         ],
                     ],
 
-                    ['note', 'Two roles are singletons: only one active user may hold PMD Department Manager, and only one may hold Division Manager, because each is a single office whose signature the chain waits on.'],
+                    ['note', 'Three roles are singletons: only one active user may hold PMD Department Manager, Division Manager or MEPEO Manager, because each is a single office whose signature the chain waits on.'],
                 ],
             ],
 
