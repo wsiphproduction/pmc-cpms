@@ -16,6 +16,7 @@ class Projects
 
                     ['h', 'The project list'],
                     ['p', 'The list shows top-level projects. Search by number or title, and filter by status. Each row carries the project number, title, status, health and progress.'],
+                    ['p', 'A project engineer’s list holds only their own projects — the ones they registered or are named project manager of. The dashboard still counts every project.'],
                     ['ul', [
                         'Progress is the effective completion — a parent project rolls up the progress of its sub-projects rather than reporting its own figure alone.',
                         'Health compares actual progress against where the schedule says the project should be today. A project behind that line reads as Delayed.',

@@ -227,9 +227,6 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     const ntpReviewsCount = props.ntp_reviews_count ?? 0;
     const approvalsCount = props.approvals_count ?? 0;
     const isRequestor = role === 'requestor';
-    // Raises requests for their department, which its department user then
-    // reviews; signs no NTPs.
-    const isSupervisor = role === 'dept_supervisor';
     const requestReviewsCount = props.request_reviews_count ?? 0;
     // Tied to one division rather than one department; otherwise sees the
     // same portal a department user does.
@@ -356,7 +353,9 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                 </svg>
             ),
         }] : []),
-        ...(isRequestor || isSupervisor || isDivisionUser || isApprovalRole ? [] : [{
+        // Maintained by the assistant manager and admins; project engineers
+        // pick from it but don't edit it.
+        ...(isAdmin || role === 'assistant_manager' ? [{
             label: 'Master Data',
             href: route('master.index'),
             icon: (
@@ -366,7 +365,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                     <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
                 </svg>
             ),
-        }]),
+        }] : []),
         ...(isApprovalRole ? [] : [{
             label: 'Reports',
             href: route('reports.index'),

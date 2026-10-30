@@ -52,6 +52,13 @@ class ProjectController extends Controller
         // Department users see what they requested plus what their department owns.
         $query->visibleTo($request->user());
 
+        // A project engineer's list holds only the projects they handle. The
+        // dashboard still counts every project; this is just their worklist.
+        $onlyMine = $request->user()->hasRole(User::ROLE_ENGINEER) && ! $request->user()->isAdmin();
+        if ($onlyMine) {
+            $query->handledBy($request->user());
+        }
+
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
             $query->where(function ($q) use ($search) {
@@ -96,6 +103,7 @@ class ProjectController extends Controller
                 'need_mechanical',
             ]),
             'canCreate' => $request->user()->can('create', Project::class),
+            'onlyMine'  => $onlyMine,
             // The list's advanced search never filters by cost code, and that
             // list alone runs to thousands of rows — leave it off this page.
             ...Arr::except($this->masterDataOptions(), ['costCodes']),
@@ -617,7 +625,7 @@ class ProjectController extends Controller
                 'can_manage' => auth()->user()->can('manageEmsReports', $project),
                 'reports'    => $this->collectHubRows(
                     $project,
-                    fn ($p) => $p->emsSurveyReports()->with('project', 'creator', 'mepeoRep', 'approvals.user', 'approvals.onBehalfOf')->get(),
+                    fn ($p) => $p->emsSurveyReports()->with(EmsReportPresenter::WITH)->get(),
                     fn ($r, $sub) => EmsReportPresenter::row($r, $sub),
                 ),
                 'options'    => EmsReportPresenter::options(),

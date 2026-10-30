@@ -282,7 +282,10 @@ Route::middleware(['auth'])->group(function () {
             Route::post('users/{user}/impersonate', [ImpersonationController::class, 'start'])->name('users.impersonate');
         });
 
-        // ── Master Data ───────────────────────────────────────────────────────
+    });
+
+    // ── Master Data (not project engineers: they use it, but don't maintain it)
+    Route::middleware(['role:assistant_manager|admin'])->group(function () {
         Route::get('master-data', [MasterDataController::class, 'index'])->name('master.index');
 
         // Generic active/inactive toggle for any master resource ({type} = slug).

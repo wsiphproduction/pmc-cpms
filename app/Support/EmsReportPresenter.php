@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Attachment;
 use App\Models\EmsSurveyReport;
 use App\Models\Project;
 
@@ -11,6 +12,9 @@ use App\Models\Project;
  */
 class EmsReportPresenter
 {
+    /** What row() reads, for the callers to eager-load. */
+    public const WITH = ['project', 'creator', 'mepeoRep', 'approvals.user', 'approvals.onBehalfOf', 'attachments.fileVersions.uploader'];
+
     public static function row(EmsSurveyReport $report, ?Project $sub = null): array
     {
         $project = $report->project;
@@ -34,6 +38,14 @@ class EmsReportPresenter
             'mitigation'             => $report->mitigation,
             'mepeo_status'           => $report->mepeo_status,
             'remarks'                => $report->remarks,
+            'attachments'            => $report->attachments->map(fn (Attachment $file) => [
+                'id'          => $file->id,
+                'filename'    => $file->filename,
+                'url'         => $file->url,
+                'size'        => $file->fileVersions->first()?->size,
+                'uploaded_by' => $file->fileVersions->first()?->uploader?->name,
+                'uploaded_at' => $file->created_at?->format('M d, Y'),
+            ])->values()->all(),
             'return_remarks'         => $report->return_remarks,
             'mepeo_rep'              => $report->mepeoRep ? ['id' => $report->mepeoRep->id, 'name' => $report->mepeoRep->name] : null,
             'prepared_by'            => $report->creator?->name,

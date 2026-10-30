@@ -95,6 +95,8 @@ interface Props extends MasterData {
     projects: Paginated<Project>;
     filters: Filters;
     canCreate: boolean;
+    /** A project engineer, whose list holds only the projects they handle. */
+    onlyMine: boolean;
 }
 
 // ── Status Badge ───────────────────────────────────────────────────────────
@@ -461,7 +463,7 @@ function Pagination({ data }: { data: Paginated<unknown> }) {
 
 // ── Main Page ──────────────────────────────────────────────────────────────
 export default function ProjectsIndex({
-    projects, filters, canCreate,
+    projects, filters, canCreate, onlyMine,
     managers, engineers, sites, assets, departments, classes, priorities, statuses, workForces, categories, serviceTypes, structures,
 }: Props) {
     const [search,         setSearch]         = useState(filters.search ?? '');
@@ -506,6 +508,7 @@ export default function ProjectsIndex({
                     Project Management
                 </h1>
                 <span style={{ fontSize: '12.5px', color: '#9ca3af' }}>
+                    {onlyMine && 'Your projects · '}
                     {projects.total} total record{projects.total !== 1 ? 's' : ''}
                 </span>
             </div>

@@ -120,7 +120,7 @@ class ManualContent
                     'hub-permits', 'hub-vof', 'hub-qpp', 'hub-mtr', 'hub-rfp', 'hub-ioc',
                     'hub-acr', 'hub-psr', 'hub-mom', 'hub-photos', 'hub-ems', 'hub-at', 'hub-todo',
                     'weekly-status', 'completion', 'reports',
-                    'files', 'notifications', 'master-data',
+                    'files', 'notifications',
                     'account', 'printing', 'troubleshooting', 'glossary',
                 ],
             ],

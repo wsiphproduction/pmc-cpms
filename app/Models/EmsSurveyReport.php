@@ -6,6 +6,7 @@ use App\Models\Concerns\HasApprovalChain;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -98,6 +99,12 @@ class EmsSurveyReport extends Model
         return $this->belongsTo(User::class, 'mepeo_rep_id');
     }
 
+    /** Supporting documents, oldest first, the way they were added. */
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(Attachment::class, 'reference', 'reference_type', 'reference_id')->oldest('id');
+    }
+
     /** The next control number, EMS-<year>-<seq>, counting deleted reports too. */
     public static function nextControlNo(): string
     {
@@ -113,7 +120,7 @@ class EmsSurveyReport extends Model
         return self::STATUS_LABELS[$this->status] ?? ucfirst((string) $this->status);
     }
 
-    /** Still before MEPEO's submission: the engineer may change the header, resend or delete it. */
+    /** Still before MEPEO's submission: the engineer may change it, resend or delete it. */
     public function isOpen(): bool
     {
         return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_WITH_MEPEO], true);

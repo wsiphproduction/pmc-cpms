@@ -12,7 +12,7 @@ class Administration
                 'title' => 'Master Data',
                 'blocks' => [
                     ['path', 'Top bar > Master Data'],
-                    ['p', 'Master data is the set of lists every form in CPMS draws its dropdowns from. Keeping it clean is what stops the same site being spelled three ways across a year of projects. It is maintained by project engineers, assistant managers and the administrator.'],
+                    ['p', 'Master data is the set of lists every form in CPMS draws its dropdowns from. Keeping it clean is what stops the same site being spelled three ways across a year of projects. It is maintained by the assistant manager and the administrator; project engineers pick from it but do not see this page.'],
 
                     ['h', 'The lists'],
                     ['table',

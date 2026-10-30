@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\EmsSurveyReport;
 use App\Models\User;
 use App\Support\EmsReportFlow;
+use App\Support\EmsReportInput;
 use App\Support\EmsReportPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,7 +19,7 @@ use Inertia\Response;
  */
 class MepeoController extends Controller
 {
-    private const WITH = ['project', 'creator', 'mepeoRep', 'approvals.user', 'approvals.onBehalfOf'];
+    private const WITH = EmsReportPresenter::WITH;
 
     public function __construct(private readonly EmsReportFlow $flow) {}
 
@@ -65,7 +65,7 @@ class MepeoController extends Controller
     {
         abort_unless($report->editableBy($request->user()), 403);
 
-        $report->update($this->validatedBody($request, false));
+        $this->save($request, $report, false);
 
         return back()->with('success', 'Saved.');
     }
@@ -77,7 +77,7 @@ class MepeoController extends Controller
 
         abort_unless($report->editableBy($user), 403);
 
-        $report->update($this->validatedBody($request, true));
+        $this->save($request, $report, true);
 
         $this->flow->submit($report, $user);
 
@@ -116,50 +116,13 @@ class MepeoController extends Controller
             || ($report->status === EmsSurveyReport::STATUS_FOR_APPROVAL && $report->awaitingApprovalFrom($user));
     }
 
-    /**
-     * The representative's part of the form. Submitting asks for MEPEO's
-     * finding and at least one ticked activity and aspect (or an "Others").
-     */
-    private function validatedBody(Request $request, bool $submitting): array
+    /** The representative's part of the form and the supporting documents. */
+    private function save(Request $request, EmsSurveyReport $report, bool $submitting): void
     {
-        $activities = array_keys(config('ems.major_activities'));
-        $aspects = array_keys(config('ems.aspects'));
+        $files = EmsReportInput::attachments($request);
+        $body = EmsReportInput::body($request, $submitting);
 
-        $data = $request->validate([
-            'major_activities'       => ['array'],
-            'major_activities.*'     => ['string', Rule::in($activities)],
-            'major_activities_other' => ['nullable', 'string', 'max:255'],
-            'other_scope'            => ['nullable', 'string', 'max:5000'],
-            'aspects'                => ['array'],
-            'aspects.*'              => ['string', Rule::in($aspects)],
-            'aspects_other'          => ['nullable', 'string', 'max:255'],
-            'impacts'                => ['nullable', 'string', 'max:5000'],
-            'mitigation'             => ['nullable', 'string', 'max:5000'],
-            'mepeo_status'           => [$submitting ? 'required' : 'nullable', Rule::in(array_keys(config('ems.statuses')))],
-            'remarks'                => ['nullable', 'string', 'max:5000'],
-        ], [
-            'mepeo_status.required' => 'Choose the Status before submitting.',
-        ]);
-
-        $data['major_activities'] = array_values(array_unique($data['major_activities'] ?? []));
-        $data['aspects'] = array_values(array_unique($data['aspects'] ?? []));
-
-        if ($submitting) {
-            $errors = [];
-
-            if ($data['major_activities'] === [] && blank($data['major_activities_other'] ?? null)) {
-                $errors['major_activities'] = 'Tick at least one major activity, or fill in Others.';
-            }
-
-            if ($data['aspects'] === [] && blank($data['aspects_other'] ?? null)) {
-                $errors['aspects'] = 'Tick at least one environmental aspect, or fill in Others.';
-            }
-
-            if ($errors !== []) {
-                throw \Illuminate\Validation\ValidationException::withMessages($errors);
-            }
-        }
-
-        return $data;
+        $report->update($body);
+        EmsReportInput::syncAttachments($report, $files);
     }
 }

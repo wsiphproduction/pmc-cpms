@@ -25,13 +25,22 @@ uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 function makeMasterDataUser(): User
 {
-    Role::firstOrCreate(['name' => 'approver']);
+    Role::firstOrCreate(['name' => 'assistant_manager']);
 
     $user = User::factory()->create();
-    $user->assignRole('approver');
+    $user->assignRole('assistant_manager');
 
     return $user;
 }
+
+it('keeps project engineers out of master data', function () {
+    Role::firstOrCreate(['name' => 'approver']);
+    $engineer = User::factory()->create();
+    $engineer->assignRole('approver');
+
+    $this->actingAs($engineer)->get(route('master.index'))->assertForbidden();
+    $this->actingAs($engineer)->post(route('master.sites.store'), masterDataPayload())->assertForbidden();
+});
 
 function masterDataPayload(array $overrides = []): array
 {

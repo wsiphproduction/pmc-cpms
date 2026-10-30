@@ -7,6 +7,7 @@ use App\Models\EmsSurveyReport;
 use App\Models\Project;
 use App\Models\User;
 use App\Support\EmsReportFlow;
+use App\Support\EmsReportInput;
 use App\Support\PdfRenderer;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -15,19 +16,23 @@ use Illuminate\Validation\Rule;
 
 /**
  * EMS Survey Reports (PMD-PRJ-FRM-19) from the project's side: the engineer
- * raising one blank, setting its header and sending it to MEPEO, plus the
+ * raising one, filling in what they know and sending it to MEPEO, plus the
  * signatures given from For Approval and the MEPEO page, and the printout.
  *
- * What MEPEO does to the body of the report lives in MepeoController.
+ * What the MEPEO representative fills in lives in MepeoController.
  */
 class EmsSurveyReportController extends Controller
 {
     public function __construct(private readonly EmsReportFlow $flow) {}
 
-    /** A blank report, its header taken from the project unless the engineer says otherwise. */
+    /**
+     * A new report. Its header starts from the project; the engineer may fill
+     * in as much of the assessment as they know, and attach supporting
+     * documents, or leave it all for MEPEO.
+     */
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $data = $this->validatedHeader($request);
+        [$data, $files] = $this->validatedForm($request);
 
         $report = $project->emsSurveyReports()->create([
             ...$data,
@@ -35,6 +40,8 @@ class EmsSurveyReportController extends Controller
             'status'     => EmsSurveyReport::STATUS_DRAFT,
             'created_by' => $request->user()->id,
         ]);
+
+        EmsReportInput::syncAttachments($report, $files);
 
         AuditTrail::log("EMS Survey Report {$report->control_no} created", $project, ['module' => 'EMS', 'type' => 'create']);
 
@@ -45,7 +52,10 @@ class EmsSurveyReportController extends Controller
     {
         $this->ensureOwnOpenReport($project, $report);
 
-        $report->update($this->validatedHeader($request));
+        [$data, $files] = $this->validatedForm($request);
+
+        $report->update($data);
+        EmsReportInput::syncAttachments($report, $files);
 
         AuditTrail::log("EMS Survey Report {$report->control_no} details updated", $project, ['module' => 'EMS', 'type' => 'update']);
 
@@ -79,6 +89,7 @@ class EmsSurveyReportController extends Controller
         $this->ensureOwnOpenReport($project, $report);
 
         AuditTrail::log("EMS Survey Report {$report->control_no} deleted", $project, ['module' => 'EMS', 'type' => 'delete']);
+        $report->attachments->each(fn ($attachment) => EmsReportInput::purge($attachment));
         $report->delete();
 
         return back()->with('success', "EMS Survey Report {$report->control_no} deleted.");
@@ -139,16 +150,19 @@ class EmsSurveyReportController extends Controller
         ], "EMS Survey Report {$report->control_no}");
     }
 
-    /** The header the engineer sets; the rest of the form is MEPEO's. */
-    private function validatedHeader(Request $request): array
+    /**
+     * Everything on the form but its signatures, and the supporting
+     * documents, all checked before any of it is saved.
+     *
+     * @return array{0: array, 1: array{files: array, removed: int[]}}
+     */
+    private function validatedForm(Request $request): array
     {
-        return $request->validate([
-            'date_requested' => ['required', 'date'],
-            'location'       => ['nullable', 'string', 'max:255'],
-            'contractor'     => ['nullable', 'string', 'max:255'],
-            'target_start'   => ['nullable', 'date'],
-            'target_end'     => ['nullable', 'date', 'after_or_equal:target_start'],
-        ]);
+        $header = EmsReportInput::header($request);
+        $body = EmsReportInput::body($request);
+        $files = EmsReportInput::attachments($request);
+
+        return [[...$header, ...$body], $files];
     }
 
     /**

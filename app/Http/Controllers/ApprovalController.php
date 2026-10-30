@@ -185,7 +185,7 @@ class ApprovalController extends Controller
         }
 
         return self::emsReportsAwaiting($roles)
-            ->with(['project', 'creator', 'mepeoRep', 'approvals.user', 'approvals.onBehalfOf'])
+            ->with(EmsReportPresenter::WITH)
             ->latest('submitted_at')
             ->get()
             ->map(fn (EmsSurveyReport $report) => EmsReportPresenter::row($report))

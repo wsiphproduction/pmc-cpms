@@ -311,14 +311,63 @@ it('filters the project index by the engineer in charge', function () {
         ]);
     }
 
-    $this->actingAs($mine)
+    // An engineer's own list is theirs alone, so the filter is for those who see every project.
+    Role::firstOrCreate(['name' => 'assistant_manager']);
+    $assistant = User::factory()->create();
+    $assistant->assignRole('assistant_manager');
+
+    $this->actingAs($assistant)
         ->get(route('projects.index', ['engineer' => $other->id]))
         ->assertOk()
         ->assertInertia(fn (Assert $page) => $page
             ->has('projects.data', 1)
             ->where('projects.data.0.project_no', 'PRJ-2026-0002')
             ->where('filters.engineer', (string) $other->id)
+            ->where('onlyMine', false)
             ->has('engineers', 2));
+});
+
+it('lists only the projects an engineer handles, registered or managed', function () {
+    $mine  = makeApproverUser();
+    $other = makeApproverUser();
+
+    foreach ([
+        ['PRJ-2026-0001', $mine->id, null],       // registered by them
+        ['PRJ-2026-0002', $other->id, $mine->id], // named as its project manager
+        ['PRJ-2026-0003', $other->id, null],      // someone else's
+    ] as [$projectNo, $createdBy, $managerId]) {
+        Project::create([
+            'project_no'   => $projectNo,
+            'title'        => 'Warehouse Rehab',
+            'site'         => 'Main Plant',
+            'asset_id'     => 'Asset A',
+            'class_name'   => 'Major',
+            'priority'     => 'P1 - Urgent',
+            'status_key'   => 'PLANNING',
+            'work_force'   => 'In-house Team',
+            'wr_no'        => 'WR-1',
+            'wr_date'      => '2026-05-04',
+            'dept_owner'   => 'Engineering',
+            'cost_code'    => 'CC-001',
+            'category'     => 'Renovation',
+            'service_type' => 'Design-Build',
+            'deadline'     => '2026-06-04',
+            'created_by'   => $createdBy,
+            'project_manager_id' => $managerId,
+        ]);
+    }
+
+    $this->actingAs($mine)
+        ->get(route('projects.index'))
+        ->assertOk()
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('onlyMine', true)
+            ->has('projects.data', 2)
+            ->where('projects.total', 2));
+
+    $listed = collect($this->actingAs($mine)->get(route('projects.index'))->viewData('page')['props']['projects']['data'])
+        ->pluck('project_no')->sort()->values()->all();
+    expect($listed)->toBe(['PRJ-2026-0001', 'PRJ-2026-0002']);
 });
 
 it('badges a project in the list by its project type, not its class', function () {

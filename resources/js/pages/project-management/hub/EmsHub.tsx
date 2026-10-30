@@ -3,7 +3,10 @@ import { useState } from 'react';
 import { ActionBtns, DataTable, Field, HubProject, HubShell, InfoStrip, Modal, ModalSection, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
 import ApprovalTimeline from '@/components/ApprovalTimeline';
-import { EMS_TONE, EmsHeaderGrid, EmsOptions, EmsReportRow, EmsReportSheet, EmsStatusBadge, fmtDate } from '@/components/EmsReport';
+import {
+    EMS_TONE, EmsAttachmentsField, EmsBody, EmsBodyForm, EmsFileChanges, EmsHeaderGrid, EmsOptions, EmsReportRow, EmsReportSheet,
+    EmsStatusBadge, emsBodyOf, emsPayload, fmtDate,
+} from '@/components/EmsReport';
 
 interface SelectOption { value: string; label: string }
 
@@ -29,10 +32,12 @@ const btn = (bg: string, color: string, border = 'none'): React.CSSProperties =>
     padding: '8px 16px', borderRadius: '7px', border, background: bg, color, fontSize: '12.5px', fontWeight: 800, cursor: 'pointer',
 });
 
-// ── Header form: create a blank report, or change its header before MEPEO submits
-function HeaderModal({ project, report, defaults, onClose }: {
+// ── The report form: everything on FRM-19 but its signatures, plus the
+// supporting documents. Editable until MEPEO submits it.
+function ReportModal({ project, report, options, defaults, onClose }: {
     project: HubProject;
     report: EmsReportRow | null;
+    options: EmsOptions;
     defaults: Props['defaults'];
     onClose: () => void;
 }) {
@@ -43,43 +48,52 @@ function HeaderModal({ project, report, defaults, onClose }: {
         target_start:   report?.target_start ?? defaults.target_start ?? '',
         target_end:     report?.target_end ?? defaults.target_end ?? '',
     });
+    const [body, setBody] = useState<EmsBody>(() => emsBodyOf(report));
+    const [fileChanges, setFileChanges] = useState<EmsFileChanges>({ files: [], removed: [] });
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [saving, setSaving] = useState(false);
 
     const set = (key: keyof Header) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [key]: e.target.value }));
+    const setBodyField = <K extends keyof EmsBody>(key: K, value: EmsBody[K]) => {
+        setBody(b => ({ ...b, [key]: value }));
+        setErrors(e => ({ ...e, [key]: '' }));
+    };
 
     const submit = () => {
         setSaving(true);
         const options = {
             preserveScroll: true,
+            forceFormData: true,
             onSuccess: onClose,
             onError: (errs: Record<string, string>) => setErrors(errs),
             onFinish: () => setSaving(false),
         };
         report
-            ? router.patch(route('hub.ems.update', [project.id, report.id]), { ...form }, options)
-            : router.post(route('hub.ems.store', project.id), { ...form }, options);
+            ? router.post(route('hub.ems.update', [project.id, report.id]), emsPayload(body, fileChanges, { ...form, _method: 'patch' }), options)
+            : router.post(route('hub.ems.store', project.id), emsPayload(body, fileChanges, { ...form }), options);
     };
 
     const err = (key: string) => errors[key] && <div style={{ color: '#dc2626', fontSize: '11.5px', marginTop: '4px' }}>{errors[key]}</div>;
+    const errorCount = Object.values(errors).filter(Boolean).length;
 
     return (
         <Modal
             title={report ? `Edit ${report.control_no}` : 'New EMS Survey Report'}
             onClose={onClose}
             headerBg={EMS_TONE}
-            size="620px"
+            size="940px"
             footer={<>
+                {errorCount > 0 && <span style={{ marginRight: 'auto', alignSelf: 'center', color: '#dc2626', fontSize: '12px', fontWeight: 600 }}>Please correct the highlighted fields.</span>}
                 <button type="button" onClick={onClose} style={btn('#fff', '#374151', '1px solid #e2e8f0')}>Cancel</button>
                 <button type="button" onClick={submit} disabled={saving} style={btn(EMS_TONE, '#fff')}>
-                    {saving ? 'Saving…' : report ? 'Save' : 'Create Blank Report'}
+                    {saving ? 'Saving…' : report ? 'Save' : 'Create Report'}
                 </button>
             </>}
         >
             {!report && (
                 <p style={{ margin: '0 0 16px', fontSize: '12.5px', color: '#475569', lineHeight: 1.55 }}>
-                    This creates a blank Environmental Impact Assessment (PMD-PRJ-FRM-19) for <strong>{project.project_no}</strong>.
-                    Send it to a MEPEO representative afterwards; they fill out the assessment.
+                    This creates an Environmental Impact Assessment (PMD-PRJ-FRM-19) for <strong>{project.project_no}</strong>.
+                    Fill in what you already know, or leave it blank; the MEPEO representative you send it to completes the rest.
                 </p>
             )}
             <ModalSection color={EMS_TONE}>Report Header</ModalSection>
@@ -106,6 +120,22 @@ function HeaderModal({ project, report, defaults, onClose }: {
                     <input type="date" style={inputStyle} value={form.target_end} onChange={set('target_end')} />
                     {err('target_end')}
                 </Field>
+            </div>
+
+            <div style={{ marginTop: '22px' }}>
+                <ModalSection color={EMS_TONE}>Assessment</ModalSection>
+                <EmsBodyForm
+                    body={body}
+                    onChange={setBodyField}
+                    options={options}
+                    errors={errors}
+                    mepeoNote="To be filled-out by MEPEO — the representative may fill this in or change it."
+                />
+            </div>
+
+            <div style={{ marginTop: '22px' }}>
+                <ModalSection color={EMS_TONE}>Supporting Documents</ModalSection>
+                <EmsAttachmentsField existing={report?.attachments ?? []} changes={fileChanges} onChange={setFileChanges} errors={errors} />
             </div>
         </Modal>
     );
@@ -229,8 +259,8 @@ export default function EmsHub({ project, reports, options, mepeoReps, defaults,
     return (
         <HubShell>
             {confirmDialog}
-            {creating && <HeaderModal project={project} report={null} defaults={defaults} onClose={() => setCreating(false)} />}
-            {editing && <HeaderModal project={project} report={editing} defaults={defaults} onClose={() => setEditing(null)} />}
+            {creating && <ReportModal project={project} report={null} options={options} defaults={defaults} onClose={() => setCreating(false)} />}
+            {editing && <ReportModal project={project} report={editing} options={options} defaults={defaults} onClose={() => setEditing(null)} />}
             {sending && <SendModal project={project} report={sending} reps={mepeoReps} onClose={() => setSending(null)} />}
             {viewing && <ViewModal report={viewing} options={options} onClose={() => setViewing(null)} />}
 
@@ -238,7 +268,7 @@ export default function EmsHub({ project, reports, options, mepeoReps, defaults,
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
                 <div style={{ fontSize: '12.5px', color: '#64748b', maxWidth: '620px', lineHeight: 1.5 }}>
-                    Environmental Impact Assessment (PMD-PRJ-FRM-19). Create a blank report, send it to MEPEO to fill out;
+                    Environmental Impact Assessment (PMD-PRJ-FRM-19). Create a report, send it to MEPEO to fill out;
                     it is then approved by the MEPEO Manager, reviewed by the PMD Assistant Manager and noted by the PMD Manager.
                 </div>
                 {canManage && (

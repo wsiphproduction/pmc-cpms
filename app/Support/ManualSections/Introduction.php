@@ -131,7 +131,7 @@ class Introduction
                             ['Change a billing’s status', 'The assigned project manager or the engineer who registered the project, plus Admin and Assistant Manager.'],
                             ['Create and send an EMS Survey Report', 'The Project Engineer assigned to the project (who registered it, or its project manager), plus Admin and Assistant Manager.'],
                             ['File a weekly status report', 'Project Engineer, Assistant Manager, Admin.'],
-                            ['Maintain master data', 'Project Engineer, Assistant Manager, Admin.'],
+                            ['Maintain master data', 'Assistant Manager, Admin.'],
                             ['Manage users and system settings', 'Admin only.'],
                         ],
                     ],

@@ -19,6 +19,16 @@ export interface EmsOptions {
 
 export type EmsStatus = 'draft' | 'with_mepeo' | 'for_approval' | 'approved';
 
+/** A supporting document on the report. */
+export interface EmsAttachment {
+    id: number;
+    filename: string;
+    url: string;
+    size: number | null;
+    uploaded_by: string | null;
+    uploaded_at: string | null;
+}
+
 export interface EmsReportRow {
     id: number;
     control_no: string;
@@ -38,6 +48,7 @@ export interface EmsReportRow {
     mitigation: string | null;
     mepeo_status: string | null;
     remarks: string | null;
+    attachments: EmsAttachment[];
     /** Why it last came back to the representative, until they resubmit. */
     return_remarks: string | null;
     mepeo_rep: { id: number; name: string } | null;
@@ -247,6 +258,245 @@ export function EmsReportSheet({ row, options }: { row: EmsReportRow; options: E
                 <div style={{ ...band, borderTop: '1px solid #e5e7eb' }}>Remarks/Comments</div>
                 <TextCell text={row.remarks} />
             </div>
+
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+                <div style={{ ...band, background: '#f1f5f9' }}>Supporting Documents</div>
+                {row.attachments.length === 0
+                    ? <div style={{ padding: '10px 12px', fontSize: '12.5px', color: '#94a3b8' }}>None attached.</div>
+                    : row.attachments.map(file => <FileRow key={file.id} file={file} />)}
+            </div>
+        </div>
+    );
+}
+
+// ── Editing the report ──────────────────────────────────────────────────────
+// The engineer's pop-up on the hub and the representative's MEPEO page fill
+// in the same form, everything on FRM-19 but its signatures.
+
+export interface EmsBody {
+    major_activities: string[];
+    major_activities_other: string;
+    other_scope: string;
+    aspects: string[];
+    aspects_other: string;
+    impacts: string;
+    mitigation: string;
+    mepeo_status: string;
+    remarks: string;
+}
+
+export function emsBodyOf(row: EmsReportRow | null): EmsBody {
+    return {
+        major_activities:       row?.major_activities ?? [],
+        major_activities_other: row?.major_activities_other ?? '',
+        other_scope:            row?.other_scope ?? '',
+        aspects:                row?.aspects ?? [],
+        aspects_other:          row?.aspects_other ?? '',
+        impacts:                row?.impacts ?? '',
+        mitigation:             row?.mitigation ?? '',
+        mepeo_status:           row?.mepeo_status ?? '',
+        remarks:                row?.remarks ?? '',
+    };
+}
+
+/** New files and removals, sent alongside the form. */
+export interface EmsFileChanges {
+    files: File[];
+    removed: number[];
+}
+
+/** The form's fields as one multipart payload; Laravel reads `_method` for the verb. */
+export function emsPayload(body: EmsBody, changes: EmsFileChanges, extra: Record<string, unknown> = {}) {
+    return {
+        ...extra,
+        ...body,
+        mepeo_status: body.mepeo_status || null,
+        attachments: changes.files,
+        removed_attachments: changes.removed,
+    };
+}
+
+const textarea: React.CSSProperties = { flex: 1, minHeight: '120px', width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', padding: '10px 12px', fontSize: '13px', fontFamily: 'inherit', resize: 'vertical', lineHeight: 1.5 };
+const otherInput: React.CSSProperties = { flex: 1, minWidth: 0, border: 'none', borderBottom: '1.5px solid #cbd5e1', outline: 'none', padding: '3px 4px', fontSize: '12.5px', fontFamily: 'inherit', background: 'transparent' };
+const fieldError: React.CSSProperties = { color: '#dc2626', fontSize: '12px', fontWeight: 600, padding: '0 12px 8px' };
+
+function CheckGroup({ options, value, onChange, other, onOther, error }: {
+    options: EmsOption[];
+    value: string[];
+    onChange: (next: string[]) => void;
+    other: string;
+    onOther: (next: string) => void;
+    error?: string;
+}) {
+    const toggle = (key: string) => onChange(value.includes(key) ? value.filter(k => k !== key) : [...value, key]);
+    return (
+        <div>
+            {options.map(o => (
+                <label key={o.key} style={{ display: 'flex', alignItems: 'center', gap: '9px', padding: '7px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '12.5px', color: '#1e293b', cursor: 'pointer', background: value.includes(o.key) ? '#f0fdf4' : 'transparent' }}>
+                    <input type="checkbox" checked={value.includes(o.key)} onChange={() => toggle(o.key)} style={{ accentColor: EMS_TONE, width: '15px', height: '15px' }} />
+                    {o.label}
+                </label>
+            ))}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '9px', padding: '7px 12px', fontSize: '12.5px', color: '#1e293b' }}>
+                <input type="checkbox" checked={other.trim() !== ''} readOnly tabIndex={-1} style={{ accentColor: EMS_TONE, width: '15px', height: '15px' }} />
+                Others:
+                <input type="text" value={other} onChange={e => onOther(e.target.value)} placeholder="Specify, if any" style={otherInput} />
+            </div>
+            {error && <div style={fieldError}>{error}</div>}
+        </div>
+    );
+}
+
+/**
+ * The checklists, write-ups and MEPEO's finding, laid out like the paper
+ * form. `mepeoNote` heads MEPEO's part where someone else is filling it in.
+ */
+export function EmsBodyForm({ body, onChange, options, errors, mepeoNote }: {
+    body: EmsBody;
+    onChange: <K extends keyof EmsBody>(key: K, value: EmsBody[K]) => void;
+    options: EmsOptions;
+    errors: Record<string, string>;
+    mepeoNote?: string;
+}) {
+    const set = <K extends keyof EmsBody>(key: K) => (value: EmsBody[K]) => onChange(key, value);
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={frame}>
+                <div style={col}>
+                    <div style={band}>Major Activities</div>
+                    <CheckGroup
+                        options={options.major_activities}
+                        value={body.major_activities}
+                        onChange={set('major_activities')}
+                        other={body.major_activities_other}
+                        onOther={set('major_activities_other')}
+                        error={errors.major_activities}
+                    />
+                </div>
+                <div style={{ ...col, borderRight: 'none' }}>
+                    <div style={band}>Other Scope of Work</div>
+                    <textarea value={body.other_scope} onChange={e => set('other_scope')(e.target.value)} style={textarea} placeholder="Describe any other scope of work…" />
+                </div>
+            </div>
+
+            <div style={frame}>
+                <div style={col}>
+                    <div style={band}>Environmental Aspects</div>
+                    <CheckGroup
+                        options={options.aspects}
+                        value={body.aspects}
+                        onChange={set('aspects')}
+                        other={body.aspects_other}
+                        onOther={set('aspects_other')}
+                        error={errors.aspects}
+                    />
+                </div>
+                <div style={{ ...col, borderRight: 'none' }}>
+                    <div style={band}>Environmental Impacts</div>
+                    <textarea value={body.impacts} onChange={e => set('impacts')(e.target.value)} style={textarea} placeholder="The expected impacts on the environment…" />
+                    <div style={{ ...band, borderTop: '1px solid #e5e7eb' }}>Mitigation</div>
+                    <textarea value={body.mitigation} onChange={e => set('mitigation')(e.target.value)} style={textarea} placeholder="How each impact will be mitigated…" />
+                </div>
+            </div>
+
+            <div>
+                {mepeoNote && <div style={{ fontSize: '12px', fontStyle: 'italic', color: '#475569', margin: '0 0 6px' }}>{mepeoNote}</div>}
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+                    <div style={band}>Status</div>
+                    {options.statuses.map(s => (
+                        <label key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '13px', cursor: 'pointer', background: body.mepeo_status === s.key ? '#f0fdf4' : 'transparent' }}>
+                            <input type="checkbox" checked={body.mepeo_status === s.key} onChange={() => set('mepeo_status')(body.mepeo_status === s.key ? '' : s.key)} style={{ accentColor: EMS_TONE, width: '15px', height: '15px' }} />
+                            {s.label}
+                        </label>
+                    ))}
+                    {errors.mepeo_status && <div style={{ ...fieldError, padding: '6px 12px' }}>{errors.mepeo_status}</div>}
+                    <div style={{ ...band, borderTop: '1px solid #e5e7eb' }}>Remarks/Comments</div>
+                    <textarea value={body.remarks} onChange={e => set('remarks')(e.target.value)} style={{ ...textarea, minHeight: '90px' }} />
+                </div>
+            </div>
+        </div>
+    );
+}
+
+export function fmtSize(bytes: number | null | undefined): string {
+    if (!bytes) return '';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+const fileRow: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '12.5px' };
+
+function FileRow({ file, action }: { file: EmsAttachment; action?: React.ReactNode }) {
+    const meta = [fmtSize(file.size), file.uploaded_by, file.uploaded_at].filter(Boolean).join(' · ');
+    return (
+        <div style={fileRow}>
+            <span aria-hidden style={{ fontSize: '15px' }}>📎</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+                <a href={file.url} target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontWeight: 600, textDecoration: 'none', overflowWrap: 'anywhere' }}>{file.filename}</a>
+                {meta && <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '1px' }}>{meta}</div>}
+            </div>
+            {action}
+        </div>
+    );
+}
+
+const ACCEPT = '.pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.ppt,.pptx';
+
+/**
+ * Supporting documents: the ones already on the report, each removable until
+ * saved, and new ones to upload with the form.
+ */
+export function EmsAttachmentsField({ existing, changes, onChange, errors }: {
+    existing: EmsAttachment[];
+    changes: EmsFileChanges;
+    onChange: (next: EmsFileChanges) => void;
+    errors: Record<string, string>;
+}) {
+    const fileErrors = Object.entries(errors).filter(([k, v]) => v && (k === 'attachments' || k.startsWith('attachments.'))).map(([, v]) => v);
+    const uniqueErrors = Array.from(new Set(fileErrors));
+
+    const add = (list: FileList | null) => {
+        if (!list || list.length === 0) return;
+        onChange({ ...changes, files: [...changes.files, ...Array.from(list)] });
+    };
+    const toggleRemoved = (id: number) => onChange({
+        ...changes,
+        removed: changes.removed.includes(id) ? changes.removed.filter(r => r !== id) : [...changes.removed, id],
+    });
+    const linkBtn = (color: string): React.CSSProperties => ({ border: 'none', background: 'none', color, fontSize: '12px', fontWeight: 700, cursor: 'pointer', padding: '2px 4px', flexShrink: 0 });
+
+    return (
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+            {existing.map(file => {
+                const removing = changes.removed.includes(file.id);
+                return (
+                    <div key={file.id} style={{ opacity: removing ? 0.5 : 1, textDecoration: removing ? 'line-through' : 'none' }}>
+                        <FileRow
+                            file={file}
+                            action={<button type="button" onClick={() => toggleRemoved(file.id)} style={linkBtn(removing ? '#475569' : '#dc2626')}>{removing ? 'Undo' : 'Remove'}</button>}
+                        />
+                    </div>
+                );
+            })}
+            {changes.files.map((file, i) => (
+                <div key={`${file.name}-${i}`} style={{ ...fileRow, background: '#f0fdf4' }}>
+                    <span aria-hidden style={{ fontSize: '15px' }}>📄</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: '#0f172a', overflowWrap: 'anywhere' }}>{file.name}</div>
+                        <div style={{ fontSize: '11px', color: '#15803d', marginTop: '1px' }}>New · {fmtSize(file.size)} · uploads when you save</div>
+                    </div>
+                    <button type="button" onClick={() => onChange({ ...changes, files: changes.files.filter((_, j) => j !== i) })} style={linkBtn('#dc2626')}>Remove</button>
+                </div>
+            ))}
+            <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '12px', fontSize: '12.5px', fontWeight: 700, color: EMS_TONE, cursor: 'pointer', background: '#f8fafc' }}>
+                <input type="file" multiple accept={ACCEPT} style={{ display: 'none' }} onChange={e => { add(e.target.files); e.target.value = ''; }} />
+                + Add files
+                <span style={{ fontWeight: 400, color: '#94a3b8', fontSize: '11.5px' }}>PDF, images, Word, Excel or PowerPoint · up to 20 MB each</span>
+            </label>
+            {uniqueErrors.length > 0 && (
+                <div style={{ ...fieldError, padding: '8px 12px' }}>{uniqueErrors.map((e, i) => <div key={i}>{e}</div>)}</div>
+            )}
         </div>
     );
 }

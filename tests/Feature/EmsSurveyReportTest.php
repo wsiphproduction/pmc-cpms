@@ -5,7 +5,9 @@ use App\Models\EmsSurveyReport;
 use App\Models\Notification;
 use App\Models\Project;
 use App\Models\User;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Spatie\Permission\Models\Role;
 
@@ -93,7 +95,7 @@ it('lets the assigned engineer create blank reports, as many as needed', functio
     expect($reports)->toHaveCount(2)
         ->and($reports[0]->status)->toBe(EmsSurveyReport::STATUS_DRAFT)
         ->and($reports[0]->contractor)->toBe('Acme Builders')
-        ->and($reports[0]->major_activities)->toBeNull()
+        ->and($reports[0]->major_activities)->toBe([])
         ->and($reports[0]->control_no)->not->toBe($reports[1]->control_no);
 
     $this->actingAs($this->engineer)
@@ -113,6 +115,35 @@ it('keeps other engineers from creating reports on a project not theirs', functi
     $this->actingAs($other)
         ->get(route('projects.hub.ems', $this->project))
         ->assertInertia(fn (Assert $page) => $page->where('hub_data.can_manage', false));
+});
+
+it('lets the engineer fill in the whole form, signatures aside, when creating and editing', function () {
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ems.store', $this->project), [...$this->header, ...emsBody(['mepeo_status' => null, 'remarks' => null])])
+        ->assertSessionHasNoErrors();
+
+    $report = EmsSurveyReport::sole();
+    expect($report->major_activities)->toBe(['construction'])
+        ->and($report->aspects)->toBe(['heavy_equipment', 'dust'])
+        ->and($report->mitigation)->toBe('Water spraying twice a day.')
+        ->and($report->mepeo_status)->toBeNull();
+
+    // Unticking everything clears the lists, the way a multipart form sends it.
+    $this->actingAs($this->engineer)
+        ->patch(route('hub.ems.update', [$this->project, $report]), [
+            ...$this->header, 'aspects_other' => 'Noise', 'mepeo_status' => 'survey_required',
+        ])
+        ->assertSessionHasNoErrors();
+
+    $report->refresh();
+    expect($report->major_activities)->toBe([])
+        ->and($report->aspects)->toBe([])
+        ->and($report->aspects_other)->toBe('Noise')
+        ->and($report->mepeo_status)->toBe('survey_required');
+
+    $this->actingAs($this->engineer)
+        ->patch(route('hub.ems.update', [$this->project, $report]), [...$this->header, 'aspects' => ['not_on_the_form']])
+        ->assertSessionHasErrors('aspects.0');
 });
 
 it('lets the engineer named as project manager raise them too', function () {
@@ -292,6 +323,86 @@ it('counts what waits on each MEPEO user for the menu badge', function () {
         ->assertInertia(fn (Assert $page) => $page->where('mepeo_count', 0));
     $this->actingAs($this->mepeoManager)->get(route('mepeo.index'))
         ->assertInertia(fn (Assert $page) => $page->where('mepeo_count', 1)->where('reports.0.needs_me', true));
+});
+
+// ── Supporting documents ─────────────────────────────────────────────────────
+
+it('takes supporting documents from the engineer and the representative', function () {
+    Storage::fake('public');
+
+    $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), [
+        ...$this->header,
+        'attachments' => [UploadedFile::fake()->create('site-plan.pdf', 300, 'application/pdf'), UploadedFile::fake()->image('area.jpg')],
+    ])->assertSessionHasNoErrors();
+
+    $report = EmsSurveyReport::sole();
+    expect($report->attachments)->toHaveCount(2)
+        ->and($report->attachments->pluck('filename')->all())->toBe(['site-plan.pdf', 'area.jpg']);
+    Storage::disk('public')->assertExists($report->attachments[0]->filepath);
+
+    $this->actingAs($this->engineer)->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->rep->id]);
+
+    // The representative adds a survey photo and drops the engineer's plan.
+    $plan = $report->attachments[0];
+    $this->actingAs($this->rep)->patch(route('mepeo.reports.update', $report), [
+        ...emsBody(),
+        'attachments'         => [UploadedFile::fake()->image('survey.png')],
+        'removed_attachments' => [$plan->id],
+    ])->assertSessionHasNoErrors();
+
+    $files = $report->fresh()->attachments;
+    expect($files->pluck('filename')->all())->toBe(['area.jpg', 'survey.png']);
+    Storage::disk('public')->assertMissing($plan->filepath);
+
+    $this->actingAs($this->rep)
+        ->get(route('mepeo.reports.show', $report))
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('report.attachments', 2)
+            ->where('report.attachments.1.filename', 'survey.png')
+            ->where('report.attachments.1.uploaded_by', $this->rep->name));
+});
+
+it('refuses files that are not documents or images, saving nothing', function () {
+    Storage::fake('public');
+
+    $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), [
+        ...$this->header,
+        'attachments' => [UploadedFile::fake()->create('run.exe', 10)],
+    ])->assertSessionHasErrors('attachments.0');
+
+    expect(EmsSurveyReport::count())->toBe(0);
+});
+
+it('only removes documents that belong to the report', function () {
+    Storage::fake('public');
+
+    foreach ([1, 2] as $_) {
+        $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), [
+            ...$this->header, 'attachments' => [UploadedFile::fake()->create('plan.pdf', 10, 'application/pdf')],
+        ]);
+    }
+    [$first, $second] = EmsSurveyReport::orderBy('id')->get()->all();
+
+    $this->actingAs($this->engineer)->patch(route('hub.ems.update', [$this->project, $first]), [
+        ...$this->header, 'removed_attachments' => [$second->attachments[0]->id],
+    ])->assertSessionHasNoErrors();
+
+    expect($second->fresh()->attachments)->toHaveCount(1);
+});
+
+it('deletes the documents with the report', function () {
+    Storage::fake('public');
+
+    $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), [
+        ...$this->header, 'attachments' => [UploadedFile::fake()->create('plan.pdf', 10, 'application/pdf')],
+    ]);
+    $report = EmsSurveyReport::sole();
+    $path = $report->attachments[0]->filepath;
+
+    $this->actingAs($this->engineer)->delete(route('hub.ems.destroy', [$this->project, $report]))->assertSessionHasNoErrors();
+
+    Storage::disk('public')->assertMissing($path);
+    expect(\App\Models\Attachment::where('reference_type', EmsSurveyReport::class)->count())->toBe(0);
 });
 
 // ── The printed form ─────────────────────────────────────────────────────────

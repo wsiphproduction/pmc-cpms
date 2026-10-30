@@ -438,6 +438,14 @@ class Project extends Model
      * run the whole portfolio, so for them this is a no-op; a department user
      * sees only their own department's work.
      */
+    /** The projects an engineer handles: registered by them, or with them as project manager. */
+    public function scopeHandledBy(Builder $query, User $user): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->where('created_by', $user->id)
+            ->orWhere('project_manager_id', $user->id));
+    }
+
     public function scopeVisibleTo(Builder $query, ?User $user): Builder
     {
         if ($user === null || $user->hasRole(User::INTERNAL_ROLES)) {

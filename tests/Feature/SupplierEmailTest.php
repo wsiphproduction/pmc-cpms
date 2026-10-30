@@ -6,10 +6,10 @@ use Spatie\Permission\Models\Role;
 
 function makeSupplierAdmin(): User
 {
-    Role::firstOrCreate(['name' => 'approver']);
+    Role::firstOrCreate(['name' => 'assistant_manager']);
 
     $user = User::factory()->create();
-    $user->assignRole('approver');
+    $user->assignRole('assistant_manager');
 
     return $user;
 }
