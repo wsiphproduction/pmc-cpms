@@ -8,3 +8,20 @@
 
 CHANGELOG.md export-ignore
 README.md export-ignore
+
+# Binary files are never line-ending converted. The live host's git (1.8)
+# lets `eol=lf` above force text handling even on these, after which a freshly
+# deployed PDF reads as locally modified and blocks the next deploy.
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.xlsx binary
+*.docx binary
+*.zip binary
