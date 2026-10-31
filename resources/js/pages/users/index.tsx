@@ -323,6 +323,9 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
     const [editForm, setEditForm] = useState({ name: '', email: '', role: '', department: '', division: '', sites: [] as string[] });
     const [resetPw,  setResetPw]  = useState({ password: '', password_confirmation: '' });
 
+    // One person may have an account per role under the same email.
+    const sameEmailUsers = users.filter(u => addForm.email.trim() !== '' && u.email.toLowerCase() === addForm.email.trim().toLowerCase());
+
     const filtered = users.filter(u => {
         const q = search.toLowerCase();
         return (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
@@ -724,6 +727,12 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                             <input style={inputStyle} type="email" value={addForm.email} onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))} required
                                 onFocus={e => (e.target.style.borderColor = '#2563eb')} onBlur={e => (e.target.style.borderColor = '#e5e7eb')} />
                             {errors.email && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{errors.email}</p>}
+                            {!errors.email && sameEmailUsers.length > 0 && (
+                                <p style={{ margin: '4px 0 0', color: '#2563eb', fontSize: '12px', lineHeight: 1.45 }}>
+                                    {sameEmailUsers[0].name} already has a {sameEmailUsers.map(u => u.role ? roleLabel(u.role) : 'no role').join(' and ')} account
+                                    with this email. This adds another account for a different role — they switch between them from their account menu.
+                                </p>
+                            )}
                         </div>
                         <div style={fieldStyle}>
                             <label style={labelStyle}>Password</label>

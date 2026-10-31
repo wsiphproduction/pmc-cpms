@@ -9,6 +9,7 @@ use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -42,8 +43,18 @@ class AccountController extends Controller
         }
 
         $previousEmail = $user->getOriginal('email');
+        // Found by the old address, which they still share until the save.
+        $linked = $user->isDirty('email')
+            ? User::where('email', $previousEmail)->whereKeyNot($user->id)->get()
+            : collect();
 
         $user->save();
+
+        // The person's other accounts move with them, so they stay linked.
+        $linked->each(fn (User $account) => $account->forceFill([
+            'email' => $user->email,
+            'email_verified_at' => null,
+        ])->save());
 
         if ($changes) {
             // The old address hears about an email change too, so a hijacked
@@ -68,9 +79,34 @@ class AccountController extends Controller
             'password' => Hash::make($validated['password']),
         ]);
 
+        // One person, one password: their other accounts take it too.
+        $user->linkedAccounts()->each(fn (User $account) => $account->update([
+            'password' => Hash::make($validated['password']),
+        ]));
+
         $this->notifyAccountChange($user, [['Password', '', 'Changed']], [$user->email]);
 
         return to_route('account.edit')->with('success', 'Password updated.');
+    }
+
+    /**
+     * Move to another of the person's accounts — the same email under a
+     * different role. Nothing about the session changes but who is signed in,
+     * so an IT impersonation carries over to the other account.
+     */
+    public function switchAccount(Request $request, User $user): RedirectResponse
+    {
+        abort_unless($request->user()->isLinkedTo($user), 403);
+
+        // Keep "remember me" pointing at whoever is signed in now, or it
+        // would sign them back in as the old account once the session lapses.
+        $remember = $request->cookies->has(Auth::guard()->getRecallerName());
+
+        Auth::login($user, $remember);
+        $request->session()->regenerate();
+
+        return redirect()->route('dashboard')
+            ->with('success', 'Switched to your ' . User::roleLabel($user->primaryRole()) . ' account.');
     }
 
     /**

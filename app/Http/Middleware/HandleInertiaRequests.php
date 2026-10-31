@@ -61,6 +61,7 @@ class HandleInertiaRequests extends Middleware
                     $request->user()->toArray(),
                     [
                         'role' => $request->user()->roles->first()?->name,
+                        'role_label' => User::roleLabel($request->user()->roles->first()?->name),
                         // True for admins and for roles carrying admin rights
                         // (the division manager), so the UI can gate on one flag.
                         'is_admin' => $request->user()->isAdmin(),
@@ -69,6 +70,16 @@ class HandleInertiaRequests extends Middleware
                         'font_scale' => (int) ($request->user()->font_scale ?: 100),
                     ]
                 ) : null,
+                // The person's other accounts (same email, another role), for
+                // the account menu's switcher, each with its unread count so
+                // they can see something is waiting over there.
+                'linked_accounts' => $request->user()
+                    ? $request->user()->linkedAccounts()->map(fn (User $account) => [
+                        'id'     => $account->id,
+                        'role'   => User::roleLabel($account->primaryRole()),
+                        'unread' => Notification::where('recipient', $account->id)->where('is_read', false)->count(),
+                    ])->values()
+                    : [],
                 // Set while the IT account is signed in as someone else, so
                 // every page can show the "Exit impersonation" banner.
                 'impersonator' => $request->user() && $request->session()->has(User::IMPERSONATOR_SESSION_KEY)

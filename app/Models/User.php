@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -169,10 +170,40 @@ class User extends Authenticatable
         return $this->hasRole(self::ROLE_ADMIN);
     }
 
-    /** A user holds exactly one role in this system. */
+    /**
+     * An account holds exactly one role in this system. A person with two
+     * roles has two accounts — see linkedAccounts().
+     */
     public function primaryRole(): ?string
     {
         return $this->roles->first()?->name;
+    }
+
+    /**
+     * The person's other accounts: one person holding two roles that cannot
+     * share an account gets one account per role under the same email, and
+     * switches between them from the account menu.
+     *
+     * @return Collection<int, User>
+     */
+    public function linkedAccounts(): Collection
+    {
+        if (! filled($this->email)) {
+            return new Collection;
+        }
+
+        return self::with('roles')
+            ->where('email', $this->email)
+            ->whereKeyNot($this->id)
+            ->orderBy('id')
+            ->get();
+    }
+
+    public function isLinkedTo(User $other): bool
+    {
+        return $other->id !== $this->id
+            && filled($this->email)
+            && strcasecmp((string) $this->email, (string) $other->email) === 0;
     }
 
     /** Department users are scoped to their own department's work. */

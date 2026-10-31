@@ -25,7 +25,9 @@ class ProfileUpdateRequest extends FormRequest
                 'lowercase',
                 'email',
                 'max:255',
-                Rule::unique(User::class)->ignore($this->user()->id),
+                // The person's own linked accounts share their email, so only
+                // a change of address is checked against everyone else.
+                Rule::unique(User::class)->where(fn ($query) => $query->where('email', '!=', $this->user()->email)),
             ],
         ];
     }

@@ -51,6 +51,12 @@ class NewPasswordController extends Controller
                     'remember_token' => Str::random(60),
                 ])->save();
 
+                // The person's other accounts under this email take it too.
+                $user->linkedAccounts()->each(fn ($account) => $account->forceFill([
+                    'password' => Hash::make($request->password),
+                    'remember_token' => Str::random(60),
+                ])->save());
+
                 event(new PasswordReset($user));
             }
         );

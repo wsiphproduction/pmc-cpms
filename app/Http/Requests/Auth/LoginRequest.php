@@ -2,9 +2,12 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\User;
+use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -41,13 +44,25 @@ class LoginRequest extends FormRequest
     {
         $this->ensureIsNotRateLimited();
 
-        if (! Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
+        // One person may have an account per role under the same email (see
+        // User::linkedAccounts()), so the password is checked against each of
+        // them rather than only the first; the oldest it fits is signed in.
+        $user = User::where('email', (string) $this->string('email'))
+            ->orderBy('id')
+            ->get()
+            ->first(fn (User $candidate) => Hash::check((string) $this->string('password'), $candidate->getAuthPassword()));
+
+        if (! $user) {
+            event(new Failed('web', null, $this->only('email', 'password')));
             RateLimiter::hit($this->throttleKey());
 
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
         }
+
+        Auth::getProvider()->rehashPasswordIfRequired($user, $this->only('password'));
+        Auth::login($user, $this->boolean('remember'));
 
         RateLimiter::clear($this->throttleKey());
     }

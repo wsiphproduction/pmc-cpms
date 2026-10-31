@@ -69,6 +69,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('account', [AccountController::class, 'edit'])->name('account.edit');
     Route::patch('account/profile', [AccountController::class, 'updateProfile'])->name('account.update-profile');
     Route::put('account/password', [AccountController::class, 'updatePassword'])->name('account.update-password');
+    // Move to the person's other account under the same email (another role).
+    Route::post('account/switch/{user}', [AccountController::class, 'switchAccount'])->name('account.switch');
     // The first-login guided-tour offer has been answered; don't show it again.
     Route::patch('tour/seen', [AccountController::class, 'markTourSeen'])->name('tour.seen');
 

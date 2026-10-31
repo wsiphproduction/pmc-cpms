@@ -67,7 +67,7 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'name'       => 'required|string|max:255',
-            'email'      => 'required|email|max:255|unique:users,email',
+            'email'      => ['required', 'email', 'max:255', $this->sharedEmailRule($request)],
             'password'   => ['required', Password::min(8)],
             'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule()],
             'department' => [Rule::requiredIf(fn () => in_array($request->input('role'), User::DEPARTMENT_ROLES, true)), 'nullable', 'string', 'max:191'],
@@ -93,7 +93,7 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'name'       => 'required|string|max:255',
-            'email'      => 'required|email|max:255|unique:users,email,' . $user->id,
+            'email'      => ['required', 'email', 'max:255', $this->sharedEmailRule($request, $user)],
             'role'       => ['required', 'string', 'exists:roles,name', $this->singletonRoleRule($user)],
             'department' => [Rule::requiredIf(fn () => in_array($request->input('role'), User::DEPARTMENT_ROLES, true)), 'nullable', 'string', 'max:191'],
             'division'   => [Rule::requiredIf(fn () => $request->input('role') === User::ROLE_DIVISION_MANAGER_USER), 'nullable', 'string', 'max:191', 'exists:divisions,name'],
@@ -148,6 +148,14 @@ class UserController extends Controller
             ]);
         }
 
+        // Nor a second account under one email for the same role.
+        if ($role && User::where('email', $user->email)->whereHas('roles', fn ($q) => $q->where('name', $role))->exists()) {
+            return redirect()->back()->withErrors([
+                'error' => "{$user->email} already has another " . User::roleLabel($role)
+                    . ' account. Remove that one first, then restore this one.',
+            ]);
+        }
+
         $user->restore();
 
         return redirect()->back()->with('success', 'User restored successfully.');
@@ -183,6 +191,27 @@ class UserController extends Controller
 
             if ($holder) {
                 $fail(User::roleLabel($value) . " is limited to one user and is currently held by {$holder->name}.");
+            }
+        };
+    }
+
+    /**
+     * An email may be shared by one person's accounts, one per role — they
+     * switch between them from the account menu — but never twice for the
+     * same role. Passing the user being edited lets them keep their own.
+     */
+    private function sharedEmailRule(Request $request, ?User $editing = null): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) use ($request, $editing) {
+            $role = $request->input('role');
+
+            $taken = User::where('email', $value)
+                ->when($editing, fn ($q) => $q->whereKeyNot($editing->id))
+                ->whereHas('roles', fn ($q) => $q->where('name', $role))
+                ->exists();
+
+            if ($taken) {
+                $fail('This email already has a ' . User::roleLabel($role) . ' account.');
             }
         };
     }

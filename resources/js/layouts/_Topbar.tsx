@@ -110,7 +110,11 @@ interface NotificationRow {
 }
 
 interface PageProps {
-    auth: { user: { name: string; email: string; role?: string; is_admin?: boolean } };
+    auth: {
+        user: { name: string; email: string; role?: string; role_label?: string; is_admin?: boolean };
+        // The person's other accounts — same email, another role.
+        linked_accounts?: { id: number; role: string; unread: number }[];
+    };
     logo_url: string;
     notifications: NotificationRow[];
     unread_notifications_count: number;
@@ -699,7 +703,47 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
                                 <div style={{ padding: '12px 16px', borderBottom: '1px solid #f3f4f6' }}>
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{auth?.user?.name}</div>
                                     <div style={{ fontSize: '11.5px', color: '#9ca3af', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{auth?.user?.email}</div>
+                                    {!!auth?.linked_accounts?.length && (
+                                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#2563eb', marginTop: '4px' }}>{auth.user.role_label}</div>
+                                    )}
                                 </div>
+                                {/* One person with two roles has an account for each; switch between them here. */}
+                                {!!auth?.linked_accounts?.length && (
+                                    <div style={{ borderBottom: '1px solid #f3f4f6', padding: '4px 0' }}>
+                                        <div style={{ padding: '6px 16px 2px', fontSize: '10.5px', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                            Switch account
+                                        </div>
+                                        {auth.linked_accounts.map(account => (
+                                            <Link
+                                                key={account.id}
+                                                href={route('account.switch', account.id)}
+                                                method="post"
+                                                as="button"
+                                                onClick={() => setMenuOpen(false)}
+                                                style={{
+                                                    display: 'flex', alignItems: 'center', gap: '8px', width: '100%',
+                                                    padding: '8px 16px', fontSize: '12.5px', color: '#374151',
+                                                    background: 'none', border: 'none', cursor: 'pointer',
+                                                    textAlign: 'left', fontFamily: 'inherit',
+                                                }}
+                                            >
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                                                    <polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                                                    <polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                                                </svg>
+                                                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{account.role}</span>
+                                                {account.unread > 0 && (
+                                                    <span
+                                                        title={`${account.unread} unread notification${account.unread === 1 ? '' : 's'}`}
+                                                        style={{ fontSize: '10.5px', fontWeight: 700, color: '#fff', background: '#dc2626', borderRadius: '999px', padding: '1px 6px', flexShrink: 0 }}
+                                                    >
+                                                        {account.unread}
+                                                    </span>
+                                                )}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                )}
                                 <Link
                                     href={route('account.edit')}
                                     onClick={() => setMenuOpen(false)}
