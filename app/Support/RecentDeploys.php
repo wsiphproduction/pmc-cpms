@@ -13,22 +13,21 @@ namespace App\Support;
  */
 class RecentDeploys
 {
-    /** Enough of the log's tail to hold far more deploys than are ever shown. */
-    private const TAIL_BYTES = 65536;
-
     private const LABELS = [
         'feat' => 'New',
         'fix'  => 'Fix',
     ];
 
     /**
+     * Every deploy when $limit is null.
+     *
      * @return array<int, array{sha: string, type: string, text: string, date: string}>
      */
-    public static function latest(int $limit = 5, ?string $path = null): array
+    public static function latest(?int $limit = null, ?string $path = null): array
     {
         $path ??= storage_path('logs/deploy.log');
 
-        $log = self::tail($path);
+        $log = self::deployLines($path);
 
         if ($log === '') {
             return [];
@@ -90,7 +89,11 @@ class RecentDeploys
         ];
     }
 
-    private static function tail(string $path): string
+    /**
+     * Just the "Deployed" lines of the log, read a line at a time so the
+     * composer and migrate output between them never sits in memory.
+     */
+    private static function deployLines(string $path): string
     {
         if (! is_file($path) || ! is_readable($path)) {
             return '';
@@ -102,11 +105,16 @@ class RecentDeploys
             return '';
         }
 
-        $size = filesize($path) ?: 0;
-        fseek($handle, max(0, $size - self::TAIL_BYTES));
-        $tail = stream_get_contents($handle) ?: '';
+        $lines = '';
+
+        while (($line = fgets($handle)) !== false) {
+            if (str_contains($line, '] Deployed ')) {
+                $lines .= $line;
+            }
+        }
+
         fclose($handle);
 
-        return $tail;
+        return $lines;
     }
 }

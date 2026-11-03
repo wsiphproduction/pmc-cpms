@@ -15,6 +15,7 @@ const THEME: Record<Variant, {
     header: React.CSSProperties;
     heading: string;
     icon: string;
+    scrollbar: string;
     text: string;
     date: string;
     tags: Record<DeployedUpdate['type'], { bg: string; color: string }>;
@@ -25,6 +26,7 @@ const THEME: Record<Variant, {
         header: { borderBottom: '1px solid rgba(255,255,255,0.1)' },
         heading: 'rgba(255,255,255,0.85)',
         icon: '#93c5fd',
+        scrollbar: 'rgba(255,255,255,0.25) transparent',
         text: 'rgba(255,255,255,0.85)',
         date: 'rgba(255,255,255,0.45)',
         tags: {
@@ -37,6 +39,7 @@ const THEME: Record<Variant, {
         header: { borderBottom: '1px solid #f1f5f9', background: '#f8fafc' },
         heading: '#334155',
         icon: '#2563eb',
+        scrollbar: '#cbd5e1 transparent',
         text: '#334155',
         date: '#9ca3af',
         tags: {
@@ -71,7 +74,11 @@ export default function WhatsNew({ updates, variant = 'light', className, style 
                     What's new
                 </span>
             </div>
-            <ul style={{ listStyle: 'none', margin: 0, padding: '4px 0' }}>
+            {/* Every deploy is listed, newest first; the list scrolls under the header past about five. */}
+            <ul style={{
+                listStyle: 'none', margin: 0, padding: '4px 0',
+                maxHeight: '300px', overflowY: 'auto', scrollbarWidth: 'thin', scrollbarColor: theme.scrollbar,
+            }}>
                 {updates.map(u => (
                     <li key={u.sha} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '8px 14px' }}>
                         <span style={{

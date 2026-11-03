@@ -36,6 +36,10 @@ it('stops at the limit', function () {
     expect(RecentDeploys::latest(2, $this->log))->toHaveCount(2);
 });
 
+it('lists every deploy when given no limit', function () {
+    expect(RecentDeploys::latest(path: $this->log))->toHaveCount(3);
+});
+
 it('shows nothing where there is no deploy log, as on a dev machine', function () {
     expect(RecentDeploys::latest(5, $this->log . '.missing'))->toBe([]);
 });
