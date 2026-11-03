@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>EMS Survey Report Update</title>
+    <title>Environment Survey Report Update</title>
 </head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
 
@@ -22,7 +22,7 @@
                                         {{ config('app.name') }}
                                     </div>
                                     <div style="font-size:22px;font-weight:800;color:#ffffff;line-height:1.2;">
-                                        EMS Survey Report Update
+                                        Environment Survey Report Update
                                     </div>
                                 </td>
                                 <td align="right">

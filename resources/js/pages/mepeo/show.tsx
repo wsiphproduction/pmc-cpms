@@ -62,12 +62,12 @@ export default function MepeoShow({ report, options, can_edit, can_sign }: Props
 
     return (
         <AuthenticatedLayout>
-            <Head title={`EMS Survey Report ${report.control_no}`} />
+            <Head title={`Environment Survey Report ${report.control_no}`} />
             {confirmDialog}
             {signMode && <EmsSignModal report={report} mode={signMode} onClose={() => setSignMode(null)} />}
 
             <div style={{ marginBottom: '14px' }}>
-                <Link href={route('mepeo.index')} style={{ fontSize: '12.5px', color: '#64748b', textDecoration: 'none', fontWeight: 600 }}>← EMS Survey Reports</Link>
+                <Link href={route('mepeo.index')} style={{ fontSize: '12.5px', color: '#64748b', textDecoration: 'none', fontWeight: 600 }}>← Environment Survey Reports</Link>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', marginBottom: '16px' }}>

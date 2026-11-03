@@ -88,6 +88,14 @@ class ProjectController extends Controller
             $query->where('created_by', $request->integer('engineer'));
         }
 
+        // The date the project was registered.
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date('date_to'));
+        }
+
         $projects = $query->paginate(15)->withQueryString()
             ->through(fn (Project $project) => $this->projectListData($project));
 
@@ -97,6 +105,8 @@ class ProjectController extends Controller
                 'search',
                 ...array_keys($this->filterableFields()),
                 'engineer',
+                'date_from',
+                'date_to',
                 'jip',
                 'need_civil',
                 'need_electrical',
@@ -467,7 +477,7 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
-        $validSections = ['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'ems', 'at', 'todo'];
+        $validSections = ['rfq', 'ntp', 'signatories', 'contract', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'ems', 'ems-register', 'at', 'todo'];
         abort_unless(in_array($section, $validSections, true), 404);
 
         // Sub-projects run their own procurement now, so no section is off
@@ -516,6 +526,7 @@ class ProjectController extends Controller
             'ntp'         => $countAcross('ntps'),
             // Steps this project hands to someone other than the default.
             'signatories' => $project->ntpSignatories()->count(),
+            'contract'    => $countAcross('contracts'),
             // Direct children only — that's what the Sub-Projects list shows.
             'subprojects' => $project->children->count(),
             'permits'     => $countAcross('permits'),
@@ -529,6 +540,7 @@ class ProjectController extends Controller
             'mom'         => $countAcross('meetingMinutes'),
             'photos'      => $countAcross('photoAlbums'),
             'ems'         => $countAcross('emsSurveyReports'),
+            'ems-register' => $countAcross('emsRegisterEntries'),
             'at'          => AuditTrail::where('reference_type', Project::class)->whereIn('reference_id', $ids)->count(),
             'todo'        => $countAcross('tasks'),
         ];
@@ -574,13 +586,21 @@ class ProjectController extends Controller
             'ntp' => [
                 'ntps' => $this->collectHubRows(
                     $project,
-                    fn ($p) => $p->ntps()->with('rfq.items', 'reviewer', 'creator', 'approvals.user')->get(),
+                    fn ($p) => $p->ntps()->with('rfq.items', 'reviewer', 'creator', 'approvals.user', 'project.ntpSignatories.user')->get(),
                     fn ($ntp, $sub) => $this->ntpRow($ntp, $sub, $subProjectsByNtp),
                 ),
             ],
 
             'signatories' => [
                 'steps' => NtpSignatories::forProject($project),
+            ],
+
+            'contract' => [
+                'contracts' => $this->collectHubRows($project, fn ($p) => $p->contracts()->with('creator', 'fileVersions.uploader')->get(), fn ($m, $sub) => $this->uploadRow($m, $sub, ['label' => $m->label])),
+            ],
+
+            'ems-register' => [
+                'entries' => $this->collectHubRows($project, fn ($p) => $p->emsRegisterEntries()->with('creator', 'fileVersions.uploader')->get(), fn ($m, $sub) => $this->uploadRow($m, $sub, ['description' => $m->description])),
             ],
 
             'subprojects' => [
@@ -943,6 +963,8 @@ class ProjectController extends Controller
             // Who signed which step, so the printed form can stamp each
             // signatory block as approved and date it.
             'approvals'      => $ntp->approvalTimeline(),
+            // Who may sign each step not yet signed, by role.
+            'signers'        => $this->ntpSigners($ntp->project),
             // Telling the contractor is only possible once the chain is done.
             'vendor_email'       => $ntp->rfq?->recipient_email,
             'vendor_notified_at' => optional($ntp->vendor_notified_at)->format('M d, Y h:i A'),
@@ -963,6 +985,25 @@ class ProjectController extends Controller
                 ])->values()->all()
                 : [],
         ];
+    }
+
+    /** @var array<int, array<string, array<int, string>>> Per project, for the length of the request. */
+    private array $ntpSignerCache = [];
+
+    /**
+     * The names that can sign each NTP step on a project: whoever it names,
+     * else the step's default holders. Worked out once per project, however
+     * many NTPs it has.
+     *
+     * @return array<string, array<int, string>>
+     */
+    private function ntpSigners(Project $project): array
+    {
+        return $this->ntpSignerCache[$project->id] ??= collect(ProjectNtp::APPROVAL_CHAIN)
+            ->mapWithKeys(fn (string $role) => [$role => ($named = $project->ntpSignatoryFor($role))
+                ? [$named->name]
+                : NtpSignatories::defaultNames($project, $role)])
+            ->all();
     }
 
     private function permitRow($permit, ?Project $sub): array
@@ -1025,6 +1066,22 @@ class ProjectController extends Controller
             'versions' => $doc->fileVersionPayload(),
             'remarks'  => $doc->remarks,
             'created'  => $doc->created_at?->format('M d, Y') ?? '-',
+            'sub_project_id' => $sub?->id,
+            'sub_project_no' => $sub?->project_no,
+        ];
+    }
+
+    /** A plain uploaded file — a contract or an EMS Register entry — plus its own fields. */
+    private function uploadRow($doc, ?Project $sub, array $fields): array
+    {
+        return [
+            'id'          => $doc->id,
+            ...$fields,
+            'filename'    => $doc->filename,
+            'url'         => Storage::disk('public')->url($doc->file_path),
+            'versions'    => $doc->fileVersionPayload(),
+            'uploaded_by' => $doc->creator?->name,
+            'created'     => $doc->created_at?->format('M d, Y') ?? '-',
             'sub_project_id' => $sub?->id,
             'sub_project_no' => $sub?->project_no,
         ];

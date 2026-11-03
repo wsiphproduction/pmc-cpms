@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Project;
 use App\Models\ProjectBilling;
+use App\Models\ProjectContract;
+use App\Models\ProjectEmsRegisterEntry;
 use App\Models\ProjectIocItem;
 use App\Models\ProjectMeetingMinute;
 use App\Models\ProjectMtrDoc;
@@ -39,6 +41,8 @@ class FileVersionController extends Controller
         'permit-file' => [ProjectPermitFile::class,     'path',              'filename', 'hub/permits/%d'],
         'vof'         => [ProjectVariationOrder::class, 'attachment',        null,       'vof-files'],
         'qpp'         => [ProjectQualityDoc::class,     'file_path',         'filename', 'hub/qpp/%d'],
+        'contract'    => [ProjectContract::class,       'file_path',         'filename', 'hub/contract/%d'],
+        'ems-register' => [ProjectEmsRegisterEntry::class, 'file_path',      'filename', 'hub/ems-register/%d'],
         'mtr'         => [ProjectMtrDoc::class,         'file_path',         'filename', 'hub/mtr/%d'],
         'mom'         => [ProjectMeetingMinute::class,  'file_path',         'filename', 'hub/mom/%d'],
         'rfp'         => [ProjectBilling::class,        'file_path',         'filename', 'hub/rfp/%d'],
@@ -52,12 +56,19 @@ class FileVersionController extends Controller
         'permit-file' => 'Permit',
         'vof'         => 'VOF',
         'qpp'         => 'QPP',
+        'contract'    => 'Contract',
+        'ems-register' => 'EMS Register',
         'mtr'         => 'MTR',
         'mom'         => 'MOM',
         'rfp'         => 'RFP',
         'ioc'         => 'IOC',
         'psr'         => 'PSR',
         'proposal'    => 'Project',
+    ];
+
+    /** Slots that take only certain file types, by extension. */
+    private const MIMES = [
+        'contract' => 'pdf',
     ];
 
     public function replace(Request $request, Project $project, string $slot, int $id): RedirectResponse
@@ -69,7 +80,7 @@ class FileVersionController extends Controller
         [$class, $pathColumn, $nameColumn, $folder] = self::SLOTS[$slot];
 
         $request->validate([
-            'file' => ['required', 'file', 'max:20480'],
+            'file' => ['required', 'file', 'max:20480', ...(isset(self::MIMES[$slot]) ? ['mimes:' . self::MIMES[$slot]] : [])],
             'note' => ['nullable', 'string', 'max:255'],
         ]);
 

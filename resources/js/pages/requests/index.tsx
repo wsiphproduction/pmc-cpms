@@ -61,11 +61,16 @@ interface Filters {
     job_location?: string;
     costcode?: string;
     status?: string[];
+    date_from?: string;
+    date_to?: string;
+    project_type?: string;
 }
 
 interface Props {
     requests: Paginated<ProjectRequest>;
     filters: Filters;
+    /** The master list of job locations, for the advanced search. */
+    jobLocations: string[];
     // The PMD/division approval roles review requests but never raise them.
     canCreate: boolean;
 }
@@ -286,11 +291,14 @@ function CommentModal({ request, onClose }: { request: ProjectRequest | null; on
 }
 
 // ── Advanced Search Modal ──────────────────────────────────────────────────
-function AdvancedSearchModal({ filters, onClose }: { filters: Filters; onClose: () => void }) {
+function AdvancedSearchModal({ filters, jobLocations, onClose }: { filters: Filters; jobLocations: string[]; onClose: () => void }) {
     const [jobType,     setJobType]     = useState(filters.job_type ?? '');
     const [jobLocation, setJobLocation] = useState(filters.job_location ?? '');
     const [costcode,    setCostcode]    = useState(filters.costcode ?? '');
     const [statuses,    setStatuses]    = useState<string[]>(filters.status ?? []);
+    const [dateFrom,    setDateFrom]    = useState(filters.date_from ?? '');
+    const [dateTo,      setDateTo]      = useState(filters.date_to ?? '');
+    const [projectType, setProjectType] = useState(filters.project_type ?? '');
 
     const toggleStatus = (s: string) =>
         setStatuses(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
@@ -301,6 +309,9 @@ function AdvancedSearchModal({ filters, onClose }: { filters: Filters; onClose: 
             ...(jobLocation && { job_location: jobLocation }),
             ...(costcode    && { costcode }),
             ...(statuses.length && { status: statuses }),
+            ...(dateFrom    && { date_from: dateFrom }),
+            ...(dateTo      && { date_to: dateTo }),
+            ...(projectType && { project_type: projectType }),
         }, { preserveState: true });
         onClose();
     };
@@ -320,6 +331,22 @@ function AdvancedSearchModal({ filters, onClose }: { filters: Filters; onClose: 
                 <div style={{ padding: '20px 22px' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                         <div>
+                            <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Date Range From</label>
+                            <input type="date" value={dateFrom} max={dateTo || undefined} onChange={e => setDateFrom(e.target.value)} style={{ ...selectStyle, boxSizing: 'border-box' as const }} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Date Range To</label>
+                            <input type="date" value={dateTo} min={dateFrom || undefined} onChange={e => setDateTo(e.target.value)} style={{ ...selectStyle, boxSizing: 'border-box' as const }} />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Project Type</label>
+                            <select value={projectType} onChange={e => setProjectType(e.target.value)} style={selectStyle}>
+                                <option value="">All</option>
+                                <option value="major">Major</option>
+                                <option value="minor">Minor</option>
+                            </select>
+                        </div>
+                        <div>
                             <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Job Type</label>
                             <select value={jobType} onChange={e => setJobType(e.target.value)} style={selectStyle}>
                                 <option value="">All Types</option>
@@ -328,7 +355,11 @@ function AdvancedSearchModal({ filters, onClose }: { filters: Filters; onClose: 
                         </div>
                         <div>
                             <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Job Location</label>
-                            <input type="text" value={jobLocation} onChange={e => setJobLocation(e.target.value)} placeholder="Filter by location" style={{ ...selectStyle, boxSizing: 'border-box' as const }} />
+                            <select value={jobLocation} onChange={e => setJobLocation(e.target.value)} style={selectStyle}>
+                                <option value="">All Locations</option>
+                                {/* Keep a filter from an older link selectable, even if it is off the list. */}
+                                {[...jobLocations, ...(jobLocation && !jobLocations.includes(jobLocation) ? [jobLocation] : [])].map(l => <option key={l} value={l}>{l}</option>)}
+                            </select>
                         </div>
                         <div>
                             <label style={{ fontSize: '11.5px', fontWeight: 700, color: '#374151', display: 'block', marginBottom: '5px' }}>Cost Code</label>
@@ -455,7 +486,7 @@ function Pagination({ data }: { data: Paginated<unknown> }) {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function RequestsIndex({ requests, filters, canCreate }: Props) {
+export default function RequestsIndex({ requests, filters, jobLocations = [], canCreate }: Props) {
     const [search,        setSearch]        = useState(filters.search ?? '');
     const [commentTarget, setCommentTarget] = useState<ProjectRequest | null>(null);
     const [showAdvSearch, setShowAdvSearch] = useState(false);
@@ -497,7 +528,7 @@ export default function RequestsIndex({ requests, filters, canCreate }: Props) {
 
             {confirmDialog}
             {commentTarget && <CommentModal request={commentTarget} onClose={() => setCommentTarget(null)} />}
-            {showAdvSearch && <AdvancedSearchModal filters={filters} onClose={() => setShowAdvSearch(false)} />}
+            {showAdvSearch && <AdvancedSearchModal filters={filters} jobLocations={jobLocations} onClose={() => setShowAdvSearch(false)} />}
             {decisionTarget && (
                 <DecisionModal
                     request={decisionTarget.request}

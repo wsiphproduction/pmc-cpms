@@ -266,7 +266,7 @@ function SiteChecklist({ value, options, onChange, error }: {
                 )}
             </div>
             <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '11.5px' }}>
-                NTPs for projects on these sites go to this user for the last signature, whichever division owns the project. Projects on other sites still follow the division. Leave all unticked to sign for their own division only.
+                NTPs for projects on these sites go to this user for the Division Manager's step, in place of the Division Manager. The last signature always stays with the owning division's manager user. Leave all unticked to sign for their own division only.
             </p>
             {error && <p style={{ margin: '4px 0 0', color: '#dc2626', fontSize: '12px' }}>{error}</p>}
         </div>

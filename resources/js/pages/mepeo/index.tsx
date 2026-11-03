@@ -44,11 +44,11 @@ export default function MepeoIndex({ reports, is_manager }: Props) {
 
     return (
         <AuthenticatedLayout>
-            <Head title="EMS Survey Reports" />
+            <Head title="Environment Survey Reports" />
 
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', marginBottom: '18px' }}>
                 <div>
-                    <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>EMS Survey Reports</h1>
+                    <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>Environment Survey Reports</h1>
                     <p style={{ fontSize: '13px', color: '#64748b', margin: 0, maxWidth: '680px', lineHeight: 1.55 }}>
                         Hi <strong style={{ color: '#334155' }}>{auth.user.name}</strong>.{' '}
                         {is_manager

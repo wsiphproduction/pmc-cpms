@@ -122,7 +122,7 @@ class ProjectNtp extends Model
             return false;
         }
 
-        // The manager who has taken the project's site, else the owning division's.
+        // The owning department's division's manager users, whatever the site.
         if ($step->role === User::ROLE_DIVISION_MANAGER_USER) {
             return $user->hasRole(User::ROLE_DIVISION_MANAGER_USER)
                 && $project->divisionAudience()->contains($user->id);

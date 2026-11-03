@@ -222,28 +222,32 @@ function listedFor($test, User $user)
     return collect($test->actingAs($user)->get(route('ntp-reviews.index'))->assertOk()->inertiaPage()['props']['ntps']);
 }
 
-it('sends the last signature to the manager user who took the site, whichever division owns the work', function () {
+it('keeps the last signature with the owning division on a site another manager user took', function () {
     $mineManager = makeMineSiteManager();
     $this->project->update(['site' => 'Mine']);
 
-    reachDivisionUserStep($this);
-
     $awaiting = fn (User $u) => Notification::where('recipient', $u->id)
         ->where('message', 'like', "%{$this->ntp->ntp_no}%awaiting your approval%")
-        ->exists();
+        ->count();
 
-    expect($awaiting($mineManager))->toBeTrue()
-        ->and($awaiting($this->divisionUser))->toBeFalse()
-        ->and(ProjectNtp::awaitingReviewFrom($mineManager)->count())->toBe(1)
-        ->and(ProjectNtp::awaitingReviewFrom($this->divisionUser)->count())->toBe(0)
-        ->and(listedFor($this, $mineManager)->firstWhere('id', $this->ntp->id)['can_act'])->toBeTrue();
+    // The site manager is called on for the Division Manager's step; count
+    // only what the department user's signature sends on.
+    approvePmdSteps($this);
+    $before = $awaiting($mineManager);
+    $this->actingAs($this->requestor)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
 
-    // The owning division's own manager user no longer holds it.
-    $this->actingAs($this->divisionUser)
+    expect($awaiting($this->divisionUser))->toBe(1)
+        ->and($awaiting($mineManager))->toBe($before)
+        ->and(ProjectNtp::awaitingReviewFrom($this->divisionUser)->count())->toBe(1)
+        ->and(ProjectNtp::awaitingReviewFrom($mineManager)->count())->toBe(0)
+        // The site manager still follows it, but cannot sign it.
+        ->and(listedFor($this, $mineManager)->firstWhere('id', $this->ntp->id)['can_act'])->toBeFalse();
+
+    $this->actingAs($mineManager)
         ->patch(route('ntp-reviews.approve', $this->ntp))
         ->assertForbidden();
 
-    $this->actingAs($mineManager)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
+    $this->actingAs($this->divisionUser)->patch(route('ntp-reviews.approve', $this->ntp))->assertRedirect();
     expect($this->ntp->fresh()->status)->toBe('issued');
 });
 

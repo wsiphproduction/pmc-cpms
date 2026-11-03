@@ -78,7 +78,7 @@ function ReportModal({ project, report, options, defaults, onClose }: {
 
     return (
         <Modal
-            title={report ? `Edit ${report.control_no}` : 'New EMS Survey Report'}
+            title={report ? `Edit ${report.control_no}` : 'New Environment Survey Report'}
             onClose={onClose}
             headerBg={EMS_TONE}
             size="940px"
@@ -208,7 +208,7 @@ function SendModal({ project, report, reps, onClose }: {
 function ViewModal({ report, options, onClose }: { report: EmsReportRow; options: EmsOptions; onClose: () => void }) {
     return (
         <Modal
-            title={`EMS Survey Report ${report.control_no}`}
+            title={`Environment Survey Report ${report.control_no}`}
             onClose={onClose}
             headerBg={EMS_TONE}
             size="900px"
@@ -251,9 +251,9 @@ export default function EmsHub({ project, reports, options, mepeoReps, defaults,
     const isOpen = (r: EmsReportRow) => canManage && !r.sub_project_id && (r.status === 'draft' || r.status === 'with_mepeo');
 
     const handleDelete = (row: EmsReportRow) => {
-        showConfirm(`Delete EMS Survey Report ${row.control_no}?`, () => {
+        showConfirm(`Delete Environment Survey Report ${row.control_no}?`, () => {
             router.delete(route('hub.ems.destroy', [project.id, row.id]), { preserveScroll: true });
-        }, { title: 'Delete EMS Survey Report', confirmLabel: 'Delete', variant: 'danger' });
+        }, { title: 'Delete Environment Survey Report', confirmLabel: 'Delete', variant: 'danger' });
     };
 
     return (
@@ -272,13 +272,13 @@ export default function EmsHub({ project, reports, options, mepeoReps, defaults,
                     it is then approved by the MEPEO Manager, reviewed by the PMD Assistant Manager and noted by the PMD Manager.
                 </div>
                 {canManage && (
-                    <button type="button" onClick={() => setCreating(true)} style={btn(EMS_TONE, '#fff')}>+ New EMS Survey Report</button>
+                    <button type="button" onClick={() => setCreating(true)} style={btn(EMS_TONE, '#fff')}>+ New Environment Survey Report</button>
                 )}
             </div>
 
             {reports.length === 0 ? (
                 <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8', fontSize: '13px', border: '1px dashed #e2e8f0', borderRadius: '8px' }}>
-                    No EMS Survey Reports yet.
+                    No Environment Survey Reports yet.
                     {!canManage && <div style={{ marginTop: '6px', fontSize: '12px' }}>Only the project's assigned engineer creates them.</div>}
                 </div>
             ) : (

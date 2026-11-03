@@ -20,6 +20,8 @@ interface ApprovalStep {
     status: 'pending' | 'approved' | 'rejected';
     is_current: boolean;
     actor: string | null;
+    /** The manager an OIC signed this step for. */
+    on_behalf_of?: string | null;
     acted_at: string | null;
     remarks: string | null;
 }
@@ -48,6 +50,8 @@ interface NtpData {
     prepared_by: string | null;
     /** The sign-off chain, in signing order — stamped onto the printout. */
     approvals: ApprovalStep[];
+    /** Who may sign each step not yet signed, by role. */
+    signers?: Record<string, string[]>;
     /** Contractor address carried over from the source RFQ. */
     vendor_email: string | null;
     vendor_notified_at: string | null;
@@ -63,6 +67,116 @@ function NtpStatusBadge({ status }: { status: string }) {
     const m = NTP_STATUS_META[status] ?? { label: status, bg: '#f1f5f9', border: '#e2e8f0', color: '#475569' };
     return (
         <span style={{ padding: '3px 10px', borderRadius: '999px', background: m.bg, border: `1px solid ${m.border}`, color: m.color, fontSize: '11px', fontWeight: 700, whiteSpace: 'nowrap' }}>{m.label}</span>
+    );
+}
+
+type StepState = 'approved' | 'rejected' | 'current' | 'waiting';
+
+const STEP_META: Record<StepState, { label: string; bg: string; color: string; ring: string }> = {
+    approved: { label: 'Approved',      bg: '#dcfce7', color: '#166534', ring: '#16a34a' },
+    rejected: { label: 'Rejected',      bg: '#fee2e2', color: '#b91c1c', ring: '#dc2626' },
+    current:  { label: 'Awaiting',      bg: '#fef3c7', color: '#92400e', ring: '#f59e0b' },
+    waiting:  { label: 'Not yet',       bg: '#f1f5f9', color: '#94a3b8', ring: '#cbd5e1' },
+};
+
+const stepState = (s: ApprovalStep): StepState =>
+    s.status === 'approved' ? 'approved' : s.status === 'rejected' ? 'rejected' : s.is_current ? 'current' : 'waiting';
+
+/** "Engr. Earl M. Son" → "ES"; titles and anything after a comma are dropped. */
+function initials(name: string): string {
+    const words = name.split(',')[0].split(/\s+/)
+        // Drop middle initials ("M.") and titles ("Engr.", "BGen.").
+        .filter(w => w && !/^[A-Z]\.$/.test(w) && !/^(Engr|Atty|Arch|Dr|Mr|Ms|Mrs|BGen|Gen|Col)\.?$/i.test(w));
+    if (!words.length) return name.slice(0, 2).toUpperCase();
+    return (words[0][0] + (words.length > 1 ? words[words.length - 1][0] : '')).toUpperCase();
+}
+
+/** The person a step's avatar stands for: who signed it, else the one person who can. */
+function stepPerson(s: ApprovalStep, signers: string[]): string | null {
+    return s.actor ?? (signers.length === 1 ? signers[0] : null);
+}
+
+function Avatar({ step, signers, size = 30, overlap = false }: { step: ApprovalStep; signers: string[]; size?: number; overlap?: boolean }) {
+    const meta   = STEP_META[stepState(step)];
+    const person = stepPerson(step, signers);
+    // Nobody in particular yet (several can sign): show the office instead.
+    const text = person ? initials(person) : initials(step.role_label);
+
+    return (
+        <span style={{
+            width: size, height: size, borderRadius: '50%', flexShrink: 0,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            background: meta.bg, color: meta.color, fontSize: size * 0.36, fontWeight: 800,
+            border: `2px ${stepState(step) === 'waiting' ? 'dashed' : 'solid'} ${meta.ring}`,
+            boxShadow: '0 0 0 2px #fff', marginLeft: overlap ? -8 : 0, position: 'relative',
+        }}>
+            {text}
+        </span>
+    );
+}
+
+/**
+ * The sign-off chain as a row of avatars, coloured by where each step stands;
+ * hovering shows every step in order with who signed, when, and any remarks.
+ */
+function NtpApprovers({ steps, signers }: { steps: ApprovalStep[]; signers: Record<string, string[]> }) {
+    const [anchor, setAnchor] = useState<DOMRect | null>(null);
+    if (!steps.length) return <span style={{ color: '#94a3b8' }}>—</span>;
+
+    const signed = steps.filter(s => s.status === 'approved').length;
+    const width  = 320;
+    // Fixed to the viewport so the table's scroll box can't clip it.
+    const left = anchor ? Math.max(8, Math.min(anchor.left, window.innerWidth - width - 8)) : 0;
+    const below = anchor ? anchor.bottom + 360 < window.innerHeight : true;
+
+    return (
+        <div
+            onMouseEnter={e => setAnchor(e.currentTarget.getBoundingClientRect())}
+            onMouseLeave={() => setAnchor(null)}
+            onClick={e => { const r = e.currentTarget.getBoundingClientRect(); setAnchor(a => (a ? null : r)); }}
+            style={{ display: 'inline-flex', alignItems: 'center', cursor: 'default', padding: '2px 0' }}
+        >
+            {steps.map((s, i) => <Avatar key={s.sequence} step={s} signers={signers[s.role] ?? []} overlap={i > 0} />)}
+
+            {anchor && (
+                <div style={{
+                    position: 'fixed', zIndex: 400, width, left,
+                    ...(below ? { top: anchor.bottom + 6 } : { bottom: window.innerHeight - anchor.top + 6 }),
+                    background: '#fff', border: '1px solid #e5e7eb', borderRadius: '10px',
+                    boxShadow: '0 12px 32px rgba(15,23,42,0.16)', padding: '12px 14px', pointerEvents: 'none',
+                }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                        <span style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Approval Chain</span>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: '#475569' }}>{signed} of {steps.length} signed</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {steps.map(s => {
+                            const state  = stepState(s);
+                            const meta   = STEP_META[state];
+                            const names  = s.actor ? [s.actor] : (signers[s.role] ?? []);
+                            return (
+                                <div key={s.sequence} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+                                    <Avatar step={s} signers={signers[s.role] ?? []} size={26} />
+                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '12px', fontWeight: 700, color: '#0f172a' }}>{s.sequence}. {s.role_label}</span>
+                                            <span style={{ fontSize: '10px', fontWeight: 800, padding: '1px 7px', borderRadius: '999px', background: meta.bg, color: meta.color, whiteSpace: 'nowrap' }}>{meta.label}</span>
+                                        </div>
+                                        <div style={{ fontSize: '11.5px', color: '#475569', marginTop: '1px' }}>
+                                            {names.length ? names.join(', ') : <span style={{ color: '#b45309' }}>No one assigned</span>}
+                                            {!s.actor && names.length > 1 && <span style={{ color: '#94a3b8' }}> · any one signs</span>}
+                                        </div>
+                                        {s.on_behalf_of && <div style={{ fontSize: '11px', color: '#64748b' }}>as OIC for {s.on_behalf_of}</div>}
+                                        {s.acted_at && <div style={{ fontSize: '11px', color: '#94a3b8' }}>{s.acted_at}</div>}
+                                        {s.remarks && <div style={{ fontSize: '11px', color: '#475569', fontStyle: 'italic', marginTop: '2px' }}>“{s.remarks}”</div>}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -118,10 +232,11 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                         <div style={{ fontSize: '13px' }}>Issue an NTP from the RFQ section after awarding a contractor.</div>
                     </div>
                 ) : (
+                    <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                         <thead>
                             <tr style={{ background: '#f8fafc' }}>
-                                {['NTP No.', ...(hasSubRows ? ['Project'] : []), 'Contractor', 'Baseline Start', 'Baseline End', 'Approved Cost', 'Status', 'Issued Date', ''].map((h, hi) => (
+                                {['NTP No.', ...(hasSubRows ? ['Project'] : []), 'Contractor', 'Baseline Dates', 'Approved Cost', 'Status', 'Approvers', 'Issued Date', ''].map((h, hi) => (
                                     <th key={`${h}-${hi}`} style={{ padding: '9px 14px', fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', borderBottom: '1px solid #e5e7eb', textAlign: 'left' }}>{h}</th>
                                 ))}
                             </tr>
@@ -132,8 +247,12 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                                     <td style={{ padding: '10px 14px', fontSize: '13px', fontWeight: 700, color: '#059669', borderBottom: '1px solid #f1f5f9' }}>{ntp.ntp_no}</td>
                                     {hasSubRows && <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}><SubTag no={ntp.sub_project_no} /></td>}
                                     <td style={{ padding: '10px 14px', fontSize: '13px', color: '#0f172a', borderBottom: '1px solid #f1f5f9' }}>{ntp.contractor}</td>
-                                    <td style={{ padding: '10px 14px', fontSize: '13px', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{ntp.baseline_start}</td>
-                                    <td style={{ padding: '10px 14px', fontSize: '13px', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{ntp.baseline_end}</td>
+                                    <td style={{ padding: '10px 14px', fontSize: '13px', color: '#475569', borderBottom: '1px solid #f1f5f9', whiteSpace: 'nowrap' }}>
+                                        {ntp.baseline_start} – {ntp.baseline_end}
+                                        {ntp.duration_days != null && (
+                                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>{ntp.duration_days} day{ntp.duration_days === 1 ? '' : 's'}</div>
+                                        )}
+                                    </td>
                                     <td style={{ padding: '10px 14px', fontSize: '13px', color: '#0f172a', fontWeight: 600, borderBottom: '1px solid #f1f5f9' }}>
                                         Php {ntp.approved_cost.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                     </td>
@@ -143,6 +262,7 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                                             <div title={ntp.review_remarks} style={{ fontSize: '11px', color: '#94a3b8', marginTop: '3px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ntp.review_remarks}</div>
                                         )}
                                     </td>
+                                    <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}><NtpApprovers steps={ntp.approvals ?? []} signers={ntp.signers ?? {}} /></td>
                                     <td style={{ padding: '10px 14px', fontSize: '13px', color: '#475569', borderBottom: '1px solid #f1f5f9' }}>{ntp.status === 'issued' ? ntp.issued_date : '—'}</td>
                                     <td style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}>
                                         <div style={{ display: 'flex', gap: '6px' }}>
@@ -199,6 +319,7 @@ export default function NtpHub({ project, ntps, canEdit = true }: { project: Hub
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 )}
             </HubShell>
         );

@@ -172,7 +172,7 @@ it('leaves the signatories to those who can edit the project', function () {
 
 // ── The Division Manager step on a site a division manager user has taken ──
 
-it('gives the division manager step to the manager user who has taken the site, who also signs the last step', function () {
+it('gives the division manager step to the manager user who has taken the site, and the last step to the owning division', function () {
     \Illuminate\Support\Facades\Mail::fake();
     $this->mineManager->update(['sites' => ['Mine', 'Sinug-ang']]);
     $ntp = sigRaiseNtp($this);
@@ -192,14 +192,16 @@ it('gives the division manager step to the manager user who has taken the site, 
     $this->actingAs($this->mineManager)->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
     $this->actingAs($this->requestor)->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
 
-    // The last step is his too, as the manager who has taken the site.
-    expect($ntp->fresh()->awaitingApprovalFrom($this->mineManager))->toBeTrue();
-    $this->actingAs($this->mineManager)->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
+    // The last step is not: it stays with the owning department's division.
+    expect($ntp->fresh()->awaitingApprovalFrom($this->mineManager))->toBeFalse()
+        ->and($ntp->fresh()->awaitingApprovalFrom($this->millManager))->toBeTrue();
+    $this->actingAs($this->mineManager)->patch(route('ntp-reviews.approve', $ntp))->assertForbidden();
+    $this->actingAs($this->millManager)->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
 
     $timeline = collect($ntp->fresh()->approvalTimeline())->keyBy('role');
     expect($ntp->fresh()->status)->toBe('issued')
         ->and($timeline[User::ROLE_DIVISION_MANAGER]['actor'])->toBe('Earl Mine')
-        ->and($timeline[User::ROLE_DIVISION_MANAGER_USER]['actor'])->toBe('Earl Mine');
+        ->and($timeline[User::ROLE_DIVISION_MANAGER_USER]['actor'])->toBe('Jon Mill');
 });
 
 it('matches the site whatever its case', function () {
@@ -240,7 +242,7 @@ it('lists and prints the site manager as the division manager step default', fun
     // A default, not a choice the project made.
     expect($steps[User::ROLE_DIVISION_MANAGER]['default_names'])->toBe(['Earl Mine'])
         ->and($steps[User::ROLE_DIVISION_MANAGER]['user_id'])->toBeNull()
-        ->and($steps[User::ROLE_DIVISION_MANAGER_USER]['default_names'])->toBe(['Earl Mine']);
+        ->and($steps[User::ROLE_DIVISION_MANAGER_USER]['default_names'])->toBe(['Jon Mill']);
 
     $ntp = sigRaiseNtp($this);
     $this->actingAs($this->engineer)
@@ -360,4 +362,19 @@ it('renders the review email with the ntp details and a link to ntp reviews', fu
         ->toContain($this->project->project_no)
         ->toContain('Dina Dept')
         ->toContain('ntp-reviews');
+});
+
+it('names who can sign each step on the ntp list, for the approvers column', function () {
+    sigSave($this, [User::ROLE_PMD_ASST_MANAGER => $this->pmdAsst2->id]);
+    sigRaiseNtp($this);
+
+    $signers = $this->actingAs($this->engineer)
+        ->get(route('projects.hub.ntp', $this->project))
+        ->assertOk()
+        ->inertiaPage()['props']['hub_data']['ntps'][0]['signers'];
+
+    expect($signers[User::ROLE_PMD_ASST_MANAGER])->toBe(['Ben Assistant'])
+        ->and($signers[User::ROLE_PMD_DEPT_MANAGER])->toBe(['Pia Manager'])
+        ->and($signers[User::ROLE_REQUESTOR])->toBe(['Dina Dept'])
+        ->and($signers[User::ROLE_DIVISION_MANAGER_USER])->toBe(['Jon Mill']);
 });

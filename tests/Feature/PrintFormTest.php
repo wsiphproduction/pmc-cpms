@@ -121,7 +121,7 @@ it('stamps only the prepared-by block before anyone has approved', function () {
         // Rev 01 adds the project owner's division manager to the signatories.
         ->toContain('Endorsed by:')
         ->toContain('Concurred by:')
-        ->toContain('ECS / Mines Division Manager')
+        ->toContain('ECS Division Manager')
         ->toContain('Project Owner Division Manager')
         ->toContain('Service Contractor Representative')
         // Preparing the NTP is the engineer's own sign-off, so that block is

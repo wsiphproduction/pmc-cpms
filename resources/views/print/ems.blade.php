@@ -1,6 +1,6 @@
 {{--
     Environmental Impact Assessment — PMD-PRJ-FRM-19, Rev 00. Printed from
-    the EMS Survey Report record.
+    the Environment Survey Report record.
 
     The upper half is the project side: the engineer's header, then the
     assessment MEPEO's representative fills in, signed off by PMD. The lower
@@ -8,7 +8,7 @@
     once the system has recorded that signature; until then it stays blank
     for a wet one.
 --}}
-@extends('print.layout', ['title' => 'EMS Survey Report — ' . $report->control_no])
+@extends('print.layout', ['title' => 'Environment Survey Report — ' . $report->control_no])
 
 @php
     $activities = config('ems.major_activities');

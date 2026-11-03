@@ -15,7 +15,7 @@ use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
 
 /**
- * EMS Survey Reports (PMD-PRJ-FRM-19) from the project's side: the engineer
+ * Environment Survey Reports (PMD-PRJ-FRM-19) from the project's side: the engineer
  * raising one, filling in what they know and sending it to MEPEO, plus the
  * signatures given from For Approval and the MEPEO page, and the printout.
  *
@@ -43,9 +43,9 @@ class EmsSurveyReportController extends Controller
 
         EmsReportInput::syncAttachments($report, $files);
 
-        AuditTrail::log("EMS Survey Report {$report->control_no} created", $project, ['module' => 'EMS', 'type' => 'create']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} created", $project, ['module' => 'EMS', 'type' => 'create']);
 
-        return back()->with('success', "EMS Survey Report {$report->control_no} created. Send it to MEPEO to fill out.");
+        return back()->with('success', "Environment Survey Report {$report->control_no} created. Send it to MEPEO to fill out.");
     }
 
     public function update(Request $request, Project $project, EmsSurveyReport $report): RedirectResponse
@@ -57,9 +57,9 @@ class EmsSurveyReportController extends Controller
         $report->update($data);
         EmsReportInput::syncAttachments($report, $files);
 
-        AuditTrail::log("EMS Survey Report {$report->control_no} details updated", $project, ['module' => 'EMS', 'type' => 'update']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} details updated", $project, ['module' => 'EMS', 'type' => 'update']);
 
-        return back()->with('success', "EMS Survey Report {$report->control_no} updated.");
+        return back()->with('success', "Environment Survey Report {$report->control_no} updated.");
     }
 
     /** To a MEPEO representative — again, to hand it to another one before they submit. */
@@ -81,18 +81,18 @@ class EmsSurveyReportController extends Controller
 
         $this->flow->send($report, $rep, $data['send_email'] ?? true);
 
-        return back()->with('success', "EMS Survey Report {$report->control_no} sent to {$rep->name}.");
+        return back()->with('success', "Environment Survey Report {$report->control_no} sent to {$rep->name}.");
     }
 
     public function destroy(Project $project, EmsSurveyReport $report): RedirectResponse
     {
         $this->ensureOwnOpenReport($project, $report);
 
-        AuditTrail::log("EMS Survey Report {$report->control_no} deleted", $project, ['module' => 'EMS', 'type' => 'delete']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} deleted", $project, ['module' => 'EMS', 'type' => 'delete']);
         $report->attachments->each(fn ($attachment) => EmsReportInput::purge($attachment));
         $report->delete();
 
-        return back()->with('success', "EMS Survey Report {$report->control_no} deleted.");
+        return back()->with('success', "Environment Survey Report {$report->control_no} deleted.");
     }
 
     public function approve(Request $request, EmsSurveyReport $report): RedirectResponse
@@ -105,7 +105,7 @@ class EmsSurveyReportController extends Controller
             'This report is not awaiting your signature.'
         );
 
-        return back()->with('success', "EMS Survey Report {$report->control_no} signed.");
+        return back()->with('success', "Environment Survey Report {$report->control_no} signed.");
     }
 
     public function returnToRep(Request $request, EmsSurveyReport $report): RedirectResponse
@@ -120,7 +120,7 @@ class EmsSurveyReportController extends Controller
             'This report is not awaiting your signature.'
         );
 
-        return back()->with('success', "EMS Survey Report {$report->control_no} returned to MEPEO.");
+        return back()->with('success', "Environment Survey Report {$report->control_no} returned to MEPEO.");
     }
 
     /**
@@ -147,7 +147,7 @@ class EmsSurveyReportController extends Controller
                 'pmd_dept_manager' => User::holderOf(User::ROLE_PMD_DEPT_MANAGER) ?? '',
                 'mepeo_manager'    => User::holderOf(User::ROLE_MEPEO_MANAGER) ?? '',
             ],
-        ], "EMS Survey Report {$report->control_no}");
+        ], "Environment Survey Report {$report->control_no}");
     }
 
     /**

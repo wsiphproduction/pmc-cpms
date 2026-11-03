@@ -45,16 +45,24 @@ class ProjectRequestController extends Controller
         }
 
         if ($request->filled('job_type'))     $query->where('job_type', $request->job_type);
-        if ($request->filled('job_location')) $query->where('job_location', 'like', "%{$request->job_location}%");
+        // Picked from the master list; "Other" also finds the "Other - …" entries.
+        if ($request->filled('job_location')) $query->where('job_location', 'like', "{$request->job_location}%");
         if ($request->filled('costcode'))     $query->where('costcode', 'like', "%{$request->costcode}%");
         if ($request->filled('status') && is_array($request->status)) {
             $query->whereIn('status', $request->status);
+        }
+        if ($request->filled('date_from')) $query->whereDate('created_at', '>=', $request->date('date_from'));
+        if ($request->filled('date_to'))   $query->whereDate('created_at', '<=', $request->date('date_to'));
+        // A request only has a type once a project is registered from it.
+        if (in_array($request->project_type, ['major', 'minor'], true)) {
+            $query->whereHas('project', fn ($project) => $project->where('project_type', $request->project_type));
         }
 
         return Inertia::render('requests/index', [
             'requests' => $query->paginate(15)->withQueryString()
                 ->through(fn (ProjectRequest $projectRequest) => $this->requestListData($projectRequest)),
-            'filters'  => $request->only(['search', 'job_type', 'job_location', 'costcode', 'status']),
+            'filters'  => $request->only(['search', 'job_type', 'job_location', 'costcode', 'status', 'date_from', 'date_to', 'project_type']),
+            'jobLocations' => JobLocation::where('is_active', true)->orderBy('name')->pluck('name'),
             'canCreate' => $user->can('create', ProjectRequest::class),
         ]);
     }

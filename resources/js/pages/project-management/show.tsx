@@ -4,7 +4,9 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import type { HubProject } from './hub/Common';
 import AcrHub from './hub/AcrHub';
 import AuditTrailHub from './hub/AuditTrailHub';
+import ContractHub from './hub/ContractHub';
 import EmsHub from './hub/EmsHub';
+import EmsRegisterHub from './hub/EmsRegisterHub';
 import IocHub from './hub/IocHub';
 import MomHub from './hub/MomHub';
 import MtrHub from './hub/MtrHub';
@@ -138,6 +140,7 @@ const OPS_MENU = [
     { key: 'rfq', label: 'Request for Quotations', short: 'RFQ', action: 'Create RFQ Package', summary: 'Prepare quotation requests, contractor scopes, and bid comparison notes.' },
     { key: 'ntp', label: 'Notice to Proceed', short: 'NTP', action: 'Prepare NTP', summary: 'Track approval readiness, signatures, and notice issuance details.' },
     { key: 'signatories', label: 'NTP Signatories', short: 'SIG', action: 'Set Signatories', summary: 'See who signs each NTP step on this project, and name someone else where needed.' },
+    { key: 'contract', label: 'Project Contract', short: 'CON', action: 'Upload Contract', summary: 'Keep the approved project contract on file, as a PDF.' },
     { key: 'subprojects', label: 'Sub-Projects', short: 'SUB', action: 'Add Sub-Project', summary: 'Split the project into parts that are planned, procured and billed on their own.' },
     { key: 'permits', label: 'Permits', short: 'PER', action: 'Add Permit', summary: 'Monitor required permits, filing dates, and release status.' },
     { key: 'vof', label: 'Variation Order Form', short: 'VOF', action: 'Create Variation', summary: 'Log scope changes, cost movement, and approval remarks.' },
@@ -149,7 +152,8 @@ const OPS_MENU = [
     { key: 'psr', label: 'Project Status Report', short: 'PSR', action: 'Create Status Report', summary: 'Summarize progress, blockers, photos, milestones, and next actions.' },
     { key: 'mom',    label: 'Minutes of the Meeting', short: 'MOM', action: 'Add Minutes', summary: 'Keep the minutes of each project meeting, filed by meeting date.' },
     { key: 'photos', label: 'Photos',                 short: 'PHO', action: 'Upload Photos', summary: 'Site photos grouped by date, viewed as a gallery.' },
-    { key: 'ems',    label: 'EMS Survey Report',      short: 'EMS', action: 'New EMS Survey Report', summary: 'Environmental Impact Assessment, filled out by MEPEO and signed off by MEPEO and PMD.' },
+    { key: 'ems',    label: 'Environment Survey Report', short: 'EMS', action: 'New Environment Survey Report', summary: 'Environmental Impact Assessment, filled out by MEPEO and signed off by MEPEO and PMD.' },
+    { key: 'ems-register', label: 'EMS Register',     short: 'EMR', action: 'Upload File', summary: 'File the project’s environmental documents, each with a short description.' },
     { key: 'at',   label: 'Project Audit Trail', short: 'AT',  action: 'View Audit Trail',   summary: 'Review project events, status changes, and user activity history.' },
     { key: 'todo', label: 'Todo List',           short: 'TODO', action: 'Add Task',           summary: 'Track project tasks with target dates and completion status.' },
 ];
@@ -173,6 +177,7 @@ function renderHubSection(
         case 'rfq':     return <RfqHub     project={hubProject} rfqs={hubData.rfqs ?? []} suppliers={hubData.suppliers ?? []} canEdit={canEdit} />;
         case 'ntp':     return <NtpHub     project={hubProject} ntps={hubData.ntps ?? []} canEdit={canEdit} />;
         case 'signatories': return <NtpSignatoriesHub project={hubProject} steps={hubData.steps ?? []} canEdit={canEdit} />;
+        case 'contract': return <ContractHub project={hubProject} contracts={hubData.contracts ?? []} canEdit={canEdit} />;
         case 'subprojects': return <SubProjectsHub
             project={hubProject}
             subprojects={hubData.subprojects ?? []}
@@ -199,6 +204,7 @@ function renderHubSection(
             defaults={hubData.defaults ?? {}}
             canManage={!!hubData.can_manage}
         />;
+        case 'ems-register': return <EmsRegisterHub project={hubProject} entries={hubData.entries ?? []} canEdit={canEdit} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
         case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} canEdit={canEdit} />;
         default:        return <RfqHub     project={hubProject} rfqs={[]} canEdit={canEdit} />;

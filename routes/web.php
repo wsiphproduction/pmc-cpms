@@ -140,7 +140,7 @@ Route::middleware(['auth'])->group(function () {
     Route::post('projects/{project}/completion', [ProjectController::class, 'saveCompletion'])
         ->middleware('can:update,project')->name('projects.completion.save');
 
-    foreach (['rfq', 'ntp', 'signatories', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'ems', 'at', 'todo'] as $section) {
+    foreach (['rfq', 'ntp', 'signatories', 'contract', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'ems', 'ems-register', 'at', 'todo'] as $section) {
         Route::get("projects/{project}/hub/{$section}", [ProjectController::class, 'hub'])
             ->defaults('section', $section)
             ->middleware('can:view,project')
@@ -195,6 +195,12 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('vof/{vof}/status',       [ProjectHubController::class, 'updateVofStatus'])->name('hub.vof.update-status');
         Route::delete('vof/{vof}',             [ProjectHubController::class, 'destroyVof'])->name('hub.vof.destroy');
         // Quality Docs
+        Route::post('contract',                [ProjectHubController::class, 'storeContract'])->name('hub.contract.store');
+        Route::delete('contract/{contract}',   [ProjectHubController::class, 'destroyContract'])->name('hub.contract.destroy');
+
+        Route::post('ems-register',            [ProjectHubController::class, 'storeEmsRegister'])->name('hub.ems-register.store');
+        Route::delete('ems-register/{entry}',  [ProjectHubController::class, 'destroyEmsRegister'])->name('hub.ems-register.destroy');
+
         Route::post('qpp',                     [ProjectHubController::class, 'storeQpp'])->name('hub.qpp.store');
         Route::delete('qpp/{qpp}',             [ProjectHubController::class, 'destroyQpp'])->name('hub.qpp.destroy');
         // MTR

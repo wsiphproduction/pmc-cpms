@@ -20,6 +20,7 @@ class Hub
                             ['RFQ', 'Request for Quotations', 'Quotation requests sent to contractors, and the offers that came back.'],
                             ['NTP', 'Notice to Proceed', 'The notices awarding work, and their five-office approval chain.'],
                             ['SIG', 'NTP Signatories', 'Who signs each NTP step on this project, where it is not the default.'],
+                            ['CON', 'Project Contract', 'The approved project contract, as a PDF.'],
                             ['SUB', 'Sub-Projects', 'Parts of the project planned, procured and billed on their own.'],
                             ['PER', 'Permits', 'Permits the work needs, with the documents behind them.'],
                             ['VOF', 'Variation Order Form', 'Changes to scope, schedule and cost after award.'],
@@ -31,6 +32,8 @@ class Hub
                             ['PSR', 'Project Status Report', 'Weekly progress, site checklist, issues and action plans.'],
                             ['MOM', 'Minutes of the Meeting', 'The minutes of each project meeting, filed by meeting date.'],
                             ['PHO', 'Photos', 'Site photos grouped by date, viewed as a gallery.'],
+                            ['EMS', 'Environment Survey Report', 'The Environmental Impact Assessment, filled out by MEPEO and signed off by MEPEO and PMD.'],
+                            ['EMR', 'EMS Register', 'Environmental documents filed with a description.'],
                             ['AT', 'Project Audit Trail', 'Everything that has happened on the project.'],
                             ['TODO', 'Todo List', 'Project tasks with target dates.'],
                         ],
@@ -278,6 +281,33 @@ class Hub
                 ],
             ],
 
+            'hub-contract' => [
+                'title' => 'CON — Project Contract',
+                'blocks' => [
+                    ['path', 'Open a project > Project Contract'],
+                    ['p', 'The approved project contract, kept on file with the project.'],
+                    ['ol', [
+                        'Give it a label, such as Approved Project Contract.',
+                        'Attach the contract. It must be a PDF, up to 20 MB.',
+                        'Click Upload File.',
+                    ]],
+                    ['p', 'If the contract is amended, replace the file on the existing row so its history stays in one place.'],
+                ],
+            ],
+
+            'hub-ems-register' => [
+                'title' => 'EMR — EMS Register',
+                'blocks' => [
+                    ['path', 'Open a project > EMS Register'],
+                    ['p', 'A place to file the project’s environmental documents. There are no document types: each file just carries a description.'],
+                    ['ol', [
+                        'Describe the file.',
+                        'Attach it, up to 20 MB.',
+                        'Click Upload File.',
+                    ]],
+                ],
+            ],
+
             'hub-mtr' => [
                 'title' => 'MTR — Materials Test Reports',
                 'blocks' => [
@@ -412,9 +442,9 @@ class Hub
             ],
 
             'hub-ems' => [
-                'title' => 'EMS — EMS Survey Report',
+                'title' => 'EMS — Environment Survey Report',
                 'blocks' => [
-                    ['path', 'Open a project > EMS Survey Report'],
+                    ['path', 'Open a project > Environment Survey Report'],
                     ['p', 'The Environmental Impact Assessment (PMD-PRJ-FRM-19) for the work. The project engineer raises it, filling in as much as they know, MEPEO completes it, and it is signed off in this order:'],
                     ['ol', [
                         'MEPEO Representative — fills out the assessment and submits it (Inspected/Verified by).',
@@ -425,7 +455,7 @@ class Hub
                     ['h', 'Creating and sending one'],
                     ['p', 'Only the project engineer assigned to the project — the one who registered it, or the one named as its project manager — can create one, along with the Assistant Manager and the administrator. A project may have as many as it needs.'],
                     ['ol', [
-                        'Click New EMS Survey Report. The header starts from the project and its latest NTP: date requested, location, contractor and target dates. Correct any of them.',
+                        'Click New Environment Survey Report. The header starts from the project and its latest NTP: date requested, location, contractor and target dates. Correct any of them.',
                         'Below the header is the rest of the form, everything but the signatures: the Major Activities and Environmental Aspects to tick, the Other Scope of Work, Impacts and Mitigation, and MEPEO’s Status and Remarks. Fill in whatever you already know, or leave it all for MEPEO.',
                         'Under Supporting Documents, click Add files to attach plans, photos or other papers (PDF, images, Word, Excel or PowerPoint, up to 20 MB each). Add as many as you need.',
                         'Click Create Report.',
@@ -435,14 +465,14 @@ class Hub
                     ['h', 'Following it'],
                     ['p', 'The Sign-off column shows where it is. You are notified at each signature, and when anyone returns it to MEPEO for revision. View shows the whole report; Print opens the filled-in FRM-19, stamped for every signature given so far.'],
                     ['h', 'Reviewing and noting it (PMD)'],
-                    ['p', 'Once the MEPEO Manager has approved it, the report reaches the PMD Assistant Manager, then the PMD Department Manager, in For Approval under EMS Survey Reports. Click the card to read the whole assessment, then Mark Reviewed (or Mark Noted), or Return to send it back to the representative with a reason. A returned report starts its sign-off again from the MEPEO Manager once it is resubmitted.'],
+                    ['p', 'Once the MEPEO Manager has approved it, the report reaches the PMD Assistant Manager, then the PMD Department Manager, in For Approval under Environment Survey Reports. Click the card to read the whole assessment, then Mark Reviewed (or Mark Noted), or Return to send it back to the representative with a reason. A returned report starts its sign-off again from the MEPEO Manager once it is resubmitted.'],
                 ],
             ],
 
             'mepeo' => [
-                'title' => 'The MEPEO Page — EMS Survey Reports',
+                'title' => 'The MEPEO Page — Environment Survey Reports',
                 'blocks' => [
-                    ['path', 'Top bar > EMS Survey Reports'],
+                    ['path', 'Top bar > Environment Survey Reports'],
                     ['p', 'The MEPEO roles see this page and nothing else of CPMS: it opens when you sign in, and the badge on the menu counts the reports waiting on you. You are notified in CPMS and by email whenever one comes to you.'],
                     ['ul', [
                         'To Fill Out (or Needs Your Action, for the MEPEO Manager) — reports waiting on you.',

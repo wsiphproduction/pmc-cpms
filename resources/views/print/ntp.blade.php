@@ -152,7 +152,7 @@
     </div>
     <div class="sig tight">
         @include('print.partials.signature', [
-            'role' => 'Noted by:', 'title' => 'ECS / Mines Division Manager',
+            'role' => 'Noted by:', 'title' => 'ECS Division Manager',
             'name' => $named['division_manager'] ?? '', 'approval' => $stamp('division_manager'),
         ])
         @include('print.partials.signature', [

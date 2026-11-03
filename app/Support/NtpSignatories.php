@@ -58,6 +58,8 @@ class NtpSignatories
     public static function defaultNames(Project $project, string $role): array
     {
         $onSite = $role === User::ROLE_DIVISION_MANAGER ? $project->siteManagers() : collect();
+        // Unlike User::role(), a role no one has been set up with yet is simply empty.
+        $holders = fn (string $name) => User::whereHas('roles', fn ($q) => $q->where('name', $name));
 
         $ids = match (true) {
             $onSite->isNotEmpty() => $onSite->pluck('id'),
@@ -65,8 +67,8 @@ class NtpSignatories
             $role === User::ROLE_REQUESTOR => collect([$project->projectRequest?->requester_id])
                 ->filter()
                 ->reject(fn ($id) => $project->projectRequest?->requester?->hasRole(User::ROLE_DEPT_SUPERVISOR))
-                ->merge(User::role(User::ROLE_REQUESTOR)->whereIn('id', $project->departmentAudience())->pluck('id')),
-            default => User::role($role)->pluck('id'),
+                ->merge($holders(User::ROLE_REQUESTOR)->whereIn('id', $project->departmentAudience())->pluck('id')),
+            default => $holders($role)->pluck('id'),
         };
 
         return User::whereIn('id', $ids)->orderBy('name')->pluck('name')->all();

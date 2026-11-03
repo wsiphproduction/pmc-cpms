@@ -305,7 +305,7 @@ class ApprovalController extends Controller
                         default                            => 'Request',
                     },
                     'label'    => match (true) {
-                        $record instanceof ProjectNtp      => $record->ntp_no . ' — ' . $record->contractor_name,
+                        $record instanceof ProjectNtp      => $record->ntp_no . ' — ' . $record->project?->title . ' · ' . $record->contractor_name,
                         $record instanceof EmsSurveyReport => $record->control_no . ' — ' . $record->project?->title,
                         default                            => $record?->request_no . ' — ' . $record?->title,
                     },

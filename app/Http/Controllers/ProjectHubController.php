@@ -8,6 +8,8 @@ use App\Models\AuditTrail;
 use Illuminate\Support\Facades\Mail;
 use App\Models\Project;
 use App\Models\ProjectBilling;
+use App\Models\ProjectContract;
+use App\Models\ProjectEmsRegisterEntry;
 use App\Models\ProjectIocItem;
 use App\Models\ProjectMeetingMinute;
 use App\Models\ProjectMtrDoc;
@@ -979,6 +981,92 @@ class ProjectHubController extends Controller
         $qpp->delete();
 
         return back()->with('success', 'Document deleted.');
+    }
+
+    // ── Project Contract ──────────────────────────────────────────────────────
+
+    public function storeContract(Request $request, Project $project): RedirectResponse
+    {
+        $data = $request->validate([
+            'label' => ['required', 'string', 'max:255'],
+            'file'  => ['required', 'file', 'mimes:pdf', 'max:20480'],
+        ], [
+            'file.mimes' => 'The contract must be a PDF file.',
+        ]);
+
+        $file = $request->file('file');
+        $path = $file->store("hub/contract/{$project->id}", 'public');
+
+        $contract = $project->contracts()->create([
+            'label'      => $data['label'],
+            'file_path'  => $path,
+            'filename'   => $file->getClientOriginalName(),
+            'created_by' => auth()->id(),
+        ]);
+
+        $contract->recordFileVersion(
+            $path,
+            $file->getClientOriginalName(),
+            mimeType: $file->getMimeType(),
+            size: $file->getSize(),
+        );
+
+        AuditTrail::log("Project contract uploaded: {$data['label']}", $project, ['module' => 'Contract', 'type' => 'upload']);
+
+        return back()->with('success', 'Project contract uploaded.');
+    }
+
+    public function destroyContract(Project $project, ProjectContract $contract): RedirectResponse
+    {
+        abort_unless((int) $contract->project_id === (int) $project->id, 403);
+
+        AuditTrail::log("Project contract deleted: {$contract->label}", $project, ['module' => 'Contract', 'type' => 'delete']);
+        Storage::disk('public')->delete($contract->file_path);
+        $contract->delete();
+
+        return back()->with('success', 'Contract deleted.');
+    }
+
+    // ── EMS Register ──────────────────────────────────────────────────────────
+
+    public function storeEmsRegister(Request $request, Project $project): RedirectResponse
+    {
+        $data = $request->validate([
+            'description' => ['required', 'string', 'max:1000'],
+            'file'        => ['required', 'file', 'max:20480'],
+        ]);
+
+        $file = $request->file('file');
+        $path = $file->store("hub/ems-register/{$project->id}", 'public');
+
+        $entry = $project->emsRegisterEntries()->create([
+            'description' => $data['description'],
+            'file_path'   => $path,
+            'filename'    => $file->getClientOriginalName(),
+            'created_by'  => auth()->id(),
+        ]);
+
+        $entry->recordFileVersion(
+            $path,
+            $file->getClientOriginalName(),
+            mimeType: $file->getMimeType(),
+            size: $file->getSize(),
+        );
+
+        AuditTrail::log("EMS Register file uploaded: {$file->getClientOriginalName()}", $project, ['module' => 'EMS Register', 'type' => 'upload']);
+
+        return back()->with('success', 'File added to the EMS Register.');
+    }
+
+    public function destroyEmsRegister(Project $project, ProjectEmsRegisterEntry $entry): RedirectResponse
+    {
+        abort_unless((int) $entry->project_id === (int) $project->id, 403);
+
+        AuditTrail::log("EMS Register file deleted: {$entry->filename}", $project, ['module' => 'EMS Register', 'type' => 'delete']);
+        Storage::disk('public')->delete($entry->file_path);
+        $entry->delete();
+
+        return back()->with('success', 'File deleted.');
     }
 
     // ── MTR Docs ──────────────────────────────────────────────────────────────

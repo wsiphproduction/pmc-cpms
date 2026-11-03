@@ -232,6 +232,16 @@ class Project extends Model
         return $this->hasMany(ProjectQualityDoc::class)->latest();
     }
 
+    public function contracts(): HasMany
+    {
+        return $this->hasMany(ProjectContract::class)->latest();
+    }
+
+    public function emsRegisterEntries(): HasMany
+    {
+        return $this->hasMany(ProjectEmsRegisterEntry::class)->latest();
+    }
+
     public function mtrDocs(): HasMany
     {
         return $this->hasMany(ProjectMtrDoc::class)->latest();
@@ -549,18 +559,11 @@ class Project extends Model
 
     /**
      * The division manager users waiting on this project's last NTP
-     * signature. A manager who has taken the project's site signs for it,
-     * whichever division owns the work; on any other site it falls to the
-     * manager users of the owning department's division.
+     * signature: the manager users of the owning department's division,
+     * whatever site the work is on.
      */
     public function divisionAudience(): Collection
     {
-        $onSite = $this->siteManagers();
-
-        if ($onSite->isNotEmpty()) {
-            return $onSite->pluck('id')->map(fn ($id) => (int) $id)->values();
-        }
-
         $division = $this->owningDivision();
 
         if (blank($division)) {
@@ -576,9 +579,9 @@ class Project extends Model
 
     /**
      * The division manager users who have taken this project's site. They
-     * sign both division steps of its NTPs: the Division Manager's in place of
-     * the office holder, and the last one in place of the owning division's.
-     * Empty on a site nobody has taken.
+     * sign the Division Manager's step of its NTPs in place of the office
+     * holder; the last step stays with the owning division. Empty on a site
+     * nobody has taken.
      */
     public function siteManagers(): Collection
     {

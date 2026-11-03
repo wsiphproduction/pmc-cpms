@@ -14,7 +14,7 @@ use Inertia\Response;
 
 /**
  * The MEPEO page — the only part of the system the environmental office
- * sees. A representative fills in the EMS Survey Reports sent to them; the
+ * sees. A representative fills in the Environment Survey Reports sent to them; the
  * MEPEO Manager approves what the representatives submit.
  */
 class MepeoController extends Controller
@@ -82,7 +82,7 @@ class MepeoController extends Controller
         $this->flow->submit($report, $user);
 
         return redirect()->route('mepeo.index')
-            ->with('success', "EMS Survey Report {$report->control_no} submitted to the MEPEO Manager.");
+            ->with('success', "Environment Survey Report {$report->control_no} submitted to the MEPEO Manager.");
     }
 
     /**

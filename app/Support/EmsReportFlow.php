@@ -10,7 +10,7 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 
 /**
- * Moves an EMS Survey Report from the engineer to MEPEO and up its sign-off
+ * Moves an Environment Survey Report from the engineer to MEPEO and up its sign-off
  * chain, and tells each person along the way. The MEPEO Manager signs from the
  * MEPEO page and the PMD managers from For Approval, so the rules live here
  * rather than in either controller.
@@ -28,12 +28,12 @@ class EmsReportFlow
 
         $project = $report->project;
 
-        AuditTrail::log("EMS Survey Report {$report->control_no} sent to {$rep->name} (MEPEO)", $project, ['module' => 'EMS', 'type' => 'update']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} sent to {$rep->name} (MEPEO)", $project, ['module' => 'EMS', 'type' => 'update']);
 
         Notification::notifyAboutEmsReport(
             $report,
             $rep->id,
-            "EMS Survey Report {$report->control_no} for project {$project->project_no} was sent to you to fill out.",
+            "Environment Survey Report {$report->control_no} for project {$project->project_no} was sent to you to fill out.",
             $this->mepeoLink($report),
             $mail
         );
@@ -58,15 +58,15 @@ class EmsReportFlow
 
         $project = $report->project;
 
-        AuditTrail::log("EMS Survey Report {$report->control_no} filled out and submitted by {$rep->name} (MEPEO)", $project, ['module' => 'EMS', 'type' => 'update']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} filled out and submitted by {$rep->name} (MEPEO)", $project, ['module' => 'EMS', 'type' => 'update']);
 
-        $this->notifyCurrentSigner($report, "EMS Survey Report {$report->control_no} for project {$project->project_no} is awaiting your approval.");
+        $this->notifyCurrentSigner($report, "Environment Survey Report {$report->control_no} for project {$project->project_no} is awaiting your approval.");
 
         if ($report->created_by) {
             Notification::notifyAboutEmsReport(
                 $report,
                 $report->created_by,
-                "EMS Survey Report {$report->control_no} was filled out by {$rep->name} (MEPEO) and is now with the MEPEO Manager.",
+                "Environment Survey Report {$report->control_no} was filled out by {$rep->name} (MEPEO) and is now with the MEPEO Manager.",
                 $this->hubLink($report)
             );
         }
@@ -84,12 +84,12 @@ class EmsReportFlow
         $label = $step->officeLabel();
         $project = $report->project;
 
-        AuditTrail::log("EMS Survey Report {$report->control_no} {$verb} by the {$label}", $project, ['module' => 'EMS', 'type' => 'update']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} {$verb} by the {$label}", $project, ['module' => 'EMS', 'type' => 'update']);
 
         if ($report->approvalChainComplete()) {
             $report->update(['status' => EmsSurveyReport::STATUS_APPROVED]);
 
-            $message = "EMS Survey Report {$report->control_no} for project {$project->project_no} completed its sign-off.";
+            $message = "Environment Survey Report {$report->control_no} for project {$project->project_no} completed its sign-off.";
 
             if ($report->created_by) {
                 Notification::notifyAboutEmsReport($report, $report->created_by, $message, $this->hubLink($report));
@@ -102,13 +102,13 @@ class EmsReportFlow
             return true;
         }
 
-        $this->notifyCurrentSigner($report, "EMS Survey Report {$report->control_no} for project {$project->project_no} is awaiting your signature.");
+        $this->notifyCurrentSigner($report, "Environment Survey Report {$report->control_no} for project {$project->project_no} is awaiting your signature.");
 
         if ($report->created_by) {
             Notification::notifyAboutEmsReport(
                 $report,
                 $report->created_by,
-                "EMS Survey Report {$report->control_no} was {$verb} by the {$label} and is now with the "
+                "Environment Survey Report {$report->control_no} was {$verb} by the {$label} and is now with the "
                     . User::roleLabel($report->currentApprovalRole()) . '.',
                 $this->hubLink($report)
             );
@@ -136,7 +136,7 @@ class EmsReportFlow
             'return_remarks' => $remarks,
         ]);
 
-        AuditTrail::log("EMS Survey Report {$report->control_no} returned to MEPEO by the {$label}", $project, ['module' => 'EMS', 'type' => 'update']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} returned to MEPEO by the {$label}", $project, ['module' => 'EMS', 'type' => 'update']);
 
         $reason = $remarks ? " Reason: {$remarks}" : '';
 
@@ -144,7 +144,7 @@ class EmsReportFlow
             Notification::notifyAboutEmsReport(
                 $report,
                 $report->mepeo_rep_id,
-                "EMS Survey Report {$report->control_no} was returned to you by the {$label} for revision.{$reason}",
+                "Environment Survey Report {$report->control_no} was returned to you by the {$label} for revision.{$reason}",
                 $this->mepeoLink($report)
             );
         }
@@ -153,7 +153,7 @@ class EmsReportFlow
             Notification::notifyAboutEmsReport(
                 $report,
                 $report->created_by,
-                "EMS Survey Report {$report->control_no} was returned to MEPEO by the {$label} for revision.{$reason}",
+                "Environment Survey Report {$report->control_no} was returned to MEPEO by the {$label} for revision.{$reason}",
                 $this->hubLink($report)
             );
         }

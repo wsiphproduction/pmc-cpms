@@ -132,7 +132,8 @@ it('searches every past decision, not only the latest', function () {
         ->assertOk()
         ->inertiaPage()['props']['history']);
 
-    expect($history('acme')->pluck('label'))->toContain("{$this->ntp->ntp_no} — Acme Builders")
+    // The label names the project too, so the approver can tell NTPs apart.
+    expect($history('acme')->pluck('label'))->toContain("{$this->ntp->ntp_no} — {$this->ntp->project->title} · Acme Builders")
         ->and($history('reminder test project'))->toHaveCount(1)
         ->and($history($this->ntp->ntp_no))->toHaveCount(1)
         ->and($history('no such contractor'))->toHaveCount(0);

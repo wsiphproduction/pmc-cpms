@@ -51,7 +51,7 @@ interface Props {
     role_label: string;
     requests: RequestRow[];
     ntps: NtpReview[];
-    /** EMS Survey Reports at the PMD Assistant Manager's review or the Department Manager's note. */
+    /** Environment Survey Reports at the PMD Assistant Manager's review or the Department Manager's note. */
     ems_reports: EmsReportRow[];
     ems_options: EmsOptions;
     history: HistoryRow[];
@@ -217,7 +217,7 @@ function RequestCard({ row, onApprove, onReject }: {
     );
 }
 
-// ── EMS Survey Report card ───────────────────────────────────────────────────
+// ── Environment Survey Report card ───────────────────────────────────────────────────
 function EmsCard({ row, options, onSign, onReturn }: {
     row: EmsReportRow;
     options: EmsOptions;
@@ -244,7 +244,7 @@ function EmsCard({ row, options, onSign, onReturn }: {
                     <div style={{ minWidth: 0 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
                             <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>{row.control_no}</span>
-                            <span style={{ padding: '2px 10px', borderRadius: '999px', background: '#dcfce7', color: '#166534', fontSize: '11px', fontWeight: 700 }}>EMS Survey Report</span>
+                            <span style={{ padding: '2px 10px', borderRadius: '999px', background: '#dcfce7', color: '#166534', fontSize: '11px', fontWeight: 700 }}>Environment Survey Report</span>
                             <span style={{ padding: '2px 10px', borderRadius: '999px', background: '#fef3c7', color: '#92400e', fontSize: '11px', fontWeight: 700 }}>Awaiting You</span>
                         </div>
                         <div style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>{row.project.project_no} — {row.project.title}</div>
@@ -337,7 +337,7 @@ export default function ApprovalsIndex({ role, role_label, requests: allRequests
     const tabs: { key: TabKey; label: string; count: number }[] = [
         ...(shows_requests ? [{ key: 'requests' as TabKey, label: 'Requests', count: requests.length }] : []),
         { key: 'ntps', label: 'NTPs', count: ntps.length },
-        { key: 'ems', label: 'EMS Survey Reports', count: emsReports.length },
+        { key: 'ems', label: 'Environment Survey Reports', count: emsReports.length },
         { key: 'history', label: 'My Decisions', count: history.length },
     ];
 
@@ -503,7 +503,7 @@ export default function ApprovalsIndex({ role, role_label, requests: allRequests
                 emsReports.length === 0
                     ? (query
                         ? emptyState('🔍', 'No matching reports', `Nothing in your EMS queue matches “${search.trim()}”.`)
-                        : emptyState('🌿', 'No EMS Survey Reports awaiting you', 'Reports reach you once MEPEO has filled them out and the MEPEO Manager has approved them.'))
+                        : emptyState('🌿', 'No Environment Survey Reports awaiting you', 'Reports reach you once MEPEO has filled them out and the MEPEO Manager has approved them.'))
                     : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                             {emsReports.map(row => (

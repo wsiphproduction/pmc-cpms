@@ -52,6 +52,8 @@ const MODULE_COLORS: Record<string, [string, string]> = {
     'PSR':     ['#f0fdf4', '#15803d'],
     'MOM':     ['#f0fdfa', '#0d9488'],
     'Photos':  ['#f5f3ff', '#7c3aed'],
+    'Contract':     ['#f5f3ff', '#7c3aed'],
+    'EMS Register': ['#f0fdf4', '#16a34a'],
     'Project': ['#f8fafc', '#475569'],
 };
 

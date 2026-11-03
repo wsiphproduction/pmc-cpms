@@ -13,7 +13,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Str;
 
 /**
- * The mailed copy of an EMS Survey Report notification — sent to MEPEO,
+ * The mailed copy of an Environment Survey Report notification — sent to MEPEO,
  * submitted, approved, reviewed, noted, returned. MEPEO seldom sits in the
  * system, so the bell alone could leave a report waiting unseen.
  */
@@ -44,7 +44,7 @@ class EmsReportActivity extends Mailable implements ShouldQueue
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: Str::limit("EMS Survey Report {$this->report->control_no} – {$this->report->project?->project_no}: {$this->headline}", 180),
+            subject: Str::limit("Environment Survey Report {$this->report->control_no} – {$this->report->project?->project_no}: {$this->headline}", 180),
         );
     }
 

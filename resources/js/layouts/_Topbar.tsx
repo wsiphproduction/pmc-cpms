@@ -249,13 +249,13 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     // Project engineers ("approver") own the weekly status; assistant managers
     // cover for them and admins administer, matching the project-update policy.
     const canSubmitWeeklyStatus = isAdmin || ['approver', 'assistant_manager'].includes(role ?? '');
-    // The environmental office sees its EMS Survey Reports and nothing else;
+    // The environmental office sees its Environment Survey Reports and nothing else;
     // the server keeps them off every other page too (RestrictMepeoUsers).
     const isMepeo = ['mepeo_rep', 'mepeo_manager'].includes(role ?? '');
     const homeHref = isMepeo ? route('mepeo.index') : route('dashboard');
 
     const mepeoNav: NavItem[] = [{
-        label: 'EMS Survey Reports',
+        label: 'Environment Survey Reports',
         href: route('mepeo.index'),
         badge: props.mepeo_count ?? 0,
         icon: (

@@ -60,6 +60,8 @@ interface AdvancedFilters {
     work_force?: string;
     structure_type?: string;
     engineer?: string;
+    date_from?: string;
+    date_to?: string;
     jip?: boolean;
     need_civil?: boolean;
     need_electrical?: boolean;
@@ -216,6 +218,8 @@ function AdvancedFilterModal({
         work_force:        filters.work_force ?? '',
         structure_type:    filters.structure_type ?? '',
         engineer:          filters.engineer ?? '',
+        date_from:         filters.date_from ?? '',
+        date_to:           filters.date_to ?? '',
         jip:            filters.jip ?? false,
         need_civil:        filters.need_civil ?? false,
         need_electrical:   filters.need_electrical ?? false,
@@ -239,6 +243,7 @@ function AdvancedFilterModal({
         site: '', asset_id: '', cls: '', priority_no: '', status: '', wr_no: '',
         wr_date_received: '', dept_owner: '', cost_code: '', category: '',
         service_type: '', work_force: '', structure_type: '', engineer: '',
+        date_from: '', date_to: '',
         jip: false, need_civil: false, need_electrical: false, need_mechanical: false,
     });
 
@@ -383,6 +388,14 @@ function AdvancedFilterModal({
                                 <option value="">All Engineers</option>
                                 {engineers.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
                             </select>
+                        </div>
+                        <div>
+                            <label style={labelStyle}>Date From</label>
+                            <input type="date" value={form.date_from} max={form.date_to || undefined} onChange={e => set('date_from', e.target.value)} style={inputStyle} />
+                        </div>
+                        <div>
+                            <label style={labelStyle}>Date To</label>
+                            <input type="date" value={form.date_to} min={form.date_from || undefined} onChange={e => set('date_to', e.target.value)} style={inputStyle} />
                         </div>
                     </div>
 
