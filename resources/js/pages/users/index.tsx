@@ -326,16 +326,19 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
     // One person may have an account per role under the same email.
     const sameEmailUsers = users.filter(u => addForm.email.trim() !== '' && u.email.toLowerCase() === addForm.email.trim().toLowerCase());
 
-    const filtered = users.filter(u => {
-        const q = search.toLowerCase();
-        return (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
-            && (!filterRole || u.role === filterRole);
-    });
+    // Everything the table shows can be searched, the role by the label on its badge.
+    const q = search.trim().toLowerCase();
+    const matchesSearch = (values: (string | null | undefined)[]) =>
+        !q || values.some(value => value?.toLowerCase().includes(q));
 
-    const filteredTrashed = trashedUsers.filter(u => {
-        const q = search.toLowerCase();
-        return !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-    });
+    const filtered = users.filter(u =>
+        matchesSearch([u.name, u.email, u.role && roleLabel(u.role), u.department, u.division, ...(u.sites ?? [])])
+        && (!filterRole || u.role === filterRole)
+    );
+
+    const filteredTrashed = trashedUsers.filter(u =>
+        matchesSearch([u.name, u.email, u.role && roleLabel(u.role)])
+    );
 
     // Back to page 1 whenever the visible list changes shape.
     const [page, setPage] = useState(1);
@@ -511,7 +514,8 @@ export default function UsersIndex({ users, trashedUsers, roles, departments, di
                                 type="text"
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                placeholder="Search name or email…"
+                                placeholder="Search users…"
+                                title={tab === 'active' ? 'Searches name, email, role, department, division and sites' : 'Searches name, email and role'}
                                 style={{ border: 'none', background: 'transparent', outline: 'none', fontSize: '13px', color: '#374151', width: '100%', fontFamily: 'inherit' }}
                             />
                             {search && (
