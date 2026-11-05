@@ -333,11 +333,16 @@ function RecordModal({
         };
 
         if (isEdit) {
+            // preserveState keeps the list's search and page once the row is saved.
             router.put(route(`${base}.update`, item!.id), data, {
+                preserveState: true,
+                preserveScroll: true,
                 onFinish: () => { setSubmitting(false); onClose(); },
             });
         } else {
             router.post(route(`${base}.store`), data, {
+                preserveState: true,
+                preserveScroll: true,
                 onFinish: () => { setSubmitting(false); onClose(); },
             });
         }
@@ -532,6 +537,33 @@ function TablePagination({ page, totalPages, count, onPage }: { page: number; to
     );
 }
 
+// ── Search Box ─────────────────────────────────────────────────────────────
+function SearchBox({ value, onChange, label, dimmed = false }: {
+    value: string;
+    onChange: (value: string) => void;
+    /** What is being searched, lower-case: "job types". */
+    label: string;
+    dimmed?: boolean;
+}) {
+    return (
+        <div style={{ position: 'relative' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input
+                type="search"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={`Search ${label}…`}
+                aria-label={`Search ${label}`}
+                style={{ width: '240px', padding: '7px 10px 7px 30px', borderRadius: '7px', border: '1px solid #e2e8f0', fontSize: '12.5px', color: '#0f172a', outline: 'none', fontFamily: 'inherit', opacity: dimmed ? 0.7 : 1 }}
+            />
+        </div>
+    );
+}
+
+/** Whether any of the row's values contains the lower-cased needle. */
+const matchesSearch = (values: (string | number | null | undefined)[], needle: string) =>
+    values.some(value => value != null && String(value).toLowerCase().includes(needle));
+
 // ── Tab Table ──────────────────────────────────────────────────────────────
 function TabTable({
     tab, items, onAdd, onEdit, onToggle, remote,
@@ -556,19 +588,26 @@ function TabTable({
                 ? ['#', 'Name / Label', 'Division', 'Description', 'Created At', 'Actions']
                 : ['#', 'Name / Label', 'Description', 'Created At', 'Actions'];
 
+    // The search box is local so typing stays responsive. A list shipped whole
+    // is filtered right here; for a remote one the server is only asked once
+    // the user pauses.
+    const [searchInput, setSearchInput] = useState(remote?.search ?? '');
+    const activeSearch = remote ? remote.search : searchInput.trim();
+    const needle = remote ? '' : activeSearch.toLowerCase();
+    const shown = needle
+        ? items.filter(item => matchesSearch([item.name, item.description, item.division, item.sequence_no], needle))
+        : items;
+
     const [page, setPage] = useState(1);
-    const localTotalPages = Math.max(1, Math.ceil(items.length / PER_PAGE));
+    const localTotalPages = Math.max(1, Math.ceil(shown.length / PER_PAGE));
     const localPage = Math.min(page, localTotalPages);
-    const paginated = remote ? items : items.slice((localPage - 1) * PER_PAGE, localPage * PER_PAGE);
+    const paginated = remote ? shown : shown.slice((localPage - 1) * PER_PAGE, localPage * PER_PAGE);
     const paging = remote
         ? { page: remote.page, totalPages: remote.totalPages, count: remote.count, onPage: remote.onPage }
-        : { page: localPage, totalPages: localTotalPages, count: items.length, onPage: setPage };
+        : { page: localPage, totalPages: localTotalPages, count: shown.length, onPage: setPage };
     // Row numbers continue across pages either way.
     const rowOffset = (paging.page - 1) * PER_PAGE;
 
-    // The search box is local so typing stays responsive; the server is only
-    // asked once the user pauses.
-    const [searchInput, setSearchInput] = useState(remote?.search ?? '');
     const onSearch = remote?.onSearch;
     const appliedSearch = remote?.search ?? '';
     useEffect(() => {
@@ -600,22 +639,15 @@ function TabTable({
             <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: '13px', color: '#64748b' }}>
                     <strong style={{ color: '#0f172a' }}>{paging.count}</strong> {paging.count === 1 ? 'entry' : 'entries'}
-                    {remote?.search && <span style={{ color: '#94a3b8' }}> matching “{remote.search}”</span>}
+                    {activeSearch && <span style={{ color: '#94a3b8' }}> matching “{activeSearch}”</span>}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {remote && (
-                        <div style={{ position: 'relative' }}>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', pointerEvents: 'none' }}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                            <input
-                                type="search"
-                                value={searchInput}
-                                onChange={e => setSearchInput(e.target.value)}
-                                placeholder={`Search ${config.label.toLowerCase()}…`}
-                                aria-label={`Search ${config.label.toLowerCase()}`}
-                                style={{ width: '240px', padding: '7px 10px 7px 30px', borderRadius: '7px', border: '1px solid #e2e8f0', fontSize: '12.5px', color: '#0f172a', outline: 'none', fontFamily: 'inherit', opacity: remote.loading ? 0.7 : 1 }}
-                            />
-                        </div>
-                    )}
+                    <SearchBox
+                        value={searchInput}
+                        onChange={value => { setSearchInput(value); setPage(1); }}
+                        label={config.label.toLowerCase()}
+                        dimmed={remote?.loading}
+                    />
                     {isCostCode && (
                         <>
                             <input
@@ -661,7 +693,7 @@ function TabTable({
                         </tr>
                     </thead>
                     <tbody>
-                        {items.length === 0 ? (
+                        {shown.length === 0 ? (
                             <tr>
                                 <td colSpan={headers.length} style={{ padding: '48px', textAlign: 'center' }}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
@@ -669,8 +701,8 @@ function TabTable({
                                             {config.icon}
                                         </div>
                                         <span style={{ fontSize: '13px', color: '#94a3b8' }}>
-                                            {remote?.search
-                                                ? `No ${config.label.toLowerCase()} match “${remote.search}”.`
+                                            {activeSearch
+                                                ? `No ${config.label.toLowerCase()} match “${activeSearch}”.`
                                                 : `No ${config.label.toLowerCase()} yet. Add one to get started.`}
                                         </span>
                                     </div>
@@ -802,6 +834,8 @@ function SupplierModal({ supplier, onClose }: { supplier: Supplier | null; onClo
         // Close only on success: closing on finish swallowed validation errors,
         // so a rejected add looked like one that silently vanished.
         const opts = {
+            preserveState: true,
+            preserveScroll: true,
             onSuccess: onClose,
             onError:   (formErrors: Record<string, string>) => setErrors(formErrors),
             onFinish:  () => setSubmitting(false),
@@ -919,10 +953,17 @@ function SupplierTable({ suppliers, importedCount = 0, onAdd, onEdit, onToggle }
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [importing, setImporting] = useState(false);
     const [page, setPage] = useState(1);
+    const [searchInput, setSearchInput] = useState('');
 
-    const totalPages = Math.max(1, Math.ceil(suppliers.length / PER_PAGE));
+    const activeSearch = searchInput.trim();
+    const needle = activeSearch.toLowerCase();
+    const shown = needle
+        ? suppliers.filter(s => matchesSearch([s.company, s.email, s.telephone_no, s.mobile_no, s.added_by], needle))
+        : suppliers;
+
+    const totalPages = Math.max(1, Math.ceil(shown.length / PER_PAGE));
     const safePage = Math.min(page, totalPages);
-    const paginated = suppliers.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+    const paginated = shown.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
 
     const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -939,9 +980,10 @@ function SupplierTable({ suppliers, importedCount = 0, onAdd, onEdit, onToggle }
 
     return (
         <div>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                 <div style={{ fontSize: '13px', color: '#64748b' }}>
-                    <strong style={{ color: '#0f172a' }}>{suppliers.length}</strong> {suppliers.length === 1 ? 'entry' : 'entries'}
+                    <strong style={{ color: '#0f172a' }}>{shown.length}</strong> {shown.length === 1 ? 'entry' : 'entries'}
+                    {activeSearch && <span style={{ color: '#94a3b8' }}> matching “{activeSearch}”</span>}
                     {/* Everything outside this list is dormant: hidden here and
                         absent from the RFQ dropdown until someone adds it by
                         name, which promotes the existing row. */}
@@ -952,6 +994,7 @@ function SupplierTable({ suppliers, importedCount = 0, onAdd, onEdit, onToggle }
                     )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <SearchBox value={searchInput} onChange={value => { setSearchInput(value); setPage(1); }} label="suppliers" />
                     <input ref={fileInputRef} type="file" accept=".csv,text/csv" onChange={handleImport} style={{ display: 'none' }} />
                     <button onClick={() => fileInputRef.current?.click()} disabled={importing}
                         title="Import suppliers from a CSV file (columns: company, email, telephone_no, mobile_no)"
@@ -977,10 +1020,10 @@ function SupplierTable({ suppliers, importedCount = 0, onAdd, onEdit, onToggle }
                         </tr>
                     </thead>
                     <tbody>
-                        {suppliers.length === 0 ? (
+                        {shown.length === 0 ? (
                             <tr>
                                 <td colSpan={headers.length} style={{ padding: '48px', textAlign: 'center', fontSize: '13px', color: '#94a3b8' }}>
-                                    No suppliers added by PMD yet. Add one to get started.
+                                    {activeSearch ? `No suppliers match “${activeSearch}”.` : 'No suppliers added by PMD yet. Add one to get started.'}
                                 </td>
                             </tr>
                         ) : paginated.map((s, idx) => (
@@ -1008,7 +1051,7 @@ function SupplierTable({ suppliers, importedCount = 0, onAdd, onEdit, onToggle }
                 </table>
             </div>
 
-            <TablePagination page={safePage} totalPages={totalPages} count={suppliers.length} onPage={setPage} />
+            <TablePagination page={safePage} totalPages={totalPages} count={shown.length} onPage={setPage} />
         </div>
     );
 }
@@ -1043,9 +1086,9 @@ function CostCodeModal({ costCode, onClose }: { costCode: MasterItem | null; onC
             is_active: isActive,
         };
         if (isEdit) {
-            router.put(route('master.cost-codes.update', costCode!.id), data, { onFinish: () => { setSubmitting(false); onClose(); } });
+            router.put(route('master.cost-codes.update', costCode!.id), data, { preserveState: true, preserveScroll: true, onFinish: () => { setSubmitting(false); onClose(); } });
         } else {
-            router.post(route('master.cost-codes.store'), data, { onFinish: () => { setSubmitting(false); onClose(); } });
+            router.post(route('master.cost-codes.store'), data, { preserveState: true, preserveScroll: true, onFinish: () => { setSubmitting(false); onClose(); } });
         }
     };
 
@@ -1201,7 +1244,7 @@ export default function MasterData({
     // Flip active/inactive for any master record. `slug` is the route segment
     // (e.g. job-types, suppliers); the page reloads with the fresh flag.
     const toggleActive = (slug: string, id: number) => {
-        router.patch(route('master.toggle', [slug, id]), {}, { preserveScroll: true });
+        router.patch(route('master.toggle', [slug, id]), {}, { preserveState: true, preserveScroll: true });
     };
 
     // Cost codes are paged on the server, so only their page is in hand; the
