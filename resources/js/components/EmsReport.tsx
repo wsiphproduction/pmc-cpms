@@ -107,6 +107,7 @@ export function EmsSignModal({ report, mode, onClose }: { report: EmsReportRow; 
     const [saving, setSaving] = useState(false);
     const signing = mode === 'sign';
     const action = EMS_SIGN_LABELS[report.current_role ?? '']?.action ?? 'Approve';
+    const mepeoManager = signing && report.current_role === 'mepeo_manager';
 
     const submit = () => {
         if (!signing && remarks.trim() === '') { setError('Say what needs revising.'); return; }
@@ -136,7 +137,7 @@ export function EmsSignModal({ report, mode, onClose }: { report: EmsReportRow; 
                             : 'The representative revises it and submits again, which restarts the sign-off from the MEPEO Manager.'}
                     </p>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
-                        {signing ? 'Remarks (optional)' : 'What needs revising'}
+                        {mepeoManager ? 'Your comments (optional) — printed under Remarks/Comments' : signing ? 'Remarks (optional)' : 'What needs revising'}
                     </label>
                     <textarea
                         rows={4}
@@ -224,6 +225,7 @@ const col: React.CSSProperties = { display: 'flex', flexDirection: 'column', bor
 /** The assessment and MEPEO's finding, read-only, laid out like the paper form. */
 export function EmsReportSheet({ row, options }: { row: EmsReportRow; options: EmsOptions }) {
     const status = options.statuses.find(s => s.key === row.mepeo_status);
+    const managerRemarks = row.approvals.find(step => step.role === 'mepeo_manager' && step.status === 'approved')?.remarks;
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div style={frame}>
@@ -257,6 +259,11 @@ export function EmsReportSheet({ row, options }: { row: EmsReportRow; options: E
                 </div>
                 <div style={{ ...band, borderTop: '1px solid #e5e7eb' }}>Remarks/Comments</div>
                 <TextCell text={row.remarks} />
+                {managerRemarks && (
+                    <div style={{ padding: '0 12px 10px', fontSize: '12.5px', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                        <strong>MEPEO Manager:</strong> {managerRemarks}
+                    </div>
+                )}
             </div>
 
             <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
@@ -349,14 +356,16 @@ function CheckGroup({ options, value, onChange, other, onOther, error }: {
 
 /**
  * The checklists, write-ups and MEPEO's finding, laid out like the paper
- * form. `mepeoNote` heads MEPEO's part where someone else is filling it in.
+ * form. `mepeoNote` heads MEPEO's part where someone else is filling it in,
+ * and `hideRemarks` leaves out the Remarks/Comments that only MEPEO writes.
  */
-export function EmsBodyForm({ body, onChange, options, errors, mepeoNote }: {
+export function EmsBodyForm({ body, onChange, options, errors, mepeoNote, hideRemarks = false }: {
     body: EmsBody;
     onChange: <K extends keyof EmsBody>(key: K, value: EmsBody[K]) => void;
     options: EmsOptions;
     errors: Record<string, string>;
     mepeoNote?: string;
+    hideRemarks?: boolean;
 }) {
     const set = <K extends keyof EmsBody>(key: K) => (value: EmsBody[K]) => onChange(key, value);
     return (
@@ -410,8 +419,10 @@ export function EmsBodyForm({ body, onChange, options, errors, mepeoNote }: {
                         </label>
                     ))}
                     {errors.mepeo_status && <div style={{ ...fieldError, padding: '6px 12px' }}>{errors.mepeo_status}</div>}
-                    <div style={{ ...band, borderTop: '1px solid #e5e7eb' }}>Remarks/Comments</div>
-                    <textarea value={body.remarks} onChange={e => set('remarks')(e.target.value)} style={{ ...textarea, minHeight: '90px' }} />
+                    {!hideRemarks && <>
+                        <div style={{ ...band, borderTop: '1px solid #e5e7eb' }}>Remarks/Comments</div>
+                        <textarea value={body.remarks} onChange={e => set('remarks')(e.target.value)} style={{ ...textarea, minHeight: '90px' }} />
+                    </>}
                 </div>
             </div>
         </div>

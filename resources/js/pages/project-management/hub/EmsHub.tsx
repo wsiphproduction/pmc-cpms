@@ -129,7 +129,8 @@ function ReportModal({ project, report, options, defaults, onClose }: {
                     onChange={setBodyField}
                     options={options}
                     errors={errors}
-                    mepeoNote="To be filled-out by MEPEO — the representative may fill this in or change it."
+                    mepeoNote="To be filled-out by MEPEO — the representative may set or change the Status. Remarks/Comments are left for MEPEO to write."
+                    hideRemarks
                 />
             </div>
 
@@ -195,7 +196,7 @@ function SendModal({ project, report, reps, onClose }: {
                     </Field>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px', fontSize: '12.5px', color: '#334155', cursor: 'pointer' }}>
                         <input type="checkbox" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)} />
-                        Email them as well (they always get an in-app notification)
+                        Email them and the PMD managers as well (all get an in-app notification)
                     </label>
                     {error && <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '10px', fontWeight: 600 }}>{error}</div>}
                 </>

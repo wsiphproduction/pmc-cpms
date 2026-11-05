@@ -151,8 +151,8 @@ class EmsSurveyReportController extends Controller
     }
 
     /**
-     * Everything on the form but its signatures, and the supporting
-     * documents, all checked before any of it is saved.
+     * Everything on the form but its signatures and MEPEO's Remarks/Comments,
+     * and the supporting documents, all checked before any of it is saved.
      *
      * @return array{0: array, 1: array{files: array, removed: int[]}}
      */
@@ -161,6 +161,8 @@ class EmsSurveyReportController extends Controller
         $header = EmsReportInput::header($request);
         $body = EmsReportInput::body($request);
         $files = EmsReportInput::attachments($request);
+
+        unset($body['remarks']);
 
         return [[...$header, ...$body], $files];
     }

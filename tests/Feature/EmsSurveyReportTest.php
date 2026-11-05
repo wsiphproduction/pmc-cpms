@@ -177,6 +177,64 @@ it('can send by notification alone when the engineer unticks email', function ()
     Mail::assertNothingQueued();
 });
 
+it('tells the PMD managers by notification and email when the report first goes to MEPEO', function () {
+    $report = emsSentReport($this);
+
+    foreach ([$this->pmdAsst, $this->pmdDept] as $manager) {
+        $notice = Notification::where('recipient', $manager->id)->sole();
+        expect($notice->message)->toContain($report->control_no)->toContain($this->rep->name);
+
+        Mail::assertQueued(EmsReportActivity::class, fn ($mail) => $mail->hasTo($manager->email));
+
+        // The notice has to lead somewhere they can open, before it is theirs to sign.
+        $this->actingAs($manager)->get($notice->link)->assertOk();
+    }
+
+    // Handing it to another representative is not news to them.
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => emsUser(User::ROLE_MEPEO_REP)->id])
+        ->assertSessionHasNoErrors();
+
+    expect(Notification::where('recipient', $this->pmdAsst->id)->count())->toBe(1)
+        ->and(Notification::where('recipient', $this->pmdDept->id)->count())->toBe(1);
+});
+
+it('tells the PMD managers by notification alone when the engineer unticks email', function () {
+    $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), $this->header);
+
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ems.send', [$this->project, EmsSurveyReport::sole()]), ['mepeo_rep_id' => $this->rep->id, 'send_email' => false])
+        ->assertSessionHasNoErrors();
+
+    expect(Notification::where('recipient', $this->pmdAsst->id)->count())->toBe(1)
+        ->and(Notification::where('recipient', $this->pmdDept->id)->count())->toBe(1);
+    Mail::assertNothingQueued();
+});
+
+it('leaves the remarks to MEPEO, whatever the engineer sends', function () {
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ems.store', $this->project), [...$this->header, 'remarks' => 'Typed by the engineer.'])
+        ->assertSessionHasNoErrors();
+
+    $report = EmsSurveyReport::sole();
+    expect($report->remarks)->toBeNull();
+
+    $this->actingAs($this->engineer)->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->rep->id]);
+    $this->actingAs($this->rep)->patch(route('mepeo.reports.update', $report), emsBody(['remarks' => 'From the representative.']))
+        ->assertSessionHasNoErrors();
+
+    // An engineer's later edit neither writes over them nor clears them.
+    $this->actingAs($this->engineer)
+        ->patch(route('hub.ems.update', [$this->project, $report]), [...$this->header, 'remarks' => 'Typed by the engineer.'])
+        ->assertSessionHasNoErrors();
+    expect($report->fresh()->remarks)->toBe('From the representative.');
+
+    $this->actingAs($this->engineer)
+        ->patch(route('hub.ems.update', [$this->project, $report]), $this->header)
+        ->assertSessionHasNoErrors();
+    expect($report->fresh()->remarks)->toBe('From the representative.');
+});
+
 it('only sends to a MEPEO representative', function () {
     $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), $this->header);
     $report = EmsSurveyReport::sole();
@@ -406,6 +464,18 @@ it('deletes the documents with the report', function () {
 });
 
 // ── The printed form ─────────────────────────────────────────────────────────
+
+it('prints the MEPEO Manager\'s comments under Remarks/Comments, and not PMD\'s', function () {
+    $report = emsSubmittedReport($this);
+
+    $this->actingAs($this->mepeoManager)->patch(route('ems.approve', $report), ['remarks' => 'Keep the silt fence up.']);
+    $this->actingAs($this->pmdAsst)->patch(route('ems.approve', $report), ['remarks' => 'Reviewed without changes.']);
+
+    expect($this->actingAs($this->engineer)->get(route('ems.print', $report))->assertOk()->getContent())
+        ->toContain('Cleared.')
+        ->toContain('MEPEO Manager:</b> Keep the silt fence up.')
+        ->not->toContain('Reviewed without changes.');
+});
 
 it('prints FRM-19 with the ticks and the signatures given so far', function () {
     $report = emsSubmittedReport($this);

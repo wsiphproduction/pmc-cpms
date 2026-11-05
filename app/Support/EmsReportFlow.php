@@ -20,6 +20,9 @@ class EmsReportFlow
     /** The engineer hands the report to a MEPEO representative to fill in. */
     public function send(EmsSurveyReport $report, User $rep, bool $mail = true): void
     {
+        // Handing it to another representative later is not news to PMD.
+        $firstSend = $report->sent_at === null;
+
         $report->update([
             'status'       => EmsSurveyReport::STATUS_WITH_MEPEO,
             'mepeo_rep_id' => $rep->id,
@@ -37,6 +40,18 @@ class EmsReportFlow
             $this->mepeoLink($report),
             $mail
         );
+
+        if ($firstSend) {
+            // PMD signs last, so without this they would first hear of the
+            // report only once MEPEO has finished with it.
+            Notification::notifyAboutEmsReport(
+                $report,
+                $this->roleHolders(User::ROLE_PMD_ASST_MANAGER)->merge($this->roleHolders(User::ROLE_PMD_DEPT_MANAGER))->unique()->values(),
+                "Environment Survey Report {$report->control_no} for project {$project->project_no} was sent to {$rep->name} (MEPEO) to fill out. It comes to you to sign once the MEPEO Manager has approved it.",
+                $this->hubLink($report),
+                $mail
+            );
+        }
     }
 
     /**

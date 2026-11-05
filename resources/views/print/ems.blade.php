@@ -26,6 +26,9 @@
         ? ['actor' => $signed[$role]['actor'], 'date' => $signed[$role]['acted_at'], 'word' => $word]
         : null;
 
+    // What the MEPEO Manager wrote when approving, under the representative's remarks.
+    $managerRemarks = $signed->get('mepeo_manager')['remarks'] ?? null;
+
     // Sending it to MEPEO is the engineer's sign-off; submitting it back is
     // the representative's.
     $prepared = $report->sent_at
@@ -205,7 +208,7 @@
             </tr>
         @endforeach
         <tr><td class="band">Remarks/Comments</td></tr>
-        <tr><td class="txt" style="height:40px;">{{ $report->remarks }}</td></tr>
+        <tr><td class="txt" style="height:40px;">{{ $report->remarks }}@if (filled($managerRemarks))<div style="margin-top:4px;"><b>MEPEO Manager:</b> {{ $managerRemarks }}</div>@endif</td></tr>
     </table>
 
     <div class="sig two tight gap">
