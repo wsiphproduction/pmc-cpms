@@ -1438,6 +1438,7 @@ class ProjectController extends Controller
                 'remarks' => $log->remarks ?? '',
             ]),
             'completion'  => $this->completionData($project),
+            'schedule'    => $this->scheduleData($project),
             'signatories' => $this->signatoryData($project),
             // Sub-project links: the parent (if this is a sub-project) and any
             // children (if this is a parent). Hidden from the management list,
@@ -1458,6 +1459,32 @@ class ProjectController extends Controller
                 'update' => auth()->user()->can('update', $project),
                 'delete' => auth()->user()->can('delete', $project),
             ],
+        ];
+    }
+
+    /**
+     * Duration and actual dates for the project overview, at a glance.
+     *
+     * The duration is the one quoted on the RFQ behind the latest live NTP —
+     * the contract the work runs to — or else the newest RFQ that names one.
+     * Actual dates only exist once the completion certificate's Construction
+     * schedule is filled, so the NTP baseline rides along to show until then.
+     *
+     * @return array{duration_days: ?int, actual_start: ?string, actual_end: ?string, baseline_start: ?string, baseline_end: ?string}
+     */
+    private function scheduleData(Project $project): array
+    {
+        $ntp = $project->ntps()->where('status', '!=', 'rejected')->with('rfq')->first();
+        $completion = $project->completion;
+        $fmt = fn ($date) => $date?->format('M d, Y');
+
+        return [
+            'duration_days'  => $ntp?->rfq?->duration_days
+                ?? $project->rfqs()->whereNotNull('duration_days')->value('duration_days'),
+            'actual_start'   => $fmt($completion?->con_actual_start),
+            'actual_end'     => $fmt($completion?->con_actual_end),
+            'baseline_start' => $fmt($ntp?->baseline_start),
+            'baseline_end'   => $fmt($ntp?->baseline_end),
         ];
     }
 

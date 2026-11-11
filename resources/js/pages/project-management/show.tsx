@@ -80,6 +80,14 @@ interface Project {
     project_type: 'major' | 'minor';
     proposal_document_url: string | null;
     completion: CompletionData | null;
+    /** Quoted duration and actual dates; baseline (from the NTP) shows until the actuals are in. */
+    schedule: {
+        duration_days: number | null;
+        actual_start: string | null;
+        actual_end: string | null;
+        baseline_start: string | null;
+        baseline_end: string | null;
+    };
     signatories: Signatories;
     parent: { id: number; project_no: string; title: string } | null;
     sub_projects: SubProject[];
@@ -802,6 +810,27 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                             <InfoField label="Work Force">{project.work_force}</InfoField>
                             <InfoField label="JIP">{project.jip}</InfoField>
                             <InfoField label="Structure Type">{project.structure_type}</InfoField>
+                        </div>
+
+                        {/* Schedule at a glance. Actual dates come from the completion
+                            certificate; until then the NTP baseline is shown under them. */}
+                        <div data-tour="project-schedule" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 16px', marginBottom: '20px', padding: '14px 16px 0', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff' }}>
+                            <InfoField label="Project Duration">
+                                {project.schedule.duration_days != null
+                                    ? `${project.schedule.duration_days} calendar day${project.schedule.duration_days === 1 ? '' : 's'}`
+                                    : <span style={{ color: '#94a3b8' }}>Not yet quoted</span>}
+                            </InfoField>
+                            {([
+                                ['Actual Start Date', project.schedule.actual_start, project.schedule.baseline_start],
+                                ['Actual End Date', project.schedule.actual_end, project.schedule.baseline_end],
+                            ] as [string, string | null, string | null][]).map(([label, actual, baseline]) => (
+                                <InfoField key={label} label={label}>
+                                    {actual ?? <span style={{ color: '#94a3b8' }}>Not yet recorded</span>}
+                                    {!actual && baseline && (
+                                        <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '2px' }}>Baseline: {baseline}</div>
+                                    )}
+                                </InfoField>
+                            ))}
                         </div>
 
                         <div style={{ marginBottom: '24px' }}>

@@ -279,3 +279,44 @@ describe('dept sub-project access', function () {
         expect($sub->fresh()->status_key)->toBe('ONGOING');
     });
 });
+
+// -------------------------------------------------
+// Schedule at a glance on the project overview
+// -------------------------------------------------
+
+describe('project schedule', function () {
+
+    it('shows the quoted duration, with the NTP baseline until actual dates are recorded', function () {
+        $requestor = makeNtpRequestor();
+        $project   = makeNtpReviewProject($requestor);
+
+        $rfq = \App\Models\ProjectRfq::create([
+            'project_id'      => $project->id,
+            'contractor_name' => 'ABC Builders',
+            'sent_date'       => '2025-12-01',
+            'duration_days'   => 71,
+        ]);
+        makeNtp($project, 'pending_review', 'NTP-SCHED')->update(['project_rfq_id' => $rfq->id]);
+
+        $this->actingAs($requestor)
+            ->get(route('projects.show', $project->id))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('project.schedule.duration_days', 71)
+                ->where('project.schedule.actual_start', null)
+                ->where('project.schedule.actual_end', null)
+                ->where('project.schedule.baseline_start', 'Jan 01, 2026')
+                ->where('project.schedule.baseline_end', 'Jun 01, 2026'));
+
+        // The completion certificate's Construction schedule fills the actuals.
+        $project->completion()->create([
+            'con_actual_start' => '2026-01-05',
+            'con_actual_end'   => '2026-03-16',
+        ]);
+
+        $this->actingAs($requestor)
+            ->get(route('projects.show', $project->id))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('project.schedule.actual_start', 'Jan 05, 2026')
+                ->where('project.schedule.actual_end', 'Mar 16, 2026'));
+    });
+});
