@@ -1,3 +1,4 @@
+import WhatsNew, { DeployedUpdate } from '@/components/WhatsNew';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 
@@ -65,6 +66,8 @@ interface DashboardProps {
     stats: Stats;
     kpi: Kpi | null;
     ntps_for_review?: NtpForReviewRow[];
+    /** The latest updates to reach the live site, newest first. */
+    updates?: DeployedUpdate[];
     tables: {
         notifications: NotificationRow[];
         projects: ProjectRow[];
@@ -273,7 +276,7 @@ function NotificationsCard({ notifications }: { notifications: NotificationRow[]
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: DashboardProps) {
+export default function Dashboard({ stats, kpi, ntps_for_review = [], updates = [], tables }: DashboardProps) {
     const { props } = usePage<PageProps>();
     const role = props.auth?.user?.role;
     const isAdmin = !!props.auth?.user?.is_admin;
@@ -452,6 +455,9 @@ export default function Dashboard({ stats, kpi, ntps_for_review = [], tables }: 
                             a.action,
                         ])}
                     />
+
+                    {/* Its own row under the four tables, full width. */}
+                    <WhatsNew updates={updates} style={{ gridColumn: '1 / -1' }} />
                 </div>
             </div>
         </AuthenticatedLayout>

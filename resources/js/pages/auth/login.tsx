@@ -4,7 +4,6 @@ import { FormEventHandler, useState } from 'react';
 
 import InputError from '@/components/input-error';
 import TextLink from '@/components/text-link';
-import WhatsNew, { DeployedUpdate } from '@/components/WhatsNew';
 import AuthLayout from '@/layouts/auth-layout';
 
 interface LoginForm {
@@ -16,8 +15,6 @@ interface LoginForm {
 interface LoginProps {
     status?: string;
     canResetPassword: boolean;
-    /** The latest updates to reach the live site, newest first. */
-    updates?: DeployedUpdate[];
 }
 
 // ── Reusable styled field wrapper ──────────────────────────────────────────
@@ -40,7 +37,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
     );
 }
 
-export default function Login({ status, canResetPassword, updates = [] }: LoginProps) {
+export default function Login({ status, canResetPassword }: LoginProps) {
     const { data, setData, post, processing, errors, reset } = useForm<LoginForm>({
         email: '',
         password: '',
@@ -247,10 +244,6 @@ export default function Login({ status, canResetPassword, updates = [] }: LoginP
                     </TextLink>
                 </p>
             </form>
-
-            {/* Wide screens show this on the brand panel; it hides on phones, so
-                the card falls back to here, under the form. */}
-            <WhatsNew updates={updates} className="auth-whats-new-mobile" style={{ marginTop: '28px' }} />
         </AuthLayout>
     );
 }

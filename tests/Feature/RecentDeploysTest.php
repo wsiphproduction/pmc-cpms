@@ -44,8 +44,13 @@ it('shows nothing where there is no deploy log, as on a dev machine', function (
     expect(RecentDeploys::latest(5, $this->log . '.missing'))->toBe([]);
 });
 
-it('hands the updates to the login page', function () {
+it('hands the updates to the dashboard, not the login page', function () {
     $this->get(route('login'))
         ->assertOk()
-        ->assertInertia(fn ($page) => $page->component('auth/login')->has('updates'));
+        ->assertInertia(fn ($page) => $page->component('auth/login')->missing('updates'));
+
+    $this->actingAs(\App\Models\User::factory()->create())
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertInertia(fn ($page) => $page->component('dashboard')->has('updates'));
 });

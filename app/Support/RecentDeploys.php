@@ -4,12 +4,11 @@ namespace App\Support;
 
 /**
  * The latest updates to reach the live site, for the "What's new" card on the
- * login page. Read from the log scripts/deploy.sh appends to, which closes each
+ * dashboard. Read from the log scripts/deploy.sh appends to, which closes each
  * successful deploy with `[Y-m-d H:i:s] Deployed <sha>: <commit subject>`.
  *
- * The login page is public, so only user-facing commits are shown (`feat:` and
- * `fix:`; chores, CI, tests and merges are left out) and any email address in
- * a subject is dropped.
+ * Only user-facing commits are shown (`feat:` and `fix:`; chores, CI, tests
+ * and merges are left out) and any email address in a subject is dropped.
  */
 class RecentDeploys
 {

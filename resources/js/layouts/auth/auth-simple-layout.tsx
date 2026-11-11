@@ -1,5 +1,4 @@
 import { Link, usePage } from '@inertiajs/react';
-import WhatsNew, { DeployedUpdate } from '@/components/WhatsNew';
 
 interface AuthLayoutProps {
     children: React.ReactNode;
@@ -9,8 +8,7 @@ interface AuthLayoutProps {
 }
 
 export default function AuthSimpleLayout({ children, title, description }: AuthLayoutProps) {
-    // Only the login page sends `updates`; the other auth pages show none.
-    const { logo_url, updates = [] } = usePage<{ logo_url: string; updates?: DeployedUpdate[] }>().props;
+    const { logo_url } = usePage<{ logo_url: string }>().props;
 
     return (
         <div className="auth-simple-root" style={{
@@ -20,11 +18,9 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
             background: '#f8fafc',
         }}>
             <style>{`
-                .auth-whats-new-mobile { display: none; }
                 @media (max-width: 900px) {
                     .auth-simple-brand { display: none !important; }
                     .auth-simple-form { padding: 32px 20px !important; }
-                    .auth-whats-new-mobile { display: block; }
                 }
                 @media (max-width: 480px) {
                     .auth-simple-form { padding: 24px 16px !important; }
@@ -38,8 +34,8 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                 background: 'linear-gradient(160deg, #1d4ed8 0%, #1e40af 50%, #1e3a8a 100%)',
                 display: 'flex',
                 flexDirection: 'column',
-                // Copy sits under the logo rather than centred, leaving room
-                // for the What's New card; the footer is pushed to the bottom.
+                // Copy sits under the logo rather than centred; the footer is
+                // pushed to the bottom.
                 justifyContent: 'flex-start',
                 padding: '48px 44px',
                 position: 'relative',
@@ -118,8 +114,6 @@ export default function AuthSimpleLayout({ children, title, description }: AuthL
                             </div>
                         ))}
                     </div>
-
-                    <WhatsNew updates={updates} variant="dark" style={{ marginTop: '22px' }} />
                 </div>
 
                 {/* Footer note */}

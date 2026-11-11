@@ -9,6 +9,7 @@ use App\Models\ProjectNtp;
 use App\Models\ProjectRequest;
 use App\Models\Setting;
 use App\Models\User;
+use App\Support\RecentDeploys;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
@@ -83,6 +84,8 @@ class DashboardController extends Controller
                         'submitted_at'  => optional($n->created_at)->format('M d, Y'),
                     ])
                 : [],
+            // The latest updates to reach the live site, from the deploy log.
+            'updates' => RecentDeploys::latest(),
             'tables' => [
                 'notifications' => $this->notifications($user->id),
                 'projects' => (clone $projectsQuery)->with('children:id,parent_id,completion_percent')->latest()->take(5)->get()->map(fn (Project $p) => [
