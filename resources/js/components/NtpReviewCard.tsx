@@ -165,8 +165,11 @@ export default function NtpReviewCard({ ntp, canAct, approveLabel, onApprove, on
                             <span style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a' }}>{ntp.ntp_no}</span>
                             <span style={{ padding: '2px 10px', borderRadius: '999px', background: STATUS_META[ntp.status].bg, color: STATUS_META[ntp.status].color, fontSize: '11px', fontWeight: 700 }}>{STATUS_META[ntp.status].label}</span>
                         </div>
-                        <div style={{ fontSize: '12.5px', color: '#64748b' }}>
-                            Project <strong style={{ color: '#334155' }}>{ntp.project.project_no}</strong> — {ntp.project.title}
+                        <div style={{ fontSize: '13.5px', fontWeight: 700, color: '#1e293b', lineHeight: 1.4 }}>
+                            {ntp.project.title}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>
+                            Project <strong style={{ color: '#334155' }}>{ntp.project.project_no}</strong>
                         </div>
                         {!open && (
                             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '5px' }}>{summary}</div>
@@ -211,6 +214,16 @@ export default function NtpReviewCard({ ntp, canAct, approveLabel, onApprove, on
                     )}
 
                     <div data-tour="ntp-card-details" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '14px', marginTop: '16px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
+                        {/* Repeated here (it is also in the heading) so a reviewer
+                            scrolled past the approval chain still sees what the
+                            NTP is for. Spans the whole row: titles run long. */}
+                        <div style={{ gridColumn: '1 / -1' }}>
+                            <div style={sectionLabel}>Project Title</div>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: '#0f172a', lineHeight: 1.4 }}>
+                                {ntp.project.title || '—'}
+                                <span style={{ marginLeft: '8px', fontSize: '12px', fontWeight: 600, color: '#64748b' }}>({ntp.project.project_no})</span>
+                            </div>
+                        </div>
                         {[
                             ['Project Location / Site', ntp.project.site ?? '—'],
                             ['End-User', ntp.project.end_user
