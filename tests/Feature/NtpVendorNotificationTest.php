@@ -355,14 +355,27 @@ it('names every signatory and their date in the vendor email', function () {
             'recipient_email' => 'vendor@example.com',
         ])->assertRedirect();
 
+    // The body is HTML: names are escaped in it, so a Faker name like
+    // "O'Keefe" appears as "O&#039;Keefe". Compare against the escaped form.
     Mail::assertQueued(NtpIssuedToVendor::class, function ($mail) {
         $body = $mail->render();
 
-        return str_contains($body, $this->ntp->ntp_no)
+        return str_contains($body, e($this->ntp->ntp_no))
             && str_contains($body, 'Acme Builders')
-            && str_contains($body, $this->division->name)
-            && str_contains($body, $this->pmdManager->name);
+            && str_contains($body, e($this->division->name))
+            && str_contains($body, e($this->pmdManager->name));
     });
+});
+
+it('names a signatory whose name has an apostrophe in the vendor email', function () {
+    $this->pmdManager->update(['name' => "Ma. Grace O'Neil"]);
+    approveWholeChain($this);
+
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ntp.send', [$this->project, $this->ntp]), ['recipient_email' => 'vendor@example.com'])
+        ->assertRedirect();
+
+    Mail::assertQueued(NtpIssuedToVendor::class, fn ($mail) => str_contains($mail->render(), e("Ma. Grace O'Neil")));
 });
 
 it('rejects a malformed vendor address', function () {
