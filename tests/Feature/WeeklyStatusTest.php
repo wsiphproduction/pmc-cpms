@@ -136,8 +136,61 @@ describe('index', function () {
 
         $this->actingAs($engineer)->get(route('weekly-status.index'))
             ->assertInertia(fn (Assert $page) => $page
-                ->has('reports', 1)
-                ->where('reports.0.can_manage', true));
+                ->has('reports.data', 1)
+                ->where('reports.data.0.can_manage', true));
+    });
+
+    it('pages the reports, fifteen at a time, newest first', function () {
+        $engineer = makeWeeklyStatusEngineer();
+        $project  = makeWeeklyStatusProject($engineer);
+
+        foreach (range(1, 20) as $day) {
+            $project->weeklyReports()->create([
+                'week_code' => 'W1-AUG', 'completion_pct' => $day,
+                'submitted_date' => sprintf('2026-08-%02d', $day), 'created_by' => $engineer->id,
+            ]);
+        }
+
+        $this->actingAs($engineer)->get(route('weekly-status.index'))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('reports.data', 15)
+                ->where('reports.total', 20)
+                ->where('reports.last_page', 2)
+                ->where('reports.data.0.completion_pct', 20));
+
+        $this->actingAs($engineer)->get(route('weekly-status.index', ['page' => 2]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('reports.data', 5)
+                ->where('reports.data.4.completion_pct', 1));
+
+        // Past the last page goes back to it.
+        $this->actingAs($engineer)->get(route('weekly-status.index', ['page' => 9]))
+            ->assertRedirectContains('page=2');
+    });
+
+    it('filters by week and project on the server, listing who has not filed that week', function () {
+        $engineer = makeWeeklyStatusEngineer();
+        $filed    = makeWeeklyStatusProject($engineer);
+        $missing  = makeWeeklyStatusProject($engineer);
+
+        $filed->weeklyReports()->create(['week_code' => 'W1-NOV', 'completion_pct' => 10, 'submitted_date' => '2026-11-03', 'created_by' => $engineer->id]);
+        $filed->weeklyReports()->create(['week_code' => 'W2-NOV', 'completion_pct' => 20, 'submitted_date' => '2026-11-10', 'created_by' => $engineer->id]);
+        $missing->weeklyReports()->create(['week_code' => 'W1-NOV', 'completion_pct' => 5, 'submitted_date' => '2026-11-04', 'created_by' => $engineer->id]);
+
+        $this->actingAs($engineer)->get(route('weekly-status.index', ['week' => 'W2-NOV']))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('filters.week', 'W2-NOV')
+                ->has('reports.data', 1)
+                ->where('reports.data.0.completion_pct', 20)
+                ->where('outstanding', [$missing->project_no])
+                // Latest filed week first, not alphabetical.
+                ->where('week_options', ['W2-NOV', 'W1-NOV']));
+
+        $this->actingAs($engineer)->get(route('weekly-status.index', ['project' => $missing->id]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->has('reports.data', 1)
+                ->where('reports.data.0.project_id', $missing->id)
+                ->where('outstanding', []));
     });
 
     it('shows admins every project', function () {

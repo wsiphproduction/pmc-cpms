@@ -7,6 +7,7 @@ import {
     ReadOnlyValue, ReportFormBody, ReportViewBody, answerable,
 } from '@/pages/project-management/hub/PsrDocument';
 import { useConfirm } from '@/components/useConfirm';
+import Pagination, { type Paginated } from '@/components/Pagination';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface NtpOption { id: number; ntp_no: string; contractor: string | null }
@@ -45,7 +46,13 @@ interface ReportRow {
 
 interface Props {
     projects: ProjectOption[];
-    reports: ReportRow[];
+    /** One page of reports, filtered on the server. */
+    reports: Paginated<ReportRow>;
+    filters: { week: string; project: string };
+    /** Every week anything was filed for, latest first. */
+    week_options: string[];
+    /** Project numbers with no report for the filtered week, across every page. */
+    outstanding: string[];
     checklist: ChecklistItem[];
     issue_rows: number;
     statuses: string[];
@@ -474,34 +481,32 @@ function BulkUploadModal({ projects, checklist, issueRowCount, statuses, default
 
 // ── Page ───────────────────────────────────────────────────────────────────
 export default function WeeklyStatusIndex({
-    projects, reports, checklist, issue_rows: issueRows, statuses, suggested_week_code: suggestedWeekCode,
+    projects, reports, filters, week_options: weekOptions, outstanding,
+    checklist, issue_rows: issueRows, statuses, suggested_week_code: suggestedWeekCode,
 }: Props) {
     const [showSubmit, setShowSubmit] = useState(false);
     const [showUpload, setShowUpload] = useState(false);
     const [viewing, setViewing]       = useState<ReportRow | null>(null);
     const [editing, setEditing]       = useState<ReportRow | null>(null);
-    const [weekFilter, setWeekFilter]     = useState('');
-    const [projectFilter, setProjectFilter] = useState('');
 
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
     const { flash } = usePage<{ flash?: { success?: string; error?: string } }>().props;
 
-    const weekOptions = useMemo(
-        () => Array.from(new Set(reports.map(r => r.week_code))).sort(),
-        [reports],
-    );
+    const weekFilter = filters.week;
+    const projectFilter = filters.project;
+    const rows = reports.data;
+    const isSub = useMemo(() => new Map(projects.map(p => [p.id, p.is_sub])), [projects]);
 
-    const filtered = reports.filter(r =>
-        (!weekFilter || r.week_code === weekFilter) &&
-        (!projectFilter || String(r.project_id) === projectFilter));
-
-    // Projects with nothing filed for the week being looked at — the reason to
-    // open this page at all.
-    const outstanding = useMemo(() => {
-        if (!weekFilter) return [];
-        const filed = new Set(reports.filter(r => r.week_code === weekFilter).map(r => r.project_id));
-        return projects.filter(p => !filed.has(p.id));
-    }, [weekFilter, reports, projects]);
+    // Filters live in the URL and are applied on the server; changing one
+    // goes back to the first page.
+    const applyFilters = (next: Partial<Props['filters']>) => {
+        const merged = { ...filters, ...next };
+        router.get(
+            route('weekly-status.index'),
+            Object.fromEntries(Object.entries(merged).filter(([, v]) => v !== '')),
+            { preserveState: true, preserveScroll: true, replace: true },
+        );
+    };
 
     const handleDelete = (r: ReportRow) => {
         showConfirm(`Delete ${r.week_code} for ${r.project_no}?`, () => {
@@ -628,11 +633,11 @@ export default function WeeklyStatusIndex({
                 <div style={card}>
                     {/* Toolbar */}
                     <div style={{ padding: '14px 18px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        <select value={weekFilter} onChange={e => setWeekFilter(e.target.value)} style={filterSelect(!!weekFilter)} title="Filter by week">
+                        <select value={weekFilter} onChange={e => applyFilters({ week: e.target.value })} style={filterSelect(!!weekFilter)} title="Filter by week">
                             <option value="">All Weeks</option>
                             {weekOptions.map(w => <option key={w} value={w}>{w}</option>)}
                         </select>
-                        <select value={projectFilter} onChange={e => setProjectFilter(e.target.value)} style={filterSelect(!!projectFilter)} title="Filter by project">
+                        <select value={projectFilter} onChange={e => applyFilters({ project: e.target.value })} style={filterSelect(!!projectFilter)} title="Filter by project">
                             <option value="">All Projects</option>
                             {projects.map(p => (
                                 <option key={p.id} value={String(p.id)}>{p.project_no} — {p.title}</option>
@@ -641,14 +646,15 @@ export default function WeeklyStatusIndex({
                         {(weekFilter || projectFilter) && (
                             <button
                                 type="button"
-                                onClick={() => { setWeekFilter(''); setProjectFilter(''); }}
+                                onClick={() => applyFilters({ week: '', project: '' })}
                                 style={{ padding: '7px 12px', borderRadius: '7px', border: '1px solid #fca5a5', background: '#fff7f7', fontSize: '12px', fontWeight: 500, color: '#dc2626', cursor: 'pointer' }}
                             >
                                 Clear filters
                             </button>
                         )}
                         <span style={{ marginLeft: 'auto', fontSize: '12.5px', color: '#9ca3af' }}>
-                            Showing <strong style={{ color: '#374151' }}>{filtered.length}</strong> of {reports.length}
+                            <strong style={{ color: '#374151' }}>{reports.total}</strong> report{reports.total === 1 ? '' : 's'}
+                            {(weekFilter || projectFilter) ? ' match' : ''}
                         </span>
                     </div>
 
@@ -656,7 +662,7 @@ export default function WeeklyStatusIndex({
                     {weekFilter && outstanding.length > 0 && (
                         <div style={{ padding: '11px 18px', background: '#fffbeb', borderBottom: '1px solid #fef3c7', fontSize: '12.5px', color: '#92400e' }}>
                             <strong>{outstanding.length}</strong> project{outstanding.length === 1 ? '' : 's'} with no {weekFilter} report yet:{' '}
-                            {outstanding.map(p => p.project_no).join(', ')}
+                            {outstanding.join(', ')}
                         </div>
                     )}
 
@@ -671,13 +677,15 @@ export default function WeeklyStatusIndex({
                                 </tr>
                             </thead>
                             <tbody>
-                                {filtered.length === 0 ? (
+                                {rows.length === 0 ? (
                                     <tr>
                                         <td colSpan={9} style={{ padding: '44px', textAlign: 'center', fontSize: '13px', color: '#9ca3af' }}>
-                                            No weekly status filed yet. Submit one, or bulk-upload a week's worth.
+                                            {weekFilter || projectFilter
+                                                ? 'No weekly status matches these filters.'
+                                                : 'No weekly status filed yet. Submit one, or bulk-upload a week\'s worth.'}
                                         </td>
                                     </tr>
-                                ) : filtered.map(r => (
+                                ) : rows.map(r => (
                                     <tr
                                         key={r.id}
                                         style={{ borderBottom: '1px solid #f8fafc' }}
@@ -686,7 +694,7 @@ export default function WeeklyStatusIndex({
                                     >
                                         <td style={{ ...td, fontWeight: 700, color: '#2563eb', whiteSpace: 'nowrap' }}>{r.week_code}</td>
                                         <td style={td}>
-                                            <ProjectTag no={r.project_no} isSub={projects.find(p => p.id === r.project_id)?.is_sub} />
+                                            <ProjectTag no={r.project_no} isSub={isSub.get(r.project_id)} />
                                         </td>
                                         <td style={{ ...td, maxWidth: '240px' }}>{r.project_title ?? '—'}</td>
                                         <td style={td}>
@@ -730,6 +738,8 @@ export default function WeeklyStatusIndex({
                             </tbody>
                         </table>
                     </div>
+
+                    <Pagination data={reports} />
                 </div>
             )}
         </AuthenticatedLayout>

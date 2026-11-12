@@ -28,15 +28,51 @@ class WeeklyStatusController extends Controller
     public function index(Request $request)
     {
         $projects = $this->scopedProjects($request)->with('ntps:id,project_id,ntp_no,contractor_name')->get();
+        $projectIds = $projects->pluck('id');
 
-        $reports = ProjectWeeklyReport::whereIn('project_id', $projects->pluck('id'))
+        $filters = [
+            'week'    => (string) $request->query('week', ''),
+            'project' => (string) $request->query('project', ''),
+        ];
+
+        // Filtered and paged on the server: every report the user can see,
+        // a page at a time, rather than the newest few hundred in one list.
+        $reports = ProjectWeeklyReport::whereIn('project_id', $projectIds)
+            ->when($filters['week'] !== '', fn ($q) => $q->where('week_code', $filters['week']))
+            ->when($filters['project'] !== '', fn ($q) => $q->where('project_id', (int) $filters['project']))
             // created_by is read by the project-update policy behind can_manage;
             // without it every engineer's row reads as not theirs.
             ->with(['ntp:id,ntp_no,contractor_name', 'project:id,project_no,title,created_by', 'creator:id,name'])
             ->latest('submitted_date')
             ->latest('id')
-            ->limit(200)
-            ->get();
+            ->paginate(15)
+            ->withQueryString();
+
+        // Past the end — e.g. the last report on the last page was deleted.
+        if ($reports->isEmpty() && $reports->currentPage() > 1) {
+            return redirect()->to($reports->url($reports->lastPage()));
+        }
+
+        // Every week anything was filed for, for the filter. Codes read like
+        // "W2-NOV", which do not sort as text, so the latest filed comes first.
+        $weekOptions = ProjectWeeklyReport::whereIn('project_id', $projectIds)
+            ->selectRaw('week_code, MAX(submitted_date) AS last_filed, MAX(id) AS last_id')
+            ->groupBy('week_code')
+            ->orderByDesc('last_filed')
+            ->orderByDesc('last_id')
+            ->pluck('week_code')
+            ->values();
+
+        // Projects with nothing filed for the week being looked at — the reason
+        // to open this page at all. Counted across every page, not this one.
+        $outstanding = [];
+        if ($filters['week'] !== '') {
+            $filed = ProjectWeeklyReport::whereIn('project_id', $projectIds)
+                ->where('week_code', $filters['week'])
+                ->distinct()
+                ->pluck('project_id');
+            $outstanding = $projects->whereNotIn('id', $filed)->pluck('project_no')->values()->all();
+        }
 
         return Inertia::render('weekly-status/index', [
             'projects' => $projects->map(fn (Project $project) => [
@@ -52,7 +88,10 @@ class WeeklyStatusController extends Controller
                     'contractor' => $ntp->contractor_name,
                 ])->values(),
             ])->values(),
-            'reports' => $reports->map(fn (ProjectWeeklyReport $report) => [
+            'filters'      => $filters,
+            'week_options' => $weekOptions,
+            'outstanding'  => $outstanding,
+            'reports' => $reports->through(fn (ProjectWeeklyReport $report) => [
                 'id'                => $report->id,
                 'project_id'        => $report->project_id,
                 'project_no'        => $report->project?->project_no,
@@ -72,7 +111,7 @@ class WeeklyStatusController extends Controller
                 'ntp_contractor'    => $report->ntp?->contractor_name,
                 // Governs both the Edit and Delete actions on the row.
                 'can_manage'        => $request->user()->can('update', $report->project),
-            ])->values(),
+            ]),
             // Same form definition the operations hub uses, so a report reads
             // back identically wherever it was filed from.
             'checklist'          => config('psr.checklist'),
