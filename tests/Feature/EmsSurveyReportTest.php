@@ -6,6 +6,7 @@ use App\Models\Notification;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -21,7 +22,7 @@ function emsUser(string $role, array $attributes = []): User
     return $user;
 }
 
-/** What a representative fills in before submitting. */
+/** The assessment the engineer prepares before submitting. */
 function emsBody(array $overrides = []): array
 {
     return array_merge([
@@ -32,9 +33,13 @@ function emsBody(array $overrides = []): array
         'aspects_other'          => '',
         'impacts'                => 'Dust from excavation.',
         'mitigation'             => 'Water spraying twice a day.',
-        'mepeo_status'           => 'proceed',
-        'remarks'                => 'Cleared.',
     ], $overrides);
+}
+
+/** MEPEO's part, filled in by the representative to verify it. */
+function emsFinding(array $overrides = []): array
+{
+    return array_merge(['mepeo_status' => 'proceed', 'remarks' => 'Cleared.'], $overrides);
 }
 
 beforeEach(function () {
@@ -64,21 +69,40 @@ beforeEach(function () {
     ];
 });
 
-/** A report already with the representative. */
-function emsSentReport($test): EmsSurveyReport
+/** A draft with the assessment filled in. */
+function emsDraft($test): EmsSurveyReport
 {
-    $test->actingAs($test->engineer)->post(route('hub.ems.store', $test->project), $test->header)->assertSessionHasNoErrors();
-    $report = EmsSurveyReport::sole();
-    $test->actingAs($test->engineer)->post(route('hub.ems.send', [$test->project, $report]), ['mepeo_rep_id' => $test->rep->id])->assertSessionHasNoErrors();
+    $test->actingAs($test->engineer)->post(route('hub.ems.store', $test->project), [...$test->header, ...emsBody()])->assertSessionHasNoErrors();
+
+    return EmsSurveyReport::sole();
+}
+
+/** Submitted for review: waiting on the PMD Assistant Manager. */
+function emsSubmitted($test, array $extra = []): EmsSurveyReport
+{
+    $report = emsDraft($test);
+    $test->actingAs($test->engineer)
+        ->post(route('hub.ems.send', [$test->project, $report]), ['mepeo_rep_id' => $test->rep->id, ...$extra])
+        ->assertSessionHasNoErrors();
 
     return $report->fresh();
 }
 
-/** A report the representative has filled out and submitted. */
-function emsSubmittedReport($test): EmsSurveyReport
+/** Reviewed and noted by PMD: waiting on the representative's verification. */
+function emsAtMepeo($test): EmsSurveyReport
 {
-    $report = emsSentReport($test);
-    $test->actingAs($test->rep)->post(route('mepeo.reports.submit', $report), emsBody())->assertSessionHasNoErrors();
+    $report = emsSubmitted($test);
+    $test->actingAs($test->pmdAsst)->patch(route('ems.approve', $report))->assertRedirect();
+    $test->actingAs($test->pmdDept)->patch(route('ems.approve', $report))->assertRedirect();
+
+    return $report->fresh();
+}
+
+/** Verified by the representative: waiting on the MEPEO Manager. */
+function emsVerified($test): EmsSurveyReport
+{
+    $report = emsAtMepeo($test);
+    $test->actingAs($test->rep)->post(route('mepeo.reports.submit', $report), emsFinding())->assertSessionHasNoErrors();
 
     return $report->fresh();
 }
@@ -117,29 +141,28 @@ it('keeps other engineers from creating reports on a project not theirs', functi
         ->assertInertia(fn (Assert $page) => $page->where('hub_data.can_manage', false));
 });
 
-it('lets the engineer fill in the whole form, signatures aside, when creating and editing', function () {
+it('lets the engineer fill in the assessment, leaving MEPEO\'s part to MEPEO', function () {
     $this->actingAs($this->engineer)
-        ->post(route('hub.ems.store', $this->project), [...$this->header, ...emsBody(['mepeo_status' => null, 'remarks' => null])])
+        ->post(route('hub.ems.store', $this->project), [...$this->header, ...emsBody(), ...emsFinding(['remarks' => 'Typed by the engineer.'])])
         ->assertSessionHasNoErrors();
 
     $report = EmsSurveyReport::sole();
     expect($report->major_activities)->toBe(['construction'])
         ->and($report->aspects)->toBe(['heavy_equipment', 'dust'])
         ->and($report->mitigation)->toBe('Water spraying twice a day.')
-        ->and($report->mepeo_status)->toBeNull();
+        ->and($report->mepeo_status)->toBeNull()
+        ->and($report->remarks)->toBeNull();
 
     // Unticking everything clears the lists, the way a multipart form sends it.
     $this->actingAs($this->engineer)
-        ->patch(route('hub.ems.update', [$this->project, $report]), [
-            ...$this->header, 'aspects_other' => 'Noise', 'mepeo_status' => 'survey_required',
-        ])
+        ->patch(route('hub.ems.update', [$this->project, $report]), [...$this->header, 'aspects_other' => 'Noise', 'mepeo_status' => 'survey_required'])
         ->assertSessionHasNoErrors();
 
     $report->refresh();
     expect($report->major_activities)->toBe([])
         ->and($report->aspects)->toBe([])
         ->and($report->aspects_other)->toBe('Noise')
-        ->and($report->mepeo_status)->toBe('survey_required');
+        ->and($report->mepeo_status)->toBeNull();
 
     $this->actingAs($this->engineer)
         ->patch(route('hub.ems.update', [$this->project, $report]), [...$this->header, 'aspects' => ['not_on_the_form']])
@@ -155,143 +178,59 @@ it('lets the engineer named as project manager raise them too', function () {
     expect(EmsSurveyReport::count())->toBe(1);
 });
 
-it('sends the report to a MEPEO representative by notification and email', function () {
-    $report = emsSentReport($this);
+// ── Submitting for review ────────────────────────────────────────────────────
 
-    expect($report->status)->toBe(EmsSurveyReport::STATUS_WITH_MEPEO)
+it('asks for at least one activity and aspect before submitting', function () {
+    $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), $this->header);
+    $report = EmsSurveyReport::sole();
+
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->rep->id])
+        ->assertSessionHasErrors(['major_activities', 'aspects']);
+
+    expect($report->fresh()->status)->toBe(EmsSurveyReport::STATUS_DRAFT);
+});
+
+it('goes to the PMD Assistant Manager first, by notification and email', function () {
+    $report = emsSubmitted($this);
+
+    expect($report->status)->toBe(EmsSurveyReport::STATUS_FOR_APPROVAL)
+        ->and($report->currentApprovalRole())->toBe(User::ROLE_PMD_ASST_MANAGER)
+        ->and($report->statusLabel())->toBe('For PMD Review')
         ->and($report->mepeo_rep_id)->toBe($this->rep->id)
-        ->and(Notification::where('recipient', $this->rep->id)->count())->toBe(1);
+        ->and($report->submitted_at)->not->toBeNull()
+        ->and($report->sent_at)->toBeNull();
 
-    Mail::assertQueued(EmsReportActivity::class, fn ($mail) => $mail->hasTo($this->rep->email));
+    $notice = Notification::where('recipient', $this->pmdAsst->id)->sole();
+    expect($notice->message)->toContain($report->control_no);
+    $this->actingAs($this->pmdAsst)->get($notice->link)->assertOk();
+    Mail::assertQueued(EmsReportActivity::class, fn ($mail) => $mail->hasTo($this->pmdAsst->email));
+
+    // MEPEO hears nothing, and sees nothing, until PMD has signed.
+    expect(Notification::where('recipient', $this->rep->id)->count())->toBe(0)
+        ->and(Notification::where('recipient', $this->mepeoManager->id)->count())->toBe(0);
+    $this->actingAs($this->rep)->get(route('mepeo.index'))->assertInertia(fn (Assert $page) => $page->has('reports', 0));
+    $this->actingAs($this->mepeoManager)->get(route('mepeo.index'))->assertInertia(fn (Assert $page) => $page->has('reports', 0));
+    $this->actingAs($this->rep)->get(route('mepeo.reports.show', $report))->assertNotFound();
 });
 
-it('can send by notification alone when the engineer unticks email', function () {
-    $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), $this->header);
-    $report = EmsSurveyReport::sole();
+it('can submit by notification alone when the engineer unticks email', function () {
+    emsSubmitted($this, ['send_email' => false]);
 
-    $this->actingAs($this->engineer)
-        ->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->rep->id, 'send_email' => false])
-        ->assertSessionHasNoErrors();
-
-    expect(Notification::where('recipient', $this->rep->id)->count())->toBe(1);
+    expect(Notification::where('recipient', $this->pmdAsst->id)->count())->toBe(1);
     Mail::assertNothingQueued();
 });
 
-it('tells the PMD managers by notification and email when the report first goes to MEPEO', function () {
-    $report = emsSentReport($this);
-
-    foreach ([$this->pmdAsst, $this->pmdDept] as $manager) {
-        $notice = Notification::where('recipient', $manager->id)->sole();
-        expect($notice->message)->toContain($report->control_no)->toContain($this->rep->name);
-
-        Mail::assertQueued(EmsReportActivity::class, fn ($mail) => $mail->hasTo($manager->email));
-
-        // The notice has to lead somewhere they can open, before it is theirs to sign.
-        $this->actingAs($manager)->get($notice->link)->assertOk();
-    }
-
-    // Handing it to another representative is not news to them.
-    $this->actingAs($this->engineer)
-        ->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => emsUser(User::ROLE_MEPEO_REP)->id])
-        ->assertSessionHasNoErrors();
-
-    expect(Notification::where('recipient', $this->pmdAsst->id)->count())->toBe(1)
-        ->and(Notification::where('recipient', $this->pmdDept->id)->count())->toBe(1);
-});
-
-it('tells the PMD managers by notification alone when the engineer unticks email', function () {
-    $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), $this->header);
-
-    $this->actingAs($this->engineer)
-        ->post(route('hub.ems.send', [$this->project, EmsSurveyReport::sole()]), ['mepeo_rep_id' => $this->rep->id, 'send_email' => false])
-        ->assertSessionHasNoErrors();
-
-    expect(Notification::where('recipient', $this->pmdAsst->id)->count())->toBe(1)
-        ->and(Notification::where('recipient', $this->pmdDept->id)->count())->toBe(1);
-    Mail::assertNothingQueued();
-});
-
-it('leaves the remarks to MEPEO, whatever the engineer sends', function () {
-    $this->actingAs($this->engineer)
-        ->post(route('hub.ems.store', $this->project), [...$this->header, 'remarks' => 'Typed by the engineer.'])
-        ->assertSessionHasNoErrors();
-
-    $report = EmsSurveyReport::sole();
-    expect($report->remarks)->toBeNull();
-
-    $this->actingAs($this->engineer)->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->rep->id]);
-    $this->actingAs($this->rep)->patch(route('mepeo.reports.update', $report), emsBody(['remarks' => 'From the representative.']))
-        ->assertSessionHasNoErrors();
-
-    // An engineer's later edit neither writes over them nor clears them.
-    $this->actingAs($this->engineer)
-        ->patch(route('hub.ems.update', [$this->project, $report]), [...$this->header, 'remarks' => 'Typed by the engineer.'])
-        ->assertSessionHasNoErrors();
-    expect($report->fresh()->remarks)->toBe('From the representative.');
-
-    $this->actingAs($this->engineer)
-        ->patch(route('hub.ems.update', [$this->project, $report]), $this->header)
-        ->assertSessionHasNoErrors();
-    expect($report->fresh()->remarks)->toBe('From the representative.');
-});
-
-it('only sends to a MEPEO representative', function () {
-    $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), $this->header);
-    $report = EmsSurveyReport::sole();
+it('only names a MEPEO representative', function () {
+    $report = emsDraft($this);
 
     $this->actingAs($this->engineer)
         ->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->pmdAsst->id])
         ->assertSessionHasErrors('mepeo_rep_id');
 });
 
-// ── MEPEO filling it out ─────────────────────────────────────────────────────
-
-it('lets the representative fill out and submit, which goes to the MEPEO Manager', function () {
-    $report = emsSentReport($this);
-
-    $this->actingAs($this->rep)->patch(route('mepeo.reports.update', $report), emsBody(['mepeo_status' => null]))
-        ->assertSessionHasNoErrors();
-    expect($report->fresh()->aspects)->toBe(['heavy_equipment', 'dust'])
-        ->and($report->fresh()->status)->toBe(EmsSurveyReport::STATUS_WITH_MEPEO);
-
-    $this->actingAs($this->rep)->post(route('mepeo.reports.submit', $report), emsBody())
-        ->assertRedirect(route('mepeo.index'));
-
-    $report->refresh();
-    expect($report->status)->toBe(EmsSurveyReport::STATUS_FOR_APPROVAL)
-        ->and($report->currentApprovalRole())->toBe(User::ROLE_MEPEO_MANAGER)
-        ->and(Notification::where('recipient', $this->mepeoManager->id)->count())->toBe(1);
-});
-
-it('asks for the status and at least one activity and aspect before submitting', function () {
-    $report = emsSentReport($this);
-
-    $this->actingAs($this->rep)
-        ->post(route('mepeo.reports.submit', $report), emsBody(['mepeo_status' => null, 'major_activities' => [], 'aspects' => []]))
-        ->assertSessionHasErrors('mepeo_status');
-
-    $this->actingAs($this->rep)
-        ->post(route('mepeo.reports.submit', $report), emsBody(['major_activities' => [], 'aspects' => []]))
-        ->assertSessionHasErrors(['major_activities', 'aspects']);
-
-    expect($report->fresh()->status)->toBe(EmsSurveyReport::STATUS_WITH_MEPEO);
-});
-
-it('keeps a representative to the reports sent to them', function () {
-    $report = emsSentReport($this);
-    $otherRep = emsUser(User::ROLE_MEPEO_REP);
-
-    $this->actingAs($otherRep)->get(route('mepeo.reports.show', $report))->assertNotFound();
-    $this->actingAs($otherRep)->patch(route('mepeo.reports.update', $report), emsBody())->assertForbidden();
-
-    $this->actingAs($otherRep)->get(route('mepeo.index'))
-        ->assertInertia(fn (Assert $page) => $page->component('mepeo/index')->has('reports', 0));
-    $this->actingAs($this->rep)->get(route('mepeo.index'))
-        ->assertInertia(fn (Assert $page) => $page->has('reports', 1)->where('reports.0.needs_me', true));
-});
-
-it('fixes the header once MEPEO has submitted', function () {
-    $report = emsSubmittedReport($this);
+it('fixes the report once it is submitted', function () {
+    $report = emsSubmitted($this);
 
     $this->actingAs($this->engineer)->patch(route('hub.ems.update', [$this->project, $report]), $this->header)->assertStatus(422);
     $this->actingAs($this->engineer)->delete(route('hub.ems.destroy', [$this->project, $report]))->assertStatus(422);
@@ -299,26 +238,54 @@ it('fixes the header once MEPEO has submitted', function () {
 
 // ── The sign-off chain ───────────────────────────────────────────────────────
 
-it('is approved by MEPEO, reviewed by the PMD Assistant Manager and noted by the PMD Manager', function () {
-    $report = emsSubmittedReport($this);
+it('is reviewed by the PMD Assistant Manager, noted by the PMD Manager, verified by the representative and approved by the MEPEO Manager', function () {
+    $report = emsSubmitted($this);
 
-    // Not PMD's turn yet.
-    $this->actingAs($this->pmdAsst)->patch(route('ems.approve', $report))->assertForbidden();
-    $this->actingAs($this->pmdAsst)->get(route('approvals.index'))
-        ->assertInertia(fn (Assert $page) => $page->has('ems_reports', 0));
-
-    $this->actingAs($this->mepeoManager)->patch(route('ems.approve', $report), ['remarks' => 'OK'])->assertRedirect();
-    expect($report->fresh()->currentApprovalRole())->toBe(User::ROLE_PMD_ASST_MANAGER);
+    // Not the PMD Manager's or MEPEO's turn yet.
+    $this->actingAs($this->pmdDept)->patch(route('ems.approve', $report))->assertForbidden();
+    $this->actingAs($this->mepeoManager)->patch(route('ems.approve', $report))->assertForbidden();
+    $this->actingAs($this->pmdDept)->get(route('approvals.index'))->assertInertia(fn (Assert $page) => $page->has('ems_reports', 0));
 
     $this->actingAs($this->pmdAsst)->get(route('approvals.index'))
         ->assertInertia(fn (Assert $page) => $page->has('ems_reports', 1)->where('ems_reports.0.id', $report->id));
     $this->actingAs($this->pmdAsst)->patch(route('ems.approve', $report))->assertRedirect();
+    expect($report->fresh()->currentApprovalRole())->toBe(User::ROLE_PMD_DEPT_MANAGER);
 
     $this->actingAs($this->pmdDept)->patch(route('ems.approve', $report))->assertRedirect();
 
+    // The PMD Manager's note passes it to MEPEO: the named representative, only.
+    $report->refresh();
+    expect($report->currentApprovalRole())->toBe(User::ROLE_MEPEO_REP)
+        ->and($report->statusLabel())->toBe('With MEPEO')
+        ->and($report->sent_at)->not->toBeNull()
+        ->and(Notification::where('recipient', $this->rep->id)->where('message', 'like', '%awaiting your verification%')->count())->toBe(1);
+    $this->actingAs($this->rep)->get(route('mepeo.reports.show', $report))
+        ->assertInertia(fn (Assert $page) => $page->where('can_edit', true)->where('can_sign', false));
+
+    // The verification needs MEPEO's Status; it is given from the MEPEO page.
+    $this->actingAs($this->rep)->patch(route('ems.approve', $report))->assertForbidden();
+    $this->actingAs($this->rep)->post(route('mepeo.reports.submit', $report), emsFinding(['mepeo_status' => null]))
+        ->assertSessionHasErrors('mepeo_status');
+
+    $this->actingAs($this->rep)->post(route('mepeo.reports.submit', $report), emsFinding())
+        ->assertRedirect(route('mepeo.index'));
+
+    $report->refresh();
+    expect($report->currentApprovalRole())->toBe(User::ROLE_MEPEO_MANAGER)
+        ->and($report->mepeo_status)->toBe('proceed')
+        ->and($report->remarks)->toBe('Cleared.')
+        ->and(Notification::where('recipient', $this->mepeoManager->id)->count())->toBe(1);
+
+    $this->actingAs($this->mepeoManager)->get(route('mepeo.reports.show', $report))
+        ->assertInertia(fn (Assert $page) => $page->where('can_edit', false)->where('can_sign', true));
+    $this->actingAs($this->mepeoManager)->patch(route('ems.approve', $report), ['remarks' => 'OK'])->assertRedirect();
+
     $report->refresh();
     expect($report->status)->toBe(EmsSurveyReport::STATUS_APPROVED)
-        ->and($report->approvalChainComplete())->toBeTrue();
+        ->and($report->approvalChainComplete())->toBeTrue()
+        ->and(collect($report->approvalTimeline())->pluck('role')->all())->toBe([
+            User::ROLE_PMD_ASST_MANAGER, User::ROLE_PMD_DEPT_MANAGER, User::ROLE_MEPEO_REP, User::ROLE_MEPEO_MANAGER,
+        ]);
 
     expect(Notification::where('recipient', $this->engineer->id)->where('message', 'like', '%completed its sign-off%')->exists())->toBeTrue();
 
@@ -327,26 +294,97 @@ it('is approved by MEPEO, reviewed by the PMD Assistant Manager and noted by the
         ->assertInertia(fn (Assert $page) => $page->where('history.0.type', 'EMS'));
 });
 
-it('goes back to the representative when returned, and restarts on resubmission', function () {
-    $report = emsSubmittedReport($this);
+it('lets the representative fill in only MEPEO\'s part', function () {
+    $report = emsAtMepeo($this);
 
-    $this->actingAs($this->mepeoManager)->patch(route('ems.approve', $report));
+    $this->actingAs($this->rep)->patch(route('mepeo.reports.update', $report), [
+        ...emsBody(['mitigation' => 'Changed by MEPEO.', 'aspects' => ['dust']]),
+        ...emsFinding(['mepeo_status' => 'survey_required', 'remarks' => 'Needs a survey.']),
+    ])->assertSessionHasNoErrors();
+
+    $report->refresh();
+    expect($report->mitigation)->toBe('Water spraying twice a day.')
+        ->and($report->aspects)->toBe(['heavy_equipment', 'dust'])
+        ->and($report->mepeo_status)->toBe('survey_required')
+        ->and($report->remarks)->toBe('Needs a survey.')
+        ->and($report->currentApprovalRole())->toBe(User::ROLE_MEPEO_REP);
+});
+
+it('keeps a representative to the reports naming them', function () {
+    $report = emsAtMepeo($this);
+    $otherRep = emsUser(User::ROLE_MEPEO_REP);
+
+    $this->actingAs($otherRep)->get(route('mepeo.reports.show', $report))->assertNotFound();
+    $this->actingAs($otherRep)->patch(route('mepeo.reports.update', $report), emsFinding())->assertForbidden();
+    $this->actingAs($otherRep)->post(route('mepeo.reports.submit', $report), emsFinding())->assertForbidden();
+
+    $this->actingAs($otherRep)->get(route('mepeo.index'))
+        ->assertInertia(fn (Assert $page) => $page->component('mepeo/index')->has('reports', 0));
+    $this->actingAs($this->rep)->get(route('mepeo.index'))
+        ->assertInertia(fn (Assert $page) => $page->has('reports', 1)->where('reports.0.needs_me', true));
+});
+
+it('goes back to the engineer when returned, and restarts from PMD on resubmission', function () {
+    $report = emsSubmitted($this);
+
     $this->actingAs($this->pmdAsst)->patch(route('ems.return', $report), ['remarks' => ''])->assertSessionHasErrors('remarks');
     $this->actingAs($this->pmdAsst)->patch(route('ems.return', $report), ['remarks' => 'Add the silt fence.'])->assertRedirect();
 
     $report->refresh();
-    expect($report->status)->toBe(EmsSurveyReport::STATUS_WITH_MEPEO)
+    expect($report->status)->toBe(EmsSurveyReport::STATUS_DRAFT)
         ->and($report->return_remarks)->toBe('Add the silt fence.')
-        ->and($report->editableBy($this->rep))->toBeTrue();
+        ->and(Notification::where('recipient', $this->engineer->id)->where('message', 'like', '%returned to you%')->count())->toBe(1);
 
-    $this->actingAs($this->rep)->post(route('mepeo.reports.submit', $report), emsBody(['mitigation' => 'Silt fence added.']))
+    // A draft again: the engineer revises and resubmits.
+    $this->actingAs($this->engineer)
+        ->patch(route('hub.ems.update', [$this->project, $report]), [...$this->header, ...emsBody(['mitigation' => 'Silt fence added.'])])
+        ->assertSessionHasNoErrors();
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->rep->id])
         ->assertSessionHasNoErrors();
 
     $report->refresh();
     expect($report->status)->toBe(EmsSurveyReport::STATUS_FOR_APPROVAL)
         ->and($report->return_remarks)->toBeNull()
-        ->and($report->currentApprovalRole())->toBe(User::ROLE_MEPEO_MANAGER)
-        ->and($report->approvals()->count())->toBe(3);
+        ->and($report->currentApprovalRole())->toBe(User::ROLE_PMD_ASST_MANAGER)
+        ->and($report->approvals()->where('status', 'pending')->count())->toBe(4);
+});
+
+it('can be returned to the engineer by MEPEO too', function () {
+    $report = emsAtMepeo($this);
+
+    $this->actingAs($this->rep)->patch(route('ems.return', $report), ['remarks' => 'Wrong site.'])
+        ->assertRedirect(route('mepeo.index'));
+    expect($report->fresh()->status)->toBe(EmsSurveyReport::STATUS_DRAFT);
+
+    // After the representative has verified it, the MEPEO Manager's return tells them as well.
+    EmsSurveyReport::query()->delete();
+    $report = emsVerified($this);
+
+    $this->actingAs($this->mepeoManager)->patch(route('ems.return', $report), ['remarks' => 'Redo the status.'])->assertRedirect();
+    expect($report->fresh()->status)->toBe(EmsSurveyReport::STATUS_DRAFT)
+        ->and(Notification::where('recipient', $this->rep->id)->where('message', 'like', '%returned to the engineer%')->count())->toBe(1);
+});
+
+it('lets the engineer reassign the representative until they have verified it', function () {
+    $report = emsAtMepeo($this);
+    $newRep = emsUser(User::ROLE_MEPEO_REP);
+
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $newRep->id])
+        ->assertSessionHasNoErrors();
+
+    $report->refresh();
+    expect($report->mepeo_rep_id)->toBe($newRep->id)
+        ->and($report->currentApprovalRole())->toBe(User::ROLE_MEPEO_REP)
+        ->and(Notification::where('recipient', $newRep->id)->count())->toBe(1);
+    $this->actingAs($this->rep)->get(route('mepeo.reports.show', $report))->assertNotFound();
+
+    $this->actingAs($newRep)->post(route('mepeo.reports.submit', $report), emsFinding())->assertSessionHasNoErrors();
+
+    $this->actingAs($this->engineer)
+        ->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->rep->id])
+        ->assertStatus(422);
 });
 
 // ── MEPEO sees nothing else ──────────────────────────────────────────────────
@@ -370,12 +408,14 @@ it('keeps everyone else off the MEPEO page', function () {
 });
 
 it('counts what waits on each MEPEO user for the menu badge', function () {
-    $report = emsSentReport($this);
+    $report = emsAtMepeo($this);
 
     $this->actingAs($this->rep)->get(route('mepeo.index'))
         ->assertInertia(fn (Assert $page) => $page->where('mepeo_count', 1));
+    $this->actingAs($this->mepeoManager)->get(route('mepeo.index'))
+        ->assertInertia(fn (Assert $page) => $page->where('mepeo_count', 0));
 
-    $this->actingAs($this->rep)->post(route('mepeo.reports.submit', $report), emsBody());
+    $this->actingAs($this->rep)->post(route('mepeo.reports.submit', $report), emsFinding());
 
     $this->actingAs($this->rep)->get(route('mepeo.index'))
         ->assertInertia(fn (Assert $page) => $page->where('mepeo_count', 0));
@@ -390,6 +430,7 @@ it('takes supporting documents from the engineer and the representative', functi
 
     $this->actingAs($this->engineer)->post(route('hub.ems.store', $this->project), [
         ...$this->header,
+        ...emsBody(),
         'attachments' => [UploadedFile::fake()->create('site-plan.pdf', 300, 'application/pdf'), UploadedFile::fake()->image('area.jpg')],
     ])->assertSessionHasNoErrors();
 
@@ -399,11 +440,13 @@ it('takes supporting documents from the engineer and the representative', functi
     Storage::disk('public')->assertExists($report->attachments[0]->filepath);
 
     $this->actingAs($this->engineer)->post(route('hub.ems.send', [$this->project, $report]), ['mepeo_rep_id' => $this->rep->id]);
+    $this->actingAs($this->pmdAsst)->patch(route('ems.approve', $report));
+    $this->actingAs($this->pmdDept)->patch(route('ems.approve', $report));
 
     // The representative adds a survey photo and drops the engineer's plan.
     $plan = $report->attachments[0];
     $this->actingAs($this->rep)->patch(route('mepeo.reports.update', $report), [
-        ...emsBody(),
+        ...emsFinding(),
         'attachments'         => [UploadedFile::fake()->image('survey.png')],
         'removed_attachments' => [$plan->id],
     ])->assertSessionHasNoErrors();
@@ -466,10 +509,12 @@ it('deletes the documents with the report', function () {
 // ── The printed form ─────────────────────────────────────────────────────────
 
 it('prints the MEPEO Manager\'s comments under Remarks/Comments, and not PMD\'s', function () {
-    $report = emsSubmittedReport($this);
+    $report = emsSubmitted($this);
 
-    $this->actingAs($this->mepeoManager)->patch(route('ems.approve', $report), ['remarks' => 'Keep the silt fence up.']);
     $this->actingAs($this->pmdAsst)->patch(route('ems.approve', $report), ['remarks' => 'Reviewed without changes.']);
+    $this->actingAs($this->pmdDept)->patch(route('ems.approve', $report));
+    $this->actingAs($this->rep)->post(route('mepeo.reports.submit', $report), emsFinding());
+    $this->actingAs($this->mepeoManager)->patch(route('ems.approve', $report), ['remarks' => 'Keep the silt fence up.']);
 
     expect($this->actingAs($this->engineer)->get(route('ems.print', $report))->assertOk()->getContent())
         ->toContain('Cleared.')
@@ -478,8 +523,8 @@ it('prints the MEPEO Manager\'s comments under Remarks/Comments, and not PMD\'s'
 });
 
 it('prints FRM-19 with the ticks and the signatures given so far', function () {
-    $report = emsSubmittedReport($this);
-    $this->actingAs($this->mepeoManager)->patch(route('ems.approve', $report));
+    $report = emsSubmitted($this);
+    $this->actingAs($this->pmdAsst)->patch(route('ems.approve', $report));
 
     $html = $this->actingAs($this->engineer)->get(route('ems.print', $report))->assertOk()->getContent();
 
@@ -488,11 +533,68 @@ it('prints FRM-19 with the ticks and the signatures given so far', function () {
         ->toContain($report->control_no)
         ->toContain('Acme Builders')
         ->toContain('Water spraying twice a day.')
-        ->toContain('VERIFIED')
         ->toContain('PREPARED')
-        ->not->toContain('NOTED');
+        ->toContain('REVIEWED')
+        ->not->toContain('NOTED')
+        ->not->toContain('VERIFIED');
+
+    $this->actingAs($this->pmdDept)->patch(route('ems.approve', $report));
+    $this->actingAs($this->rep)->post(route('mepeo.reports.submit', $report), emsFinding());
+
+    expect($this->actingAs($this->engineer)->get(route('ems.print', $report))->getContent())
+        ->toContain('NOTED')
+        ->toContain('VERIFIED');
 
     // MEPEO prints the reports it works; a representative not on it cannot.
     $this->actingAs($this->rep)->get(route('ems.print', $report))->assertOk();
     $this->actingAs(emsUser(User::ROLE_MEPEO_REP))->get(route('ems.print', $report))->assertForbidden();
+});
+
+// ── Reports under way when the order changed ────────────────────────────────
+
+it('moves reports under way onto the new sign-off order', function () {
+    $migration = require database_path('migrations/2026_11_12_000002_reorder_ems_report_signoff.php');
+    $make = fn (string $status, array $attributes = []) => $this->project->emsSurveyReports()->create([
+        'control_no' => EmsSurveyReport::nextControlNo(), 'status' => $status, 'date_requested' => '2026-10-30',
+        'created_by' => $this->engineer->id, 'mepeo_rep_id' => $this->rep->id, ...$attributes,
+    ]);
+    $step = fn (EmsSurveyReport $r, string $role, int $sequence, string $status) => $r->approvals()->create([
+        'role' => $role, 'sequence' => $sequence, 'status' => $status,
+        'user_id' => $status === 'approved' ? $this->mepeoManager->id : null, 'acted_at' => $status === 'approved' ? now() : null,
+    ]);
+
+    // With the representative, not yet filled out: back to the engineer.
+    $withRep = $make('with_mepeo', ['sent_at' => '2026-11-01 08:00:00']);
+
+    // MEPEO Manager approved, waiting on the PMD Assistant Manager (old order).
+    $inSignoff = $make('for_approval', [
+        'major_activities' => ['construction'], 'aspects' => ['dust'], 'mepeo_status' => 'proceed',
+        'sent_at' => '2026-11-01 08:00:00', 'submitted_at' => '2026-11-02 09:00:00',
+    ]);
+    $step($inSignoff, User::ROLE_MEPEO_MANAGER, 1, 'approved');
+    $step($inSignoff, User::ROLE_PMD_ASST_MANAGER, 2, 'pending');
+    $step($inSignoff, User::ROLE_PMD_DEPT_MANAGER, 3, 'pending');
+
+    $migration->up();
+
+    $withRep->refresh();
+    expect($withRep->status)->toBe(EmsSurveyReport::STATUS_DRAFT)
+        ->and($withRep->sent_at)->toBeNull()
+        ->and($withRep->return_remarks)->toContain('PMD now reviews');
+
+    $inSignoff->refresh();
+    expect($inSignoff->submitted_at->toDateTimeString())->toBe('2026-11-01 08:00:00')
+        ->and($inSignoff->currentApprovalRole())->toBe(User::ROLE_PMD_ASST_MANAGER)
+        ->and(collect($inSignoff->approvalTimeline())->pluck('role')->all())->toBe([
+            User::ROLE_PMD_ASST_MANAGER, User::ROLE_PMD_DEPT_MANAGER, User::ROLE_MEPEO_REP, User::ROLE_MEPEO_MANAGER,
+        ]);
+
+    // PMD's two signatures complete it — MEPEO already signed under the old order.
+    $this->actingAs($this->pmdAsst)->patch(route('ems.approve', $inSignoff))->assertRedirect();
+    $this->actingAs($this->pmdDept)->patch(route('ems.approve', $inSignoff))->assertRedirect();
+    expect($inSignoff->fresh()->status)->toBe(EmsSurveyReport::STATUS_APPROVED);
+
+    // Running it again changes nothing.
+    $migration->up();
+    expect(DB::table('approval_steps')->where('approvable_id', $inSignoff->id)->count())->toBe(4);
 });

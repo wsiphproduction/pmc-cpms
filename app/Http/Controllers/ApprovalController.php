@@ -165,8 +165,8 @@ class ApprovalController extends Controller
 
     /**
      * EMS Survey Reports at one of these roles' signatures — the PMD
-     * Assistant Manager's review or the Department Manager's note. The MEPEO
-     * Manager's approval comes first and is given from the MEPEO page.
+     * Assistant Manager's review or the Department Manager's note, which come
+     * first. MEPEO's verification and approval follow, on the MEPEO page.
      *
      * @param  array<int, string>  $roles
      */

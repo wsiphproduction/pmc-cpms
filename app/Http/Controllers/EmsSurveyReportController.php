@@ -13,11 +13,13 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
- * Environment Survey Reports (PMD-PRJ-FRM-19) from the project's side: the engineer
- * raising one, filling in what they know and sending it to MEPEO, plus the
- * signatures given from For Approval and the MEPEO page, and the printout.
+ * Environment Survey Reports (PMD-PRJ-FRM-19) from the project's side: the
+ * engineer raising one, filling in the assessment and submitting it for
+ * review, plus the signatures given from For Approval and the MEPEO page,
+ * returns for revision, and the printout.
  *
  * What the MEPEO representative fills in lives in MepeoController.
  */
@@ -45,7 +47,7 @@ class EmsSurveyReportController extends Controller
 
         AuditTrail::log("Environment Survey Report {$report->control_no} created", $project, ['module' => 'EMS', 'type' => 'create']);
 
-        return back()->with('success', "Environment Survey Report {$report->control_no} created. Send it to MEPEO to fill out.");
+        return back()->with('success', "Environment Survey Report {$report->control_no} created. Submit it for review once the assessment is filled in.");
     }
 
     public function update(Request $request, Project $project, EmsSurveyReport $report): RedirectResponse
@@ -62,10 +64,19 @@ class EmsSurveyReportController extends Controller
         return back()->with('success', "Environment Survey Report {$report->control_no} updated.");
     }
 
-    /** To a MEPEO representative — again, to hand it to another one before they submit. */
+    /**
+     * A draft: submit it for PMD's review, naming the MEPEO representative
+     * who verifies it afterwards. In sign-off: name another representative,
+     * as long as the verification has not been given yet.
+     */
     public function send(Request $request, Project $project, EmsSurveyReport $report): RedirectResponse
     {
-        $this->ensureOwnOpenReport($project, $report);
+        abort_unless((int) $report->project_id === (int) $project->id, 404);
+        abort_unless(
+            $report->isOpen() || $report->awaitsRepresentative(),
+            422,
+            'The MEPEO representative has already verified this report.'
+        );
 
         $data = $request->validate([
             'mepeo_rep_id' => ['required', 'integer', Rule::exists('users', 'id')->where(
@@ -78,10 +89,22 @@ class EmsSurveyReportController extends Controller
         ]);
 
         $rep = User::findOrFail($data['mepeo_rep_id']);
+        $mail = $data['send_email'] ?? true;
 
-        $this->flow->send($report, $rep, $data['send_email'] ?? true);
+        if (! $report->isOpen()) {
+            $this->flow->reassign($report, $rep, $mail);
 
-        return back()->with('success', "Environment Survey Report {$report->control_no} sent to {$rep->name}.");
+            return back()->with('success', "Environment Survey Report {$report->control_no} reassigned to {$rep->name}.");
+        }
+
+        $errors = EmsReportInput::assessmentErrors($report);
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+
+        $this->flow->submit($report, $request->user(), $rep, $mail);
+
+        return back()->with('success', "Environment Survey Report {$report->control_no} submitted to the PMD Assistant Manager for review.");
     }
 
     public function destroy(Project $project, EmsSurveyReport $report): RedirectResponse
@@ -108,19 +131,23 @@ class EmsSurveyReportController extends Controller
         return back()->with('success', "Environment Survey Report {$report->control_no} signed.");
     }
 
-    public function returnToRep(Request $request, EmsSurveyReport $report): RedirectResponse
+    /** Back to the engineer to revise, from whichever step it waits on. */
+    public function returnForRevision(Request $request, EmsSurveyReport $report): RedirectResponse
     {
         $data = $request->validate(['remarks' => ['required', 'string', 'max:1000']], [
             'remarks.required' => 'Say what needs revising.',
         ]);
 
         abort_unless(
-            $this->flow->returnToRep($report, $request->user(), $data['remarks']),
+            $this->flow->returnForRevision($report, $request->user(), $data['remarks']),
             403,
             'This report is not awaiting your signature.'
         );
 
-        return back()->with('success', "Environment Survey Report {$report->control_no} returned to MEPEO.");
+        // The representative's MEPEO page no longer shows it as theirs to work.
+        return $request->user()->isMepeo()
+            ? redirect()->route('mepeo.index')->with('success', "Environment Survey Report {$report->control_no} returned to the engineer.")
+            : back()->with('success', "Environment Survey Report {$report->control_no} returned to the engineer.");
     }
 
     /**
@@ -151,8 +178,9 @@ class EmsSurveyReportController extends Controller
     }
 
     /**
-     * Everything on the form but its signatures and MEPEO's Remarks/Comments,
-     * and the supporting documents, all checked before any of it is saved.
+     * Everything on the form but its signatures and MEPEO's part (Status and
+     * Remarks/Comments), and the supporting documents, all checked before any
+     * of it is saved.
      *
      * @return array{0: array, 1: array{files: array, removed: int[]}}
      */
@@ -162,18 +190,16 @@ class EmsSurveyReportController extends Controller
         $body = EmsReportInput::body($request);
         $files = EmsReportInput::attachments($request);
 
-        unset($body['remarks']);
-
         return [[...$header, ...$body], $files];
     }
 
     /**
-     * Only this project's own reports, and only until MEPEO submits: after
-     * that the report is in sign-off and its header is fixed.
+     * Only this project's own reports, and only as drafts: once submitted the
+     * report is in sign-off and fixed, unless it is returned for revision.
      */
     private function ensureOwnOpenReport(Project $project, EmsSurveyReport $report): void
     {
         abort_unless((int) $report->project_id === (int) $project->id, 404);
-        abort_unless($report->isOpen(), 422, 'This report has already been submitted by MEPEO.');
+        abort_unless($report->isOpen(), 422, 'This report has already been submitted for review.');
     }
 }

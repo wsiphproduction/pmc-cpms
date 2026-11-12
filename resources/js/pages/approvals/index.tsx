@@ -250,7 +250,7 @@ function EmsCard({ row, options, onSign, onReturn }: {
                         <div style={{ fontSize: '13px', color: '#334155', fontWeight: 600 }}>{row.project.project_no} — {row.project.title}</div>
                         <div style={{ fontSize: '12.5px', color: '#64748b', marginTop: '2px' }}>
                             Requested {fmtDate(row.date_requested)}{row.prepared_by ? ` by ${row.prepared_by}` : ''}
-                            {row.mepeo_rep ? ` · Filled out by ${row.mepeo_rep.name} (MEPEO)` : ''}
+                            {row.mepeo_rep ? ` · MEPEO Representative: ${row.mepeo_rep.name}` : ''}
                         </div>
                     </div>
                 </div>

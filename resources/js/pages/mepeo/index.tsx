@@ -34,7 +34,7 @@ export default function MepeoIndex({ reports, is_manager }: Props) {
     };
 
     const tabs: { key: TabKey; label: string }[] = [
-        { key: 'action',   label: is_manager ? 'Needs Your Action' : 'To Fill Out' },
+        { key: 'action',   label: is_manager ? 'Needs Your Action' : 'To Verify' },
         { key: 'signoff',  label: 'In Sign-off' },
         { key: 'approved', label: 'Completed' },
         { key: 'all',      label: 'All' },
@@ -52,8 +52,8 @@ export default function MepeoIndex({ reports, is_manager }: Props) {
                     <p style={{ fontSize: '13px', color: '#64748b', margin: 0, maxWidth: '680px', lineHeight: 1.55 }}>
                         Hi <strong style={{ color: '#334155' }}>{auth.user.name}</strong>.{' '}
                         {is_manager
-                            ? 'Reports the MEPEO representatives submit come to you for approval; PMD then reviews and notes them.'
-                            : 'Project engineers send you blank Environmental Impact Assessments to fill out. Submit each one to the MEPEO Manager when done.'}
+                            ? 'Environmental Impact Assessments reach MEPEO once PMD has reviewed and noted them. The representative verifies each one, then it comes to you for approval.'
+                            : 'Environmental Impact Assessments reach you once PMD has reviewed and noted them. Fill in MEPEO\'s Status and Remarks, then verify each one for the MEPEO Manager.'}
                     </p>
                 </div>
             </div>
@@ -117,7 +117,7 @@ export default function MepeoIndex({ reports, is_manager }: Props) {
                                         Print
                                     </a>
                                     <Link href={route('mepeo.reports.show', r.id)} style={{ padding: '8px 18px', borderRadius: '7px', background: r.needs_me ? EMS_TONE : '#0f172a', color: '#fff', fontSize: '12.5px', fontWeight: 700, textDecoration: 'none' }}>
-                                        {r.needs_me ? (r.status === 'for_approval' ? 'Review & Sign' : 'Fill Out') : 'Open'}
+                                        {r.needs_me ? (r.current_role === 'mepeo_rep' ? 'Fill Out & Verify' : 'Review & Sign') : 'Open'}
                                     </Link>
                                 </div>
                             </div>

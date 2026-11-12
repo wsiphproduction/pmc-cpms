@@ -10,87 +10,78 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 
 /**
- * Moves an Environment Survey Report from the engineer to MEPEO and up its sign-off
- * chain, and tells each person along the way. The MEPEO Manager signs from the
- * MEPEO page and the PMD managers from For Approval, so the rules live here
- * rather than in either controller.
+ * Moves an Environment Survey Report up its sign-off chain and tells each
+ * person along the way: the engineer submits it, the PMD Assistant Manager
+ * reviews it and the PMD Manager notes it (from For Approval), then the
+ * MEPEO representative verifies it and the MEPEO Manager approves it (from
+ * the MEPEO page). The rules live here rather than in either controller.
  */
 class EmsReportFlow
 {
-    /** The engineer hands the report to a MEPEO representative to fill in. */
-    public function send(EmsSurveyReport $report, User $rep, bool $mail = true): void
-    {
-        // Handing it to another representative later is not news to PMD.
-        $firstSend = $report->sent_at === null;
-
-        $report->update([
-            'status'       => EmsSurveyReport::STATUS_WITH_MEPEO,
-            'mepeo_rep_id' => $rep->id,
-            'sent_at'      => now(),
-        ]);
-
-        $project = $report->project;
-
-        AuditTrail::log("Environment Survey Report {$report->control_no} sent to {$rep->name} (MEPEO)", $project, ['module' => 'EMS', 'type' => 'update']);
-
-        Notification::notifyAboutEmsReport(
-            $report,
-            $rep->id,
-            "Environment Survey Report {$report->control_no} for project {$project->project_no} was sent to you to fill out.",
-            $this->mepeoLink($report),
-            $mail
-        );
-
-        if ($firstSend) {
-            // PMD signs last, so without this they would first hear of the
-            // report only once MEPEO has finished with it.
-            Notification::notifyAboutEmsReport(
-                $report,
-                $this->roleHolders(User::ROLE_PMD_ASST_MANAGER)->merge($this->roleHolders(User::ROLE_PMD_DEPT_MANAGER))->unique()->values(),
-                "Environment Survey Report {$report->control_no} for project {$project->project_no} was sent to {$rep->name} (MEPEO) to fill out. It comes to you to sign once the MEPEO Manager has approved it.",
-                $this->hubLink($report),
-                $mail
-            );
-        }
-    }
-
     /**
-     * The representative's "Inspected/Verified by": the report goes up the
-     * chain from its first step, whatever an earlier round reached.
+     * The engineer's "Prepared by": submit for review, naming the MEPEO
+     * representative who verifies it once PMD has signed. A report sent back
+     * to be revised starts the chain afresh.
      */
-    public function submit(EmsSurveyReport $report, User $rep): void
+    public function submit(EmsSurveyReport $report, User $engineer, User $rep, bool $mail = true): void
     {
-        // A report sent back to be revised starts the chain afresh.
         $report->approvals()->delete();
         $report->unsetRelation('approvals');
 
         $report->update([
             'status'         => EmsSurveyReport::STATUS_FOR_APPROVAL,
+            'mepeo_rep_id'   => $rep->id,
             'submitted_at'   => now(),
+            'sent_at'        => null,
             'return_remarks' => null,
         ]);
         $report->startApprovalChain();
 
         $project = $report->project;
 
-        AuditTrail::log("Environment Survey Report {$report->control_no} filled out and submitted by {$rep->name} (MEPEO)", $project, ['module' => 'EMS', 'type' => 'update']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} submitted for review by {$engineer->name}", $project, ['module' => 'EMS', 'type' => 'update']);
 
-        $this->notifyCurrentSigner($report, "Environment Survey Report {$report->control_no} for project {$project->project_no} is awaiting your approval.");
+        $this->notifyCurrentSigner(
+            $report,
+            "Environment Survey Report {$report->control_no} for project {$project->project_no} is awaiting your review.",
+            $mail
+        );
+    }
 
-        if ($report->created_by) {
+    /**
+     * Name another representative, any time before the verification is
+     * given. If it already waits on them, the new one is told.
+     */
+    public function reassign(EmsSurveyReport $report, User $rep, bool $mail = true): void
+    {
+        $report->update(['mepeo_rep_id' => $rep->id]);
+
+        $project = $report->project;
+
+        AuditTrail::log("Environment Survey Report {$report->control_no} reassigned to {$rep->name} (MEPEO)", $project, ['module' => 'EMS', 'type' => 'update']);
+
+        if ($report->currentApprovalRole() === User::ROLE_MEPEO_REP) {
             Notification::notifyAboutEmsReport(
                 $report,
-                $report->created_by,
-                "Environment Survey Report {$report->control_no} was filled out by {$rep->name} (MEPEO) and is now with the MEPEO Manager.",
-                $this->hubLink($report)
+                $rep->id,
+                "Environment Survey Report {$report->control_no} for project {$project->project_no} was passed to you to verify.",
+                $this->mepeoLink($report),
+                $mail
             );
         }
     }
 
-    /** Sign the current step. Returns false when the user was not the one being waited on. */
+    /**
+     * Sign the current step. Returns false when the user was not the one being
+     * waited on — or, for the representative, when MEPEO's Status is not set.
+     */
     public function approve(EmsSurveyReport $report, User $user, ?string $remarks = null): bool
     {
         if (! $this->mayAct($report, $user)) {
+            return false;
+        }
+
+        if ($report->currentApprovalRole() === User::ROLE_MEPEO_REP && blank($report->mepeo_status)) {
             return false;
         }
 
@@ -117,7 +108,17 @@ class EmsReportFlow
             return true;
         }
 
-        $this->notifyCurrentSigner($report, "Environment Survey Report {$report->control_no} for project {$project->project_no} is awaiting your signature.");
+        // The PMD Manager's note passes it to MEPEO.
+        if ($report->currentApprovalRole() === User::ROLE_MEPEO_REP && $report->sent_at === null) {
+            $report->update(['sent_at' => now()]);
+        }
+
+        $this->notifyCurrentSigner(
+            $report,
+            $report->currentApprovalRole() === User::ROLE_MEPEO_REP
+                ? "Environment Survey Report {$report->control_no} for project {$project->project_no} was reviewed and noted by PMD and is awaiting your verification."
+                : "Environment Survey Report {$report->control_no} for project {$project->project_no} is awaiting your signature."
+        );
 
         if ($report->created_by) {
             Notification::notifyAboutEmsReport(
@@ -133,10 +134,10 @@ class EmsReportFlow
     }
 
     /**
-     * Send the report back to the representative to revise. Their next
-     * submission restarts the chain.
+     * Send the report back to the engineer to revise. Their next submission
+     * restarts the chain from the PMD Assistant Manager.
      */
-    public function returnToRep(EmsSurveyReport $report, User $user, ?string $remarks = null): bool
+    public function returnForRevision(EmsSurveyReport $report, User $user, ?string $remarks = null): bool
     {
         if (! $this->mayAct($report, $user)) {
             return false;
@@ -147,29 +148,30 @@ class EmsReportFlow
         $project = $report->project;
 
         $report->update([
-            'status'         => EmsSurveyReport::STATUS_WITH_MEPEO,
+            'status'         => EmsSurveyReport::STATUS_DRAFT,
             'return_remarks' => $remarks,
         ]);
 
-        AuditTrail::log("Environment Survey Report {$report->control_no} returned to MEPEO by the {$label}", $project, ['module' => 'EMS', 'type' => 'update']);
+        AuditTrail::log("Environment Survey Report {$report->control_no} returned to the engineer by the {$label}", $project, ['module' => 'EMS', 'type' => 'update']);
 
         $reason = $remarks ? " Reason: {$remarks}" : '';
-
-        if ($report->mepeo_rep_id) {
-            Notification::notifyAboutEmsReport(
-                $report,
-                $report->mepeo_rep_id,
-                "Environment Survey Report {$report->control_no} was returned to you by the {$label} for revision.{$reason}",
-                $this->mepeoLink($report)
-            );
-        }
 
         if ($report->created_by) {
             Notification::notifyAboutEmsReport(
                 $report,
                 $report->created_by,
-                "Environment Survey Report {$report->control_no} was returned to MEPEO by the {$label} for revision.{$reason}",
+                "Environment Survey Report {$report->control_no} was returned to you by the {$label} for revision.{$reason}",
                 $this->hubLink($report)
+            );
+        }
+
+        // The representative already verified it; let them know it is back with the engineer.
+        if ($step->role === User::ROLE_MEPEO_MANAGER && $report->mepeo_rep_id) {
+            Notification::notifyAboutEmsReport(
+                $report,
+                $report->mepeo_rep_id,
+                "Environment Survey Report {$report->control_no} was returned to the engineer by the {$label} for revision.{$reason}",
+                $this->mepeoLink($report)
             );
         }
 
@@ -189,8 +191,11 @@ class EmsReportFlow
         return $user->hasRole(User::ROLE_ADMIN) || $report->awaitingApprovalFrom($user);
     }
 
-    /** Call on whoever holds the step the chain now waits on, from the page they sign on. */
-    private function notifyCurrentSigner(EmsSurveyReport $report, string $message): void
+    /**
+     * Call on whoever holds the step the chain now waits on, from the page
+     * they sign on. The verification goes to the named representative only.
+     */
+    private function notifyCurrentSigner(EmsSurveyReport $report, string $message, bool $mail = true): void
     {
         $role = $report->currentApprovalRole();
 
@@ -198,11 +203,20 @@ class EmsReportFlow
             return;
         }
 
+        if ($role === User::ROLE_MEPEO_REP) {
+            if ($report->mepeo_rep_id) {
+                Notification::notifyAboutEmsReport($report, $report->mepeo_rep_id, $message, $this->mepeoLink($report), $mail);
+            }
+
+            return;
+        }
+
         Notification::notifyAboutEmsReport(
             $report,
             $this->roleHolders($role),
             $message,
-            $role === User::ROLE_MEPEO_MANAGER ? $this->mepeoLink($report) : route('approvals.index', absolute: false)
+            $role === User::ROLE_MEPEO_MANAGER ? $this->mepeoLink($report) : route('approvals.index', absolute: false),
+            $mail
         );
     }
 

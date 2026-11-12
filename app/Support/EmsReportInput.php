@@ -11,10 +11,9 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
- * What the EMS Survey Report forms send: the header, the assessment and the
- * supporting documents. The engineer's pop-up on the project hub and the
- * representative's MEPEO page both fill in the assessment, so they validate
- * it the same way here.
+ * What the EMS Survey Report forms send: the header and assessment (the
+ * engineer's pop-up on the project hub), MEPEO's finding (the
+ * representative's MEPEO page) and the supporting documents both may add.
  */
 class EmsReportInput
 {
@@ -35,11 +34,11 @@ class EmsReportInput
     }
 
     /**
-     * The checklists, write-ups and MEPEO's finding. Only submitting to the
-     * MEPEO Manager asks for the Status and at least one ticked activity and
-     * aspect (or an "Others"); until then any of it may stay blank.
+     * The engineer's assessment: the checklists and write-ups. Any of it may
+     * stay blank while the report is a draft; assessmentErrors() says what
+     * must be there before it is submitted for review.
      */
-    public static function body(Request $request, bool $submitting = false): array
+    public static function body(Request $request): array
     {
         $data = $request->validate([
             'major_activities'       => ['nullable', 'array'],
@@ -51,33 +50,43 @@ class EmsReportInput
             'aspects_other'          => ['nullable', 'string', 'max:255'],
             'impacts'                => ['nullable', 'string', 'max:5000'],
             'mitigation'             => ['nullable', 'string', 'max:5000'],
-            'mepeo_status'           => [$submitting ? 'required' : 'nullable', Rule::in(array_keys(config('ems.statuses')))],
-            'remarks'                => ['nullable', 'string', 'max:5000'],
-        ], [
-            'mepeo_status.required' => 'Choose the Status before submitting.',
         ]);
 
         // A form posted as multipart drops an empty list entirely.
         $data['major_activities'] = array_values(array_unique($data['major_activities'] ?? []));
         $data['aspects'] = array_values(array_unique($data['aspects'] ?? []));
 
-        if ($submitting) {
-            $errors = [];
+        return $data;
+    }
 
-            if ($data['major_activities'] === [] && blank($data['major_activities_other'] ?? null)) {
-                $errors['major_activities'] = 'Tick at least one major activity, or fill in Others.';
-            }
+    /** What a saved report still lacks before PMD can review it: at least one activity and aspect (or an "Others"). */
+    public static function assessmentErrors(EmsSurveyReport $report): array
+    {
+        $errors = [];
 
-            if ($data['aspects'] === [] && blank($data['aspects_other'] ?? null)) {
-                $errors['aspects'] = 'Tick at least one environmental aspect, or fill in Others.';
-            }
-
-            if ($errors !== []) {
-                throw ValidationException::withMessages($errors);
-            }
+        if (empty($report->major_activities) && blank($report->major_activities_other)) {
+            $errors['major_activities'] = 'Tick at least one major activity, or fill in Others, before submitting.';
         }
 
-        return $data;
+        if (empty($report->aspects) && blank($report->aspects_other)) {
+            $errors['aspects'] = 'Tick at least one environmental aspect, or fill in Others, before submitting.';
+        }
+
+        return $errors;
+    }
+
+    /**
+     * MEPEO's part — "To be filled-out by MEPEO": the Status and the
+     * Remarks/Comments. Verifying the report asks for the Status.
+     */
+    public static function finding(Request $request, bool $verifying = false): array
+    {
+        return $request->validate([
+            'mepeo_status' => [$verifying ? 'required' : 'nullable', Rule::in(array_keys(config('ems.statuses')))],
+            'remarks'      => ['nullable', 'string', 'max:5000'],
+        ], [
+            'mepeo_status.required' => 'Choose the Status before verifying.',
+        ]);
     }
 
     /**

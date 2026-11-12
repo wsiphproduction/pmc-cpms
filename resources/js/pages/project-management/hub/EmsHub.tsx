@@ -4,7 +4,7 @@ import { ActionBtns, DataTable, Field, HubProject, HubShell, InfoStrip, Modal, M
 import { useConfirm } from '@/components/useConfirm';
 import ApprovalTimeline from '@/components/ApprovalTimeline';
 import {
-    EMS_TONE, EmsAttachmentsField, EmsBody, EmsBodyForm, EmsFileChanges, EmsHeaderGrid, EmsOptions, EmsReportRow, EmsReportSheet,
+    EMS_BEFORE_VERIFY, EMS_TONE, EmsAttachmentsField, EmsBody, EmsBodyForm, EmsFileChanges, EmsHeaderGrid, EmsOptions, EmsReportRow, EmsReportSheet,
     EmsStatusBadge, emsBodyOf, emsPayload, fmtDate,
 } from '@/components/EmsReport';
 
@@ -32,8 +32,8 @@ const btn = (bg: string, color: string, border = 'none'): React.CSSProperties =>
     padding: '8px 16px', borderRadius: '7px', border, background: bg, color, fontSize: '12.5px', fontWeight: 800, cursor: 'pointer',
 });
 
-// ── The report form: everything on FRM-19 but its signatures, plus the
-// supporting documents. Editable until MEPEO submits it.
+// ── The report form: everything on FRM-19 but its signatures and MEPEO's
+// part, plus the supporting documents. Editable while it is a draft.
 function ReportModal({ project, report, options, defaults, onClose }: {
     project: HubProject;
     report: EmsReportRow | null;
@@ -93,7 +93,8 @@ function ReportModal({ project, report, options, defaults, onClose }: {
             {!report && (
                 <p style={{ margin: '0 0 16px', fontSize: '12.5px', color: '#475569', lineHeight: 1.55 }}>
                     This creates an Environmental Impact Assessment (PMD-PRJ-FRM-19) for <strong>{project.project_no}</strong>.
-                    Fill in what you already know, or leave it blank; the MEPEO representative you send it to completes the rest.
+                    Fill in the assessment, then submit it for review: the PMD Assistant Manager reviews it and the PMD Manager notes it,
+                    then the MEPEO representative verifies it and the MEPEO Manager approves it. You can save it as a draft and finish it later.
                 </p>
             )}
             <ModalSection color={EMS_TONE}>Report Header</ModalSection>
@@ -124,14 +125,10 @@ function ReportModal({ project, report, options, defaults, onClose }: {
 
             <div style={{ marginTop: '22px' }}>
                 <ModalSection color={EMS_TONE}>Assessment</ModalSection>
-                <EmsBodyForm
-                    body={body}
-                    onChange={setBodyField}
-                    options={options}
-                    errors={errors}
-                    mepeoNote="To be filled-out by MEPEO — the representative may set or change the Status. Remarks/Comments are left for MEPEO to write."
-                    hideRemarks
-                />
+                <EmsBodyForm body={body} onChange={setBodyField} options={options} errors={errors} />
+                <div style={{ fontSize: '12px', fontStyle: 'italic', color: '#64748b', marginTop: '8px' }}>
+                    The Status and Remarks/Comments are filled out by MEPEO when they verify the report.
+                </div>
             </div>
 
             <div style={{ marginTop: '22px' }}>
@@ -142,7 +139,7 @@ function ReportModal({ project, report, options, defaults, onClose }: {
     );
 }
 
-// ── Send to a MEPEO representative ──────────────────────────────────────────
+// ── Submit for review (a draft) or reassign the MEPEO representative ───────
 function SendModal({ project, report, reps, onClose }: {
     project: HubProject;
     report: EmsReportRow;
@@ -153,28 +150,29 @@ function SendModal({ project, report, reps, onClose }: {
     const [sendEmail, setSendEmail] = useState(true);
     const [error, setError] = useState('');
     const [saving, setSaving] = useState(false);
+    const submitting = report.status === 'draft';
 
     const submit = () => {
-        if (!repId) { setError('Choose the MEPEO representative to send it to.'); return; }
+        if (!repId) { setError('Choose the MEPEO representative who will verify it.'); return; }
         setSaving(true);
         router.post(route('hub.ems.send', [project.id, report.id]), { mepeo_rep_id: Number(repId), send_email: sendEmail }, {
             preserveScroll: true,
             onSuccess: onClose,
-            onError: errs => setError(Object.values(errs)[0] ?? 'Could not send.'),
+            onError: errs => setError(Object.values(errs)[0] ?? 'Could not submit.'),
             onFinish: () => setSaving(false),
         });
     };
 
     return (
         <Modal
-            title={`Send ${report.control_no} to MEPEO`}
+            title={submitting ? `Submit ${report.control_no} for Review` : `Reassign MEPEO Representative — ${report.control_no}`}
             onClose={onClose}
             headerBg={EMS_TONE}
             size="480px"
             footer={<>
                 <button type="button" onClick={onClose} style={btn('#fff', '#374151', '1px solid #e2e8f0')}>Cancel</button>
                 <button type="button" onClick={submit} disabled={saving || reps.length === 0} style={{ ...btn(EMS_TONE, '#fff'), opacity: reps.length === 0 ? 0.5 : 1 }}>
-                    {saving ? 'Sending…' : 'Send'}
+                    {saving ? 'Saving…' : submitting ? 'Submit for Review' : 'Reassign'}
                 </button>
             </>}
         >
@@ -185,8 +183,9 @@ function SendModal({ project, report, reps, onClose }: {
             ) : (
                 <>
                     <p style={{ margin: '0 0 14px', fontSize: '12.5px', color: '#475569', lineHeight: 1.55 }}>
-                        The representative fills out the assessment, then submits it to the MEPEO Manager for approval.
-                        {report.mepeo_rep && <> It is with <strong>{report.mepeo_rep.name}</strong> now; choosing someone else hands it over.</>}
+                        {submitting
+                            ? <>It goes to the PMD Assistant Manager to review, then the PMD Manager to note. It then reaches the MEPEO representative you choose here, who fills in MEPEO&apos;s Status and Remarks and verifies it for the MEPEO Manager&apos;s approval.</>
+                            : <><strong>{report.mepeo_rep?.name ?? 'No one'}</strong> is named to verify it. Choosing someone else hands it over{report.current_role === 'mepeo_rep' ? ' now' : ' for when PMD has signed'}.</>}
                     </p>
                     <Field label="MEPEO Representative">
                         <select value={repId} onChange={e => { setRepId(e.target.value); setError(''); }} style={{ ...inputStyle, background: '#fff' }}>
@@ -196,7 +195,9 @@ function SendModal({ project, report, reps, onClose }: {
                     </Field>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '14px', fontSize: '12.5px', color: '#334155', cursor: 'pointer' }}>
                         <input type="checkbox" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)} />
-                        Email them and the PMD managers as well (all get an in-app notification)
+                        {submitting
+                            ? 'Email the PMD Assistant Manager as well (they get an in-app notification either way)'
+                            : 'Email the representative as well, if it is with them now (in-app notification either way)'}
                     </label>
                     {error && <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '10px', fontWeight: 600 }}>{error}</div>}
                 </>
@@ -222,7 +223,7 @@ function ViewModal({ report, options, onClose }: { report: EmsReportRow; options
                 <EmsStatusBadge row={report} />
                 {report.mepeo_rep && <span style={{ fontSize: '12.5px', color: '#64748b' }}>MEPEO Representative: <strong style={{ color: '#334155' }}>{report.mepeo_rep.name}</strong></span>}
             </div>
-            {report.return_remarks && report.status === 'with_mepeo' && (
+            {report.return_remarks && report.status === 'draft' && (
                 <div style={{ fontSize: '12.5px', color: '#991b1b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px' }}>
                     <strong>Returned for revision:</strong> {report.return_remarks}
                 </div>
@@ -248,8 +249,11 @@ export default function EmsHub({ project, reports, options, mepeoReps, defaults,
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
     const hasSubRows = reports.some(r => !!r.sub_project_id);
-    // Only this project's own reports, and only until MEPEO submits them.
-    const isOpen = (r: EmsReportRow) => canManage && !r.sub_project_id && (r.status === 'draft' || r.status === 'with_mepeo');
+    // Only this project's own reports: edited while drafts, and the MEPEO
+    // representative changed until they have verified it.
+    const isOpen = (r: EmsReportRow) => canManage && !r.sub_project_id && r.status === 'draft';
+    const canReassign = (r: EmsReportRow) => canManage && !r.sub_project_id && r.status === 'for_approval'
+        && EMS_BEFORE_VERIFY.includes(r.current_role ?? '');
 
     const handleDelete = (row: EmsReportRow) => {
         showConfirm(`Delete Environment Survey Report ${row.control_no}?`, () => {
@@ -269,8 +273,9 @@ export default function EmsHub({ project, reports, options, mepeoReps, defaults,
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginBottom: '16px' }}>
                 <div style={{ fontSize: '12.5px', color: '#64748b', maxWidth: '620px', lineHeight: 1.5 }}>
-                    Environmental Impact Assessment (PMD-PRJ-FRM-19). Create a report, send it to MEPEO to fill out;
-                    it is then approved by the MEPEO Manager, reviewed by the PMD Assistant Manager and noted by the PMD Manager.
+                    Environmental Impact Assessment (PMD-PRJ-FRM-19). Prepare the report and submit it for review:
+                    it is reviewed by the PMD Assistant Manager and noted by the PMD Manager, then verified by the MEPEO
+                    Representative and approved by the MEPEO Manager.
                 </div>
                 {canManage && (
                     <button type="button" onClick={() => setCreating(true)} style={btn(EMS_TONE, '#fff')}>+ New Environment Survey Report</button>
@@ -289,13 +294,18 @@ export default function EmsHub({ project, reports, options, mepeoReps, defaults,
                         <strong style={{ whiteSpace: 'nowrap' }}>{row.control_no}</strong>,
                         ...(hasSubRows ? [<SubTag no={row.sub_project_no} />] : []),
                         <span style={{ whiteSpace: 'nowrap' }}>{fmtDate(row.date_requested)}</span>,
-                        <span style={{ fontSize: '12.5px' }}>{row.mepeo_rep?.name ?? <span style={{ color: '#94a3b8' }}>Not sent yet</span>}</span>,
+                        <span style={{ fontSize: '12.5px' }}>{row.mepeo_rep?.name ?? <span style={{ color: '#94a3b8' }}>Not chosen yet</span>}</span>,
                         <EmsStatusBadge row={row} />,
                         row.approvals.length > 0 ? <ApprovalTimeline steps={row.approvals} compact /> : <span style={{ color: '#94a3b8', fontSize: '12px' }}>—</span>,
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                             {isOpen(row) && (
-                                <button type="button" onClick={() => setSending(row)} style={{ ...btn(row.status === 'draft' ? EMS_TONE : '#fff', row.status === 'draft' ? '#fff' : EMS_TONE, row.status === 'draft' ? 'none' : `1px solid ${EMS_TONE}`), padding: '6px 11px', fontSize: '12px', whiteSpace: 'nowrap' }}>
-                                    {row.status === 'draft' ? 'Send to MEPEO' : 'Reassign'}
+                                <button type="button" onClick={() => setSending(row)} style={{ ...btn(EMS_TONE, '#fff'), padding: '6px 11px', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                    {row.return_remarks ? 'Resubmit for Review' : 'Submit for Review'}
+                                </button>
+                            )}
+                            {canReassign(row) && (
+                                <button type="button" onClick={() => setSending(row)} style={{ ...btn('#fff', EMS_TONE, `1px solid ${EMS_TONE}`), padding: '6px 11px', fontSize: '12px', whiteSpace: 'nowrap' }}>
+                                    Reassign MEPEO
                                 </button>
                             )}
                             <ActionBtns

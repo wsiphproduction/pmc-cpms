@@ -4,14 +4,14 @@ import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import ApprovalTimeline from '@/components/ApprovalTimeline';
 import { useConfirm } from '@/components/useConfirm';
 import {
-    EMS_TONE, EmsAttachmentsField, EmsBody, EmsBodyForm, EmsFileChanges, EmsHeaderGrid, EmsOptions, EmsReportRow, EmsReportSheet,
+    EMS_TONE, EmsAttachmentsField, EmsBody, EmsFileChanges, EmsFindingForm, EmsHeaderGrid, EmsOptions, EmsReportRow, EmsReportSheet,
     EmsSignModal, EmsStatusBadge, emsBodyOf, emsPayload,
 } from '@/components/EmsReport';
 
 interface Props {
     report: EmsReportRow;
     options: EmsOptions;
-    /** The representative it is with, while it is with them. */
+    /** The representative named on it, while it waits on their verification. */
     can_edit: boolean;
     /** The MEPEO Manager, while it waits on their approval. */
     can_sign: boolean;
@@ -45,7 +45,7 @@ export default function MepeoShow({ report, options, can_edit, can_sign }: Props
 
     const submit = () => {
         showConfirm(
-            `Submit ${report.control_no} to the MEPEO Manager for approval? You can no longer change it unless it is returned to you.`,
+            `Verify ${report.control_no} and pass it to the MEPEO Manager for approval? You can no longer change MEPEO's part afterwards.`,
             () => {
                 setBusy('submit');
                 router.post(route('mepeo.reports.submit', report.id), emsPayload(body, fileChanges), {
@@ -54,7 +54,7 @@ export default function MepeoShow({ report, options, can_edit, can_sign }: Props
                     onFinish: () => setBusy(null),
                 });
             },
-            { title: 'Submit for Approval', confirmLabel: 'Submit', variant: 'info' },
+            { title: 'Verify Report', confirmLabel: 'Verify', variant: 'info' },
         );
     };
 
@@ -98,9 +98,9 @@ export default function MepeoShow({ report, options, can_edit, can_sign }: Props
                 </div>
             </div>
 
-            {report.return_remarks && report.status === 'with_mepeo' && (
+            {report.return_remarks && report.status === 'draft' && (
                 <div style={{ fontSize: '13px', color: '#991b1b', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 16px', marginBottom: '14px' }}>
-                    <strong>Returned for revision:</strong> {report.return_remarks}
+                    <strong>Returned to the engineer for revision:</strong> {report.return_remarks}
                 </div>
             )}
 
@@ -117,7 +117,10 @@ export default function MepeoShow({ report, options, can_edit, can_sign }: Props
                     <EmsReportSheet row={report} options={options} />
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <EmsBodyForm body={body} onChange={set} options={options} errors={errors} />
+                        {/* The assessment the engineer prepared and PMD reviewed stays as signed. */}
+                        <EmsReportSheet row={report} options={options} hideFinding />
+
+                        <EmsFindingForm body={body} onChange={set} options={options} errors={errors} />
 
                         <div>
                             <div style={sectionTitle}>Supporting Documents</div>
@@ -131,11 +134,14 @@ export default function MepeoShow({ report, options, can_edit, can_sign }: Props
                         )}
 
                         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', flexWrap: 'wrap', position: 'sticky', bottom: 0, background: 'linear-gradient(transparent, #f8fafc 30%)', padding: '14px 0 4px' }}>
+                            <button type="button" onClick={() => setSignMode('return')} disabled={busy !== null} style={{ padding: '9px 20px', borderRadius: '8px', border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: '13px', fontWeight: 700, cursor: 'pointer', marginRight: 'auto' }}>
+                                Return for Revision
+                            </button>
                             <button type="button" onClick={save} disabled={busy !== null} style={{ padding: '9px 20px', borderRadius: '8px', border: '1px solid #e2e8f0', background: '#fff', color: '#334155', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}>
                                 {busy === 'save' ? 'Saving…' : 'Save Draft'}
                             </button>
                             <button type="button" onClick={submit} disabled={busy !== null} style={{ padding: '9px 22px', borderRadius: '8px', border: 'none', background: EMS_TONE, color: '#fff', fontSize: '13px', fontWeight: 800, cursor: 'pointer' }}>
-                                {busy === 'submit' ? 'Submitting…' : 'Submit to MEPEO Manager'}
+                                {busy === 'submit' ? 'Verifying…' : '✓ Verify & Pass to MEPEO Manager'}
                             </button>
                         </div>
                     </div>

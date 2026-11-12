@@ -17,7 +17,7 @@ export interface EmsOptions {
     statuses: EmsOption[];
 }
 
-export type EmsStatus = 'draft' | 'with_mepeo' | 'for_approval' | 'approved';
+export type EmsStatus = 'draft' | 'for_approval' | 'approved';
 
 /** A supporting document on the report. */
 export interface EmsAttachment {
@@ -49,7 +49,7 @@ export interface EmsReportRow {
     mepeo_status: string | null;
     remarks: string | null;
     attachments: EmsAttachment[];
-    /** Why it last came back to the representative, until they resubmit. */
+    /** Why it last came back to the engineer, until they resubmit. */
     return_remarks: string | null;
     mepeo_rep: { id: number; name: string } | null;
     prepared_by: string | null;
@@ -66,23 +66,29 @@ export interface EmsReportRow {
 
 export const EMS_TONE = '#15803d';
 
-/** What each office's signature means on the form. */
+/** What each office's signature means on the form, in signing order. */
 export const EMS_SIGN_LABELS: Record<string, { verb: string; action: string }> = {
-    mepeo_manager:    { verb: 'Approved', action: 'Approve' },
     pmd_asst_manager: { verb: 'Reviewed', action: 'Mark Reviewed' },
     pmd_dept_manager: { verb: 'Noted',    action: 'Mark Noted' },
+    mepeo_rep:        { verb: 'Verified', action: 'Verify' },
+    mepeo_manager:    { verb: 'Approved', action: 'Approve' },
 };
+
+/** The steps that can still change the MEPEO representative: before they verify. */
+export const EMS_BEFORE_VERIFY = ['pmd_asst_manager', 'pmd_dept_manager', 'mepeo_rep'];
 
 const STATUS_STYLE: Record<EmsStatus, { bg: string; color: string; border: string }> = {
     draft:        { bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' },
-    with_mepeo:   { bg: '#fef9c3', color: '#854d0e', border: '#fef08a' },
     for_approval: { bg: '#dbeafe', color: '#1e40af', border: '#bfdbfe' },
     approved:     { bg: '#dcfce7', color: '#166534', border: '#bbf7d0' },
 };
 
-export function EmsStatusBadge({ row }: { row: Pick<EmsReportRow, 'status' | 'status_label' | 'return_remarks'> }) {
-    const returned = row.status === 'with_mepeo' && !!row.return_remarks;
-    const s = returned ? { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' } : STATUS_STYLE[row.status];
+const WITH_MEPEO_STYLE = { bg: '#fef9c3', color: '#854d0e', border: '#fef08a' };
+
+export function EmsStatusBadge({ row }: { row: Pick<EmsReportRow, 'status' | 'status_label' | 'return_remarks' | 'current_role'> }) {
+    const returned = row.status === 'draft' && !!row.return_remarks;
+    const withMepeo = row.status === 'for_approval' && (row.current_role === 'mepeo_rep' || row.current_role === 'mepeo_manager');
+    const s = returned ? { bg: '#fee2e2', color: '#991b1b', border: '#fecaca' } : withMepeo ? WITH_MEPEO_STYLE : STATUS_STYLE[row.status];
     return (
         <span style={{ background: s.bg, color: s.color, border: `1px solid ${s.border}`, borderRadius: '999px', padding: '3px 9px', fontSize: '11px', fontWeight: 800, whiteSpace: 'nowrap' }}>
             {returned ? 'Returned for Revision' : row.status_label}
@@ -97,8 +103,8 @@ export function fmtDate(value: string | null | undefined): string {
 }
 
 /**
- * Sign the step the report waits on, or send it back to the MEPEO
- * representative. A return has to say what needs revising; a signature may
+ * Sign the step the report waits on, or send it back to the engineer who
+ * prepared it. A return has to say what needs revising; a signature may
  * carry a remark.
  */
 export function EmsSignModal({ report, mode, onClose }: { report: EmsReportRow; mode: 'sign' | 'return'; onClose: () => void }) {
@@ -127,14 +133,14 @@ export function EmsSignModal({ report, mode, onClose }: { report: EmsReportRow; 
             <div style={{ background: '#fff', borderRadius: '12px', width: '100%', maxWidth: '460px', overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.25)' }}>
                 <div style={{ padding: '16px 22px', borderBottom: '1px solid #f1f5f9', background: tone.bg }}>
                     <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 800, color: tone.color }}>
-                        {signing ? `${action} — ${report.control_no}` : `Return ${report.control_no} to MEPEO`}
+                        {signing ? `${action} — ${report.control_no}` : `Return ${report.control_no} for Revision`}
                     </h3>
                 </div>
                 <div style={{ padding: '22px' }}>
                     <p style={{ margin: '0 0 14px', fontSize: '12.5px', color: '#475569', lineHeight: 1.55 }}>
                         {signing
                             ? 'Your signature moves the report to the next office; the last one completes it.'
-                            : 'The representative revises it and submits again, which restarts the sign-off from the MEPEO Manager.'}
+                            : `It goes back to ${report.prepared_by ?? 'the engineer who prepared it'} to revise. Submitting it again restarts the sign-off from the PMD Assistant Manager.`}
                     </p>
                     <label style={{ display: 'block', fontSize: '11px', fontWeight: 800, color: '#374151', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
                         {mepeoManager ? 'Your comments (optional) — printed under Remarks/Comments' : signing ? 'Remarks (optional)' : 'What needs revising'}
@@ -150,7 +156,7 @@ export function EmsSignModal({ report, mode, onClose }: { report: EmsReportRow; 
                 <div style={{ padding: '14px 22px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                     <button type="button" onClick={onClose} style={{ padding: '8px 18px', borderRadius: '7px', border: '1px solid #e5e7eb', background: '#fff', fontSize: '12.5px', cursor: 'pointer' }}>Cancel</button>
                     <button type="button" onClick={submit} disabled={saving} style={{ padding: '8px 22px', borderRadius: '7px', border: 'none', background: tone.button, color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer' }}>
-                        {saving ? 'Saving…' : signing ? action : 'Return to MEPEO'}
+                        {saving ? 'Saving…' : signing ? action : 'Return to Engineer'}
                     </button>
                 </div>
             </div>
@@ -222,8 +228,12 @@ function TextCell({ text }: { text: string | null }) {
 const frame: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' };
 const col: React.CSSProperties = { display: 'flex', flexDirection: 'column', borderRight: '1px solid #e5e7eb', minWidth: 0 };
 
-/** The assessment and MEPEO's finding, read-only, laid out like the paper form. */
-export function EmsReportSheet({ row, options }: { row: EmsReportRow; options: EmsOptions }) {
+/**
+ * The assessment and MEPEO's finding, read-only, laid out like the paper
+ * form. `hideFinding` leaves out MEPEO's part where it is being filled in
+ * beside the sheet.
+ */
+export function EmsReportSheet({ row, options, hideFinding = false }: { row: EmsReportRow; options: EmsOptions; hideFinding?: boolean }) {
     const status = options.statuses.find(s => s.key === row.mepeo_status);
     const managerRemarks = row.approvals.find(step => step.role === 'mepeo_manager' && step.status === 'approved')?.remarks;
     return (
@@ -252,7 +262,7 @@ export function EmsReportSheet({ row, options }: { row: EmsReportRow; options: E
                 </div>
             </div>
 
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+            {!hideFinding && <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
                 <div style={band}>Status (MEPEO)</div>
                 <div style={{ padding: '10px 12px', fontSize: '12.5px', fontWeight: 700, color: status ? '#0f172a' : '#94a3b8' }}>
                     {status ? status.label : 'Not decided yet.'}
@@ -264,7 +274,7 @@ export function EmsReportSheet({ row, options }: { row: EmsReportRow; options: E
                         <strong>MEPEO Manager:</strong> {managerRemarks}
                     </div>
                 )}
-            </div>
+            </div>}
 
             <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
                 <div style={{ ...band, background: '#f1f5f9' }}>Supporting Documents</div>
@@ -277,8 +287,9 @@ export function EmsReportSheet({ row, options }: { row: EmsReportRow; options: E
 }
 
 // ── Editing the report ──────────────────────────────────────────────────────
-// The engineer's pop-up on the hub and the representative's MEPEO page fill
-// in the same form, everything on FRM-19 but its signatures.
+// The engineer's pop-up on the hub fills in the assessment (EmsBodyForm); the
+// representative's MEPEO page fills in MEPEO's part (EmsFindingForm). Both
+// share one EmsBody state shape.
 
 export interface EmsBody {
     major_activities: string[];
@@ -354,18 +365,12 @@ function CheckGroup({ options, value, onChange, other, onOther, error }: {
     );
 }
 
-/**
- * The checklists, write-ups and MEPEO's finding, laid out like the paper
- * form. `mepeoNote` heads MEPEO's part where someone else is filling it in,
- * and `hideRemarks` leaves out the Remarks/Comments that only MEPEO writes.
- */
-export function EmsBodyForm({ body, onChange, options, errors, mepeoNote, hideRemarks = false }: {
+/** The engineer's assessment — checklists and write-ups — laid out like the paper form. */
+export function EmsBodyForm({ body, onChange, options, errors }: {
     body: EmsBody;
     onChange: <K extends keyof EmsBody>(key: K, value: EmsBody[K]) => void;
     options: EmsOptions;
     errors: Record<string, string>;
-    mepeoNote?: string;
-    hideRemarks?: boolean;
 }) {
     const set = <K extends keyof EmsBody>(key: K) => (value: EmsBody[K]) => onChange(key, value);
     return (
@@ -407,23 +412,32 @@ export function EmsBodyForm({ body, onChange, options, errors, mepeoNote, hideRe
                     <textarea value={body.mitigation} onChange={e => set('mitigation')(e.target.value)} style={textarea} placeholder="How each impact will be mitigated…" />
                 </div>
             </div>
+        </div>
+    );
+}
 
-            <div>
-                {mepeoNote && <div style={{ fontSize: '12px', fontStyle: 'italic', color: '#475569', margin: '0 0 6px' }}>{mepeoNote}</div>}
-                <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
-                    <div style={band}>Status</div>
-                    {options.statuses.map(s => (
-                        <label key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '13px', cursor: 'pointer', background: body.mepeo_status === s.key ? '#f0fdf4' : 'transparent' }}>
-                            <input type="checkbox" checked={body.mepeo_status === s.key} onChange={() => set('mepeo_status')(body.mepeo_status === s.key ? '' : s.key)} style={{ accentColor: EMS_TONE, width: '15px', height: '15px' }} />
-                            {s.label}
-                        </label>
-                    ))}
-                    {errors.mepeo_status && <div style={{ ...fieldError, padding: '6px 12px' }}>{errors.mepeo_status}</div>}
-                    {!hideRemarks && <>
-                        <div style={{ ...band, borderTop: '1px solid #e5e7eb' }}>Remarks/Comments</div>
-                        <textarea value={body.remarks} onChange={e => set('remarks')(e.target.value)} style={{ ...textarea, minHeight: '90px' }} />
-                    </>}
-                </div>
+/** "To be filled-out by MEPEO" — the Status and Remarks/Comments the representative gives. */
+export function EmsFindingForm({ body, onChange, options, errors }: {
+    body: EmsBody;
+    onChange: <K extends keyof EmsBody>(key: K, value: EmsBody[K]) => void;
+    options: EmsOptions;
+    errors: Record<string, string>;
+}) {
+    const set = <K extends keyof EmsBody>(key: K) => (value: EmsBody[K]) => onChange(key, value);
+    return (
+        <div>
+            <div style={{ fontSize: '12px', fontStyle: 'italic', color: '#475569', margin: '0 0 6px' }}>To be filled-out by MEPEO:</div>
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+                <div style={band}>Status</div>
+                {options.statuses.map(s => (
+                    <label key={s.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '13px', cursor: 'pointer', background: body.mepeo_status === s.key ? '#f0fdf4' : 'transparent' }}>
+                        <input type="checkbox" checked={body.mepeo_status === s.key} onChange={() => set('mepeo_status')(body.mepeo_status === s.key ? '' : s.key)} style={{ accentColor: EMS_TONE, width: '15px', height: '15px' }} />
+                        {s.label}
+                    </label>
+                ))}
+                {errors.mepeo_status && <div style={{ ...fieldError, padding: '6px 12px' }}>{errors.mepeo_status}</div>}
+                <div style={{ ...band, borderTop: '1px solid #e5e7eb' }}>Remarks/Comments</div>
+                <textarea value={body.remarks} onChange={e => set('remarks')(e.target.value)} style={{ ...textarea, minHeight: '90px' }} />
             </div>
         </div>
     );

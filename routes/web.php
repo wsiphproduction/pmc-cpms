@@ -246,7 +246,7 @@ Route::middleware(['auth'])->group(function () {
     // from For Approval; the flow checks the signer is the one waited on.
     Route::get('ems-reports/{report}/print',     [EmsSurveyReportController::class, 'print'])->name('ems.print');
     Route::patch('ems-reports/{report}/approve', [EmsSurveyReportController::class, 'approve'])->name('ems.approve');
-    Route::patch('ems-reports/{report}/return',  [EmsSurveyReportController::class, 'returnToRep'])->name('ems.return');
+    Route::patch('ems-reports/{report}/return',  [EmsSurveyReportController::class, 'returnForRevision'])->name('ems.return');
 
     // ── MEPEO (the environmental office's own page) ───────────────────────
     Route::middleware(['role:mepeo_rep|mepeo_manager|admin'])->group(function () {

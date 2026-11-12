@@ -2,8 +2,8 @@
     Environmental Impact Assessment — PMD-PRJ-FRM-19, Rev 00. Printed from
     the Environment Survey Report record.
 
-    The upper half is the project side: the engineer's header, then the
-    assessment MEPEO's representative fills in, signed off by PMD. The lower
+    The upper half is the project side: the engineer's header and
+    assessment, reviewed and noted by PMD. The lower
     half is MEPEO's own finding and signatures. Every block carries a stamp
     once the system has recorded that signature; until then it stays blank
     for a wet one.
@@ -29,14 +29,12 @@
     // What the MEPEO Manager wrote when approving, under the representative's remarks.
     $managerRemarks = $signed->get('mepeo_manager')['remarks'] ?? null;
 
-    // Sending it to MEPEO is the engineer's sign-off; submitting it back is
-    // the representative's.
-    $prepared = $report->sent_at
-        ? ['actor' => $report->creator?->name, 'date' => $report->sent_at->format('M d, Y h:i A'), 'word' => 'PREPARED']
+    // Submitting it for review is the engineer's sign-off; the
+    // representative's verification is a step of the chain like the rest.
+    $prepared = $report->submitted_at && in_array($report->status, ['for_approval', 'approved'], true)
+        ? ['actor' => $report->creator?->name, 'date' => $report->submitted_at->format('M d, Y h:i A'), 'word' => 'PREPARED']
         : null;
-    $verified = $report->submitted_at && in_array($report->status, ['for_approval', 'approved'], true)
-        ? ['actor' => $report->mepeoRep?->name, 'date' => $report->submitted_at->format('M d, Y h:i A'), 'word' => 'VERIFIED']
-        : null;
+    $verified = $stamp('mepeo_rep', 'VERIFIED');
 
     // Rows the aspects column runs to: the impacts sit beside the first seven,
     // the Mitigation heading beside the eighth, its text beside the rest.
