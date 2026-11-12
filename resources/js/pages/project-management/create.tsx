@@ -2,6 +2,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import { SharedData } from '@/types';
+import { DURATION_BASIS_OPTIONS } from '@/lib/duration';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface SelectOption {
@@ -53,6 +54,9 @@ interface ProjectFormData {
     category: string;
     service_type: string;
     deadline: string;
+    duration_basis: string;
+    actual_start: string;
+    actual_end: string;
     project_cost: string;
     owner_email: string;
     structure_type: string;
@@ -280,6 +284,9 @@ export default function ProjectCreate({
         category:        project?.category ?? '',
         service_type:    project?.service_type ?? '',
         deadline:        project?.deadline ?? '',
+        duration_basis:  project?.duration_basis || 'calendar',
+        actual_start:    project?.actual_start ?? '',
+        actual_end:      project?.actual_end ?? '',
         project_cost:    project?.project_cost != null ? String(project.project_cost) : '',
         owner_email:     project?.owner_email ?? '',
         structure_type:  project?.structure_type ?? '',
@@ -308,6 +315,11 @@ export default function ProjectCreate({
         }
 
         const payload: Record<string, string | boolean | File | null> = { ...data };
+        // Actual dates are only recorded once a project exists (Edit form).
+        if (!isEditing) {
+            delete payload.actual_start;
+            delete payload.actual_end;
+        }
         if (proposalFile) payload.proposal_document = proposalFile;
         if (sub_context) {
             payload.parent_id = String(sub_context.parent_id);
@@ -658,6 +670,52 @@ export default function ProjectCreate({
                                 error={errors.structure_type}
                             />
                         </div>
+                    </div>
+
+                    {/* Duration basis — calendar days unless changed. Actual dates are
+                        editing only; they are saved to the completion record, so
+                        they also pre-fill the Completion Certificate. */}
+                    <div style={{ ...col3, marginBottom: '20px' }}>
+                        <div>
+                            <FormLabel>Duration Basis</FormLabel>
+                            {/* Two fixed choices, so a plain select rather than the
+                                type-to-search SelectField used for master data. */}
+                            <select
+                                value={data.duration_basis}
+                                onChange={e => setData('duration_basis', e.target.value)}
+                                style={{
+                                    width: '100%', padding: '9px 13px', borderRadius: '8px', fontSize: '13.5px',
+                                    border: `1px solid ${errors.duration_basis ? '#fca5a5' : '#e2e8f0'}`,
+                                    background: '#fff', color: '#1e293b', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+                                }}
+                            >
+                                {DURATION_BASIS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            </select>
+                            {errors.duration_basis && <div style={{ fontSize: '11.5px', color: '#ef4444', marginTop: '4px' }}>{errors.duration_basis}</div>}
+                            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>
+                                How durations, the NTP baseline end and days remaining are counted.
+                            </div>
+                        </div>
+                        {isEditing && (<>
+                            <div>
+                                <FormLabel>Actual Start Date</FormLabel>
+                                <InputField
+                                    type="date"
+                                    value={data.actual_start}
+                                    onChange={set('actual_start')}
+                                    error={errors.actual_start}
+                                />
+                            </div>
+                            <div>
+                                <FormLabel>Actual End Date</FormLabel>
+                                <InputField
+                                    type="date"
+                                    value={data.actual_end}
+                                    onChange={set('actual_end')}
+                                    error={errors.actual_end}
+                                />
+                            </div>
+                        </>)}
                     </div>
 
                     {/* Spec Box — JIP hidden per request; jip stays in form state (false) */}

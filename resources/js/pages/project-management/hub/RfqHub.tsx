@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, Modal, ModalSection, SubTag, inputStyle, money } from './Common';
 import { SendConfirmModal } from './SendConfirmModal';
 import { useConfirm } from '@/components/useConfirm';
+import { addDurationDays, dayUnit, dayUnitTitle, durationLabel } from '@/lib/duration';
 
 type RfqStatus = 'Awarded' | 'Submitted' | 'Pending' | 'Expired';
 
@@ -166,7 +167,7 @@ function RfqViewModal({ row, quotation, project, onClose, canEdit = true }: { ro
         if (!scope.trim())        { setError('Scope of Work is required.'); return; }
         if (!due)                 { setError('Date Needed is required.'); return; }
         if (filledItems.length === 0 || !hasTotal) { setError('An itemized quotation with at least one costed item is required.'); return; }
-        if (!duration || Number(duration) <= 0) { setError('Target Project Duration (calendar days) is required.'); return; }
+        if (!duration || Number(duration) <= 0) { setError(`Target Project Duration (${dayUnit(project.duration_basis)}) is required.`); return; }
         if (!terms.trim())        { setError('Terms and Conditions are required.'); return; }
         if (!inclusions.trim())   { setError('Inclusions are required.'); return; }
         if (!exclusions.trim())   { setError('Exclusions are required.'); return; }
@@ -277,7 +278,7 @@ function RfqViewModal({ row, quotation, project, onClose, canEdit = true }: { ro
                     <Field label="Target Project Duration *">
                         <div style={{ display: 'flex', gap: '0' }}>
                             <input type="number" value={duration} onChange={e => setDuration(e.target.value)} placeholder="e.g., 45" style={{ ...inputStyle, borderRadius: '7px 0 0 7px', borderRight: 'none' }} />
-                            <span style={{ padding: '8px 12px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '0 7px 7px 0', fontSize: '12.5px', color: '#475569', whiteSpace: 'nowrap' }}>Calendar Days</span>
+                            <span style={{ padding: '8px 12px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '0 7px 7px 0', fontSize: '12.5px', color: '#475569', whiteSpace: 'nowrap' }}>{dayUnitTitle(project.duration_basis)}</span>
                         </div>
                     </Field>
                 </div>
@@ -359,7 +360,7 @@ function QuotationDetailModal({ row, quotation, project, onClose }: {
         ['Project Title',      project.title],
         ['Project Owner',      project.project_manager],
         ['Date Needed',        quotation.due_raw ? quotation.due : '—'],
-        ['Project Duration',   quotation.duration_days ? `${quotation.duration_days} calendar day${quotation.duration_days === 1 ? '' : 's'}` : '—'],
+        ['Project Duration',   quotation.duration_days ? durationLabel(quotation.duration_days, project.duration_basis) : '—'],
         ['Submitted',          quotation.submitted_at ?? 'Not sent yet'],
         ['Received',           quotation.received_at ?? 'Not yet acknowledged'],
     ];
@@ -583,7 +584,7 @@ function QuotationsModal({ row, project, canEdit, onClose, onEdit }: {
                                     {q.origin === 'supplier' ? `From ${row.contractor}` : 'Entered by the project team'} · Added {q.created_at}
                                     {q.submitted_at ? ` · sent ${q.submitted_at}` : ''}
                                     {q.received_at && q.origin === 'supplier' ? ` · received ${q.received_at}` : ''}
-                                    {q.duration_days ? ` · ${q.duration_days} calendar day${q.duration_days === 1 ? '' : 's'}` : ''}
+                                    {q.duration_days ? ` · ${durationLabel(q.duration_days, project.duration_basis)}` : ''}
                                     {q.due_raw ? ` · due ${q.due}` : ''}
                                     {` · ${q.items.length} item${q.items.length === 1 ? '' : 's'}`}
                                 </div>
@@ -658,28 +659,17 @@ function QuotationsModal({ row, project, canEdit, onClose, onEdit }: {
 }
 
 // ── NTP Modal ──────────────────────────────────────────────────────────────
-// Add N calendar days to a YYYY-MM-DD date, returning YYYY-MM-DD.
-// Number(days) guards against `days` arriving as a string (e.g. "30"), which
-// would otherwise make `getDate() + days` concatenate instead of add.
 function todayIso(): string {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-function addDays(dateStr: string, days: number): string {
-    if (!dateStr) return '';
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const dt = new Date(y, m - 1, d);
-    dt.setDate(dt.getDate() + Number(days));
-    const pad = (n: number) => String(n).padStart(2, '0');
-    return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
-}
-
 function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject; onClose: () => void }) {
     // Auto-fill the approved cost from the RFQ's itemized quotation total.
     const rfqTotal = (row.items ?? []).reduce((s, i) => s + Number(i.total_cost ?? 0), 0);
-    const calendarDays = row.duration_days ?? null;
+    const durationDays = row.duration_days ?? null;
+    const basis = project.duration_basis;
 
     const [start, setStart] = useState('');
     const [end, setEnd] = useState('');
@@ -697,11 +687,11 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
     ].filter(Boolean) as string[];
 
     // Baseline end date is auto-suggested from the start date + the RFQ's target
-    // duration (calendar days) whenever the start changes, but stays editable so
-    // the user can override it.
+    // duration — in the project's calendar or working days (Sundays skipped) —
+    // whenever the start changes, but stays editable so the user can override it.
     useEffect(() => {
-        if (calendarDays && start) setEnd(addDays(start, calendarDays));
-    }, [start, calendarDays]);
+        if (durationDays && start) setEnd(addDurationDays(start, durationDays, basis));
+    }, [start, durationDays, basis]);
 
     const handleIssue = () => {
         if (!start) { setError('Baseline Start date is required.'); return; }
@@ -742,7 +732,7 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
             <div style={{ padding: '10px 14px', background: '#e0f2fe', border: '1px solid #bae6fd', borderRadius: '8px', marginBottom: '18px', fontSize: '12.5px', color: '#075985' }}>
                 This NTP will be sent to the department manager for review before it is issued.<br />
                 For: <strong>{row.contractor}</strong>
-                {calendarDays != null && <> · Duration: <strong>{calendarDays} calendar day{calendarDays === 1 ? '' : 's'}</strong></>}
+                {durationDays != null && <> · Duration: <strong>{durationLabel(durationDays, basis)}</strong></>}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <Field label="Baseline Start Date"><input type="date" style={inputStyle} value={start} onChange={e => setStart(e.target.value)} /></Field>
@@ -753,8 +743,8 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
                         value={end}
                         onChange={e => setEnd(e.target.value)}
                     />
-                    {calendarDays
-                        ? <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>Auto-filled from start + {calendarDays} calendar day{calendarDays === 1 ? '' : 's'} — you can adjust it.</div>
+                    {durationDays
+                        ? <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>Auto-filled from start + {durationLabel(durationDays, basis)}{basis === 'working' ? ' (Sundays skipped)' : ''} — you can adjust it.</div>
                         : <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>No RFQ duration set — enter the end date manually.</div>}
                 </Field>
             </div>
@@ -1272,7 +1262,7 @@ export default function RfqHub({ project, rfqs, suppliers = [], canEdit = true }
                                 <div>
                                     <strong style={{ color: '#2563eb' }}>PhP {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
                                     <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
-                                        {row.duration_days ? `${row.duration_days} calendar day${row.duration_days === 1 ? '' : 's'}` : 'No duration set'}
+                                        {row.duration_days ? durationLabel(row.duration_days, project.duration_basis) : 'No duration set'}
                                     </div>
                                     {finalNote(row)}
                                 </div>

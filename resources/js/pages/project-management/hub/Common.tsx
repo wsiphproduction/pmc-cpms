@@ -22,6 +22,8 @@ export interface HubProject {
     /** Owning department — printed as "Project Owner" on the PMD forms. */
     dept_owner?: string;
     owner_email?: string;
+    /** Calendar or working days (Mon–Sat) — how this project's durations count. */
+    duration_basis?: import('@/lib/duration').DurationBasis;
     signatories?: HubSignatories;
 }
 

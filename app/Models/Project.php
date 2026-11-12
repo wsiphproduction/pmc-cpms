@@ -40,6 +40,15 @@ class Project extends Model
         'CANCELED' => 'Canceled',
     ];
 
+    /**
+     * How a project counts its days. Calendar days count every day; working
+     * days are Monday to Saturday (Sundays off). Durations, the NTP baseline
+     * end and the timeline all follow the project's basis.
+     */
+    public const BASIS_CALENDAR = 'calendar';
+    public const BASIS_WORKING = 'working';
+    public const DURATION_BASES = [self::BASIS_CALENDAR, self::BASIS_WORKING];
+
     protected $fillable = [
         'project_no',
         'parent_id',
@@ -61,6 +70,7 @@ class Project extends Model
         'category',
         'service_type',
         'deadline',
+        'duration_basis',
         'owner_email',
         'structure_type',
         'jip',
@@ -382,9 +392,52 @@ class Project extends Model
 
     // ── Health / KPI ──────────────────────────────────────────────────────
 
+    public function usesWorkingDays(): bool
+    {
+        return $this->duration_basis === self::BASIS_WORKING;
+    }
+
+    /** "71 calendar days" / "1 working day", per the project's basis. */
+    public function durationLabel(?int $days): string
+    {
+        if ($days === null) {
+            return '';
+        }
+
+        return $days . ' ' . ($this->usesWorkingDays() ? 'working' : 'calendar') . ' day' . ($days === 1 ? '' : 's');
+    }
+
+    /**
+     * Signed day count from $from to $to (both taken at start of day). With
+     * working days, Sundays are skipped — matching the calendar diff when no
+     * Sunday falls in between.
+     */
+    public static function countDays(Carbon $from, Carbon $to, bool $workingDays): int
+    {
+        $from = $from->copy()->startOfDay();
+        $to = $to->copy()->startOfDay();
+
+        if (! $workingDays) {
+            return (int) $from->diffInDays($to, false);
+        }
+
+        // Sundays after a fixed Sunday (1970-01-04) up to and including $d, so
+        // the Sundays in (from, to] are the difference of two of these.
+        $sundaysUpTo = fn (Carbon $d) => intdiv((int) Carbon::create(1970, 1, 4)->diffInDays($d), 7);
+
+        $sign = $to->lt($from) ? -1 : 1;
+        [$start, $end] = $sign === 1 ? [$from, $to] : [$to, $from];
+
+        return $sign * ((int) $start->diffInDays($end) - ($sundaysUpTo($end) - $sundaysUpTo($start)));
+    }
+
     public function daysElapsed(): int
     {
-        return $this->created_at?->diffInDays(now()) ?? 0;
+        if (! $this->created_at) {
+            return 0;
+        }
+
+        return max(0, self::countDays($this->created_at, now(), $this->usesWorkingDays()));
     }
 
     public function daysRemaining(): int
@@ -400,7 +453,7 @@ class Project extends Model
     {
         $deadline = $this->deadline ? Carbon::parse($this->deadline) : now();
 
-        return now()->startOfDay()->diffInDays($deadline->startOfDay(), false);
+        return self::countDays(now(), $deadline, $this->usesWorkingDays());
     }
 
     /**

@@ -73,7 +73,7 @@
         <tr class="rp-top">
             <td class="k">Job Site / Location</td><td class="c">:</td><td>{{ $orBlank($project->site) }}</td>
             <td class="k2 rp rt">Baseline Project Duration</td><td class="c rt">:</td>
-            <td class="rt">{{ $ntp->rfq?->duration_days ? $ntp->rfq->duration_days . ' WORKING DAYS' : '' }}</td>
+            <td class="rt">{{ strtoupper($project->durationLabel($ntp->rfq?->duration_days)) }}</td>
         </tr>
         <tr>
             <td class="k">Service Contractor</td><td class="c">:</td><td>{{ $orBlank($ntp->contractor_name) }}</td>

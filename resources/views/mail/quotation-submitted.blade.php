@@ -50,7 +50,7 @@
                                                 ['Supplier',       $rfq->contractor_name],
                                                 ['Quotation',      $quotation->displayName()],
                                                 ['Quoted Amount',  'PhP ' . number_format($grandTotal, 2)],
-                                                ['Duration',       $quotation->duration_days ? $quotation->duration_days . ' calendar day(s)' : '—'],
+                                                ['Duration',       $quotation->duration_days ? $project->durationLabel($quotation->duration_days) : '—'],
                                                 ['Submitted',      optional($quotation->submitted_at)->format('F d, Y h:i A') ?? '—'],
                                             ];
                                         @endphp

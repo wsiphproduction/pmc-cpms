@@ -2,6 +2,7 @@ import { Head, router } from '@inertiajs/react';
 import { useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
 import type { HubProject } from './hub/Common';
+import { durationLabel, type DurationBasis } from '@/lib/duration';
 import AcrHub from './hub/AcrHub';
 import AuditTrailHub from './hub/AuditTrailHub';
 import ContractHub from './hub/ContractHub';
@@ -53,6 +54,8 @@ interface Project {
     deadline: string;
     days_elapsed: number;
     days_remaining: number;
+    /** How the project counts days; the timeline above follows it. */
+    duration_basis: DurationBasis;
     budget_total: number;
     budget_base: number;
     budget_paid: number;
@@ -485,6 +488,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
         cost_code:          project.cost_code,
         dept_owner:         project.dept_owner,
         owner_email:        project.owner_email,
+        duration_basis:     project.duration_basis,
         signatories:        project.signatories,
     };
 
@@ -703,7 +707,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 <div data-tour="project-analytics" style={{ padding: '24px 30px', borderBottom: '1px solid #e5e7eb', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '0', background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '12px', margin: '20px 30px' }}>
                     {/* Timeline */}
                     <div style={{ padding: '0 24px 0 0', borderRight: '1px solid #e5e7eb', textAlign: 'center' }}>
-                        {sectionLabel('Timeline (Days Remaining)')}
+                        {sectionLabel(project.duration_basis === 'working' ? 'Timeline (Working Days Remaining)' : 'Timeline (Days Remaining)')}
                         <div style={{ position: 'relative', display: 'inline-block', marginBottom: '8px' }}>
                             <SemiDonut elapsed={project.days_elapsed} remaining={project.days_remaining} color="#f59e0b" />
                             <div style={{ position: 'absolute', bottom: '0', left: '50%', transform: 'translateX(-50%)', fontWeight: 800, fontSize: '22px', color: '#1e293b' }}>
@@ -812,12 +816,12 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                             <InfoField label="Structure Type">{project.structure_type}</InfoField>
                         </div>
 
-                        {/* Schedule at a glance. Actual dates come from the completion
-                            certificate; until then the NTP baseline is shown under them. */}
+                        {/* Schedule at a glance. Actual dates are set from Edit Project or the
+                            completion certificate; until then the NTP baseline is shown under them. */}
                         <div data-tour="project-schedule" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0 16px', marginBottom: '20px', padding: '14px 16px 0', border: '1px solid #e5e7eb', borderRadius: '8px', background: '#fff' }}>
                             <InfoField label="Project Duration">
                                 {project.schedule.duration_days != null
-                                    ? `${project.schedule.duration_days} calendar day${project.schedule.duration_days === 1 ? '' : 's'}`
+                                    ? durationLabel(project.schedule.duration_days, project.duration_basis)
                                     : <span style={{ color: '#94a3b8' }}>Not yet quoted</span>}
                             </InfoField>
                             {([

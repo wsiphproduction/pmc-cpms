@@ -240,6 +240,7 @@ class ProjectController extends Controller
             'category' => $data['category'],
             'service_type' => $data['service_type'],
             'deadline' => $data['deadline'],
+            'duration_basis' => $data['duration_basis'] ?? $parent?->duration_basis ?? Project::BASIS_CALENDAR,
             'budget_base' => $data['project_cost'] ?? 0,
             'owner_email' => $data['owner_email'] ?? null,
             'structure_type' => $data['structure_type'] ?? null,
@@ -343,6 +344,7 @@ class ProjectController extends Controller
             'category' => $data['category'],
             'service_type' => $data['service_type'],
             'deadline' => $data['deadline'],
+            'duration_basis' => $data['duration_basis'] ?? $project->duration_basis ?? Project::BASIS_CALENDAR,
             'budget_base' => $data['project_cost'] ?? 0,
             'owner_email' => $data['owner_email'] ?? null,
             'structure_type' => $data['structure_type'] ?? null,
@@ -357,6 +359,20 @@ class ProjectController extends Controller
         // Re-derive the total: the form moves the base, approved variations
         // still sit on top of it.
         $project->refreshBudgetTotal();
+
+        // Actual start/end are known while work is ongoing, long before the
+        // completion certificate opens up — so the edit form records them on
+        // the same completion record the certificate reads. Only touched when
+        // the form sent them, and no empty record is made for blank dates.
+        if ($request->has('actual_start') || $request->has('actual_end')) {
+            $dates = [
+                'con_actual_start' => $data['actual_start'] ?? null,
+                'con_actual_end'   => $data['actual_end'] ?? null,
+            ];
+            if ($project->completion || array_filter($dates)) {
+                $project->completion()->updateOrCreate(['project_id' => $project->id], $dates);
+            }
+        }
 
         // The proposal a project was approved on is kept when a newer one is
         // uploaded — it becomes an earlier version rather than being deleted.
@@ -1184,6 +1200,11 @@ class ProjectController extends Controller
             'category' => ['required', 'string', 'max:255'],
             'service_type' => ['required', 'string', 'max:255'],
             'deadline' => ['required', 'date'],
+            'duration_basis' => ['nullable', 'in:' . implode(',', Project::DURATION_BASES)],
+            // Edit form only: the construction's actual dates, kept on the
+            // completion record so the certificate and overview share them.
+            'actual_start' => ['nullable', 'date'],
+            'actual_end' => ['nullable', 'date', 'after_or_equal:actual_start'],
             'project_cost' => ['nullable', 'numeric', 'min:0'],
             'owner_email' => ['nullable', 'email', 'max:255'],
             'structure_type' => ['nullable', 'string', 'max:255'],
@@ -1324,6 +1345,7 @@ class ProjectController extends Controller
             'status' => 'PLANNING',
             'project_cost' => 0,
             'deadline' => optional($parent->deadline)->format('Y-m-d'),
+            'duration_basis' => $parent->duration_basis ?? Project::BASIS_CALENDAR,
         ];
     }
 
@@ -1362,6 +1384,7 @@ class ProjectController extends Controller
             'budget_paid' => (float) $project->budget_paid,
             'deadline' => optional($project->deadline)->format('M d, Y') ?? '—',
             'days_remaining' => $project->deadline ? $project->daysUntilDeadline() : null,
+            'duration_basis' => $project->duration_basis ?? Project::BASIS_CALENDAR,
             // Sub-projects are never rows of their own in this list; they are
             // listed under their parent's number, and only when asked for.
             'sub_projects' => $project->children->map(fn (Project $child) => [
@@ -1398,6 +1421,7 @@ class ProjectController extends Controller
             'deadline' => optional($project->deadline)->format('M d, Y') ?? '-',
             'days_elapsed' => $daysElapsed,
             'days_remaining' => $daysRemaining,
+            'duration_basis' => $project->duration_basis ?? Project::BASIS_CALENDAR,
             'budget_total' => (float) $project->budget_total,
             'budget_base' => (float) $project->budget_base,
             'budget_paid' => (float) $project->budget_paid,
@@ -1501,7 +1525,16 @@ class ProjectController extends Controller
 
         $d = fn ($date) => optional($date)->format('Y-m-d');
 
+        // The edit form can create this record with just the actual dates; the
+        // certificate only counts as filled once something beyond those is set.
+        // completion_status is skipped too: the column defaults to 'Finished'.
+        $certificateSaved = collect($c->getAttributes())
+            ->except(['id', 'project_id', 'con_actual_start', 'con_actual_end', 'completion_status', 'photos', 'saved_by', 'created_at', 'updated_at'])
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->isNotEmpty();
+
         return [
+            'certificate_saved'   => $certificateSaved,
             'reference_no'        => $c->reference_no,
             'sub_project_title'   => $c->sub_project_title,
             'classification'      => $c->classification,
@@ -1565,6 +1598,9 @@ class ProjectController extends Controller
             'category' => $project->category,
             'service_type' => $project->service_type,
             'deadline' => optional($project->deadline)->format('Y-m-d'),
+            'duration_basis' => $project->duration_basis ?? Project::BASIS_CALENDAR,
+            'actual_start' => optional($project->completion?->con_actual_start)->format('Y-m-d') ?? '',
+            'actual_end' => optional($project->completion?->con_actual_end)->format('Y-m-d') ?? '',
             'project_cost' => (float) $project->budget_base,
             'owner_email' => $project->owner_email ?? '',
             'structure_type' => $project->structure_type ?? '',

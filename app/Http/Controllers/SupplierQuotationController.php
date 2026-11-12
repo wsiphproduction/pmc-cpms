@@ -52,6 +52,7 @@ class SupplierQuotationController extends Controller
                 'title'      => $project->title,
                 'site'       => $project->site,
                 'owner'      => $project->dept_owner ?: $project->project_manager_name,
+                'duration_basis' => $project->duration_basis ?? Project::BASIS_CALENDAR,
             ],
             // Only the supplier's own offers — staff-entered quotations stay
             // internal to the project team.

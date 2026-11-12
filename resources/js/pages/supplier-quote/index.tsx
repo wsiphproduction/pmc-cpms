@@ -1,5 +1,6 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import { useMemo, useState } from 'react';
+import { dayUnit, durationLabel, type DurationBasis } from '@/lib/duration';
 
 /**
  * The supplier's quotation portal.
@@ -49,7 +50,7 @@ interface PageProps {
         scope_of_work: string | null;
         token: string;
     };
-    project: { project_no: string; title: string; site: string | null; owner: string | null };
+    project: { project_no: string; title: string; site: string | null; owner: string | null; duration_basis: DurationBasis };
     quotations: Quotation[];
     form_rows: number;
     flash?: { success?: string; error?: string };
@@ -148,8 +149,9 @@ function QuotationForm({ quotation, token, formRows, defaultScope, onCancel }: {
     onCancel: () => void;
 }) {
     const readOnly = quotation ? !quotation.editable : false;
+    const basis = usePage<PageProps>().props.project.duration_basis;
 
-    const [label, setLabel]           = useState(quotation?.label ?? '');
+    const [label, setLabel]          = useState(quotation?.label ?? '');
     const [scope, setScope]           = useState(quotation?.scope_of_work ?? defaultScope);
     const [duration, setDuration]     = useState(quotation?.duration_days?.toString() ?? '');
     const [terms, setTerms]           = useState(quotation?.terms ?? '');
@@ -193,7 +195,7 @@ function QuotationForm({ quotation, token, formRows, defaultScope, onCancel }: {
         if (send) {
             if (!scope.trim())                                    { setError('Please describe the scope of work your quotation covers.'); return; }
             if (!filled.some(r => Number(r.total_cost ?? 0) > 0)) { setError('Add at least one line item with a total cost before sending.'); return; }
-            if (!duration || Number(duration) <= 0)               { setError('Please give the project duration in calendar days.'); return; }
+            if (!duration || Number(duration) <= 0)               { setError(`Please give the project duration in ${dayUnit(basis)}.`); return; }
             if (!terms.trim())                                    { setError('Please fill in your terms and conditions.'); return; }
             if (!inclusions.trim())                               { setError('Please fill in what your quotation includes.'); return; }
             if (!exclusions.trim())                               { setError('Please fill in what your quotation excludes.'); return; }
@@ -258,7 +260,7 @@ function QuotationForm({ quotation, token, formRows, defaultScope, onCancel }: {
                     <input value={label} readOnly={readOnly} onChange={e => setLabel(e.target.value)} placeholder="e.g. Revised offer" style={input} />
                 </label>
                 <label>
-                    <Label>Project duration (calendar days) *</Label>
+                    <Label>Project duration ({basis === 'working' ? 'working days, Mon–Sat' : 'calendar days'}) *</Label>
                     <input type="number" min="1" value={duration} readOnly={readOnly} onChange={e => setDuration(e.target.value)} placeholder="e.g. 45" style={input} />
                 </label>
             </div>
@@ -425,7 +427,7 @@ export default function SupplierQuotePortal() {
                                             </div>
                                             <div style={{ fontSize: '11.5px', color: '#64748b', marginTop: '4px' }}>
                                                 {q.items.length} item{q.items.length === 1 ? '' : 's'}
-                                                {q.duration_days ? ` · ${q.duration_days} calendar day${q.duration_days === 1 ? '' : 's'}` : ''}
+                                                {q.duration_days ? ` · ${durationLabel(q.duration_days, project.duration_basis)}` : ''}
                                                 {q.submitted_at ? ` · sent ${q.submitted_at}` : ''}
                                                 {q.received_at ? ` · received ${q.received_at}` : ''}
                                             </div>

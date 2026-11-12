@@ -98,10 +98,21 @@ it('renders the rfq form with its figures', function () {
         ->toContain($this->project->project_no)
         ->toContain('Site works')
         ->toContain('2,000.00')
-        ->toContain('30 Working Days')
+        // Durations print in the project's basis — calendar days by default.
+        ->toContain('30 Calendar Days')
         // Scope ticks the matching box on the paper form.
         ->toContain('☒ Detailed Estimate')
         ->toContain('☐ Conceptual Design');
+
+    $this->project->update(['duration_basis' => Project::BASIS_WORKING]);
+    $html = view('print.rfq', [
+        'project'      => $this->project,
+        'rfq'          => $this->rfq->fresh(['items']),
+        'signatories'  => ['prepared_by' => 'Test Engineer', 'pmd_assistant_manager' => 'A. Manager', 'pmd_manager' => 'P. Manager'],
+        'subProjectNo' => null,
+    ])->render();
+
+    expect($html)->toContain('30 Working Days');
 });
 
 it('stamps only the prepared-by block before anyone has approved', function () {

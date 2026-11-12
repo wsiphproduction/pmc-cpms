@@ -148,7 +148,7 @@
             <tr>
                 <td class="num">A.</td>
                 <td>Target Project Duration</td>
-                <td colspan="4">{{ $rfq->duration_days ? $rfq->duration_days . ' Working Days' : '' }}</td>
+                <td colspan="4">{{ ucwords($project->durationLabel($rfq->duration_days)) }}</td>
             </tr>
             <tr>
                 <td class="num">B.</td>

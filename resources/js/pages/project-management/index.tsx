@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import { durationLabel, type DurationBasis } from '@/lib/duration';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface Project {
@@ -16,6 +17,7 @@ interface Project {
     budget_paid: number;
     deadline: string | null;
     days_remaining: number | null;
+    duration_basis: DurationBasis;
     /** Children of this project; listed under its number, never as own rows. */
     sub_projects: { id: number; project_no: string; ntp_no: string | null; title: string; status: string }[];
     can: {
@@ -707,7 +709,9 @@ export default function ProjectsIndex({
                                                     ? 'Delayed'
                                                     : proj.days_remaining === 0
                                                         ? 'Due today'
-                                                        : `${proj.days_remaining} day${proj.days_remaining === 1 ? '' : 's'} left`}
+                                                        : proj.duration_basis === 'working'
+                                                            ? `${durationLabel(proj.days_remaining, 'working')} left`
+                                                            : `${proj.days_remaining} day${proj.days_remaining === 1 ? '' : 's'} left`}
                                             </div>
                                         )}
                                     </td>

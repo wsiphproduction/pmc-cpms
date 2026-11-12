@@ -5,6 +5,8 @@ import { useState } from 'react';
 export interface CompletionPhoto { path: string; url: string }
 
 export interface CompletionData {
+    /** False when only the actual dates exist (recorded from Edit Project). */
+    certificate_saved: boolean;
     reference_no: string | null;
     sub_project_title: string | null;
     classification: string | null;
@@ -303,7 +305,7 @@ export function CompletionPanel({ project, completion, signatories, canEdit }: {
     canEdit: boolean;
 }) {
     const [showModal, setShowModal] = useState(false);
-    const filled = !!completion;
+    const filled = !!completion?.certificate_saved;
 
     const btn = (bg: string, color: string, border: string): React.CSSProperties => ({
         padding: '8px 16px', borderRadius: '8px', border: `1px solid ${border}`, background: bg, color,

@@ -493,3 +493,135 @@ it('reports no sub-projects for a project without children', function () {
         ->get(route('projects.index'))
         ->assertInertia(fn (Assert $page) => $page->has('projects.data.0.sub_projects', 0));
 });
+
+it('records actual start and end dates from the edit form while the project is ongoing', function () {
+    $user = makeApproverUser();
+    $manager = User::factory()->create();
+    seedProjectMasterData();
+
+    $this->actingAs($user)->post(route('projects.store'), projectPayload($manager));
+    $project = Project::firstOrFail();
+
+    // Blank dates on an edit leave no empty completion record behind.
+    $this->actingAs($user)
+        ->put(route('projects.update', $project), projectPayload($manager, [
+            'status' => 'ONGOING', 'actual_start' => '', 'actual_end' => '',
+        ]))
+        ->assertRedirect();
+    expect($project->fresh()->completion)->toBeNull();
+
+    $this->actingAs($user)
+        ->put(route('projects.update', $project), projectPayload($manager, [
+            'status' => 'ONGOING', 'actual_start' => '2026-10-07', 'actual_end' => '2026-11-14',
+        ]))
+        ->assertRedirect();
+
+    $completion = $project->fresh()->completion;
+    expect($completion->con_actual_start->format('Y-m-d'))->toBe('2026-10-07')
+        ->and($completion->con_actual_end->format('Y-m-d'))->toBe('2026-11-14');
+
+    // They show on the overview, pre-fill the edit form, and do not count as
+    // a filled-in completion certificate.
+    $this->actingAs($user)
+        ->get(route('projects.show', $project))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('project.schedule.actual_start', 'Oct 07, 2026')
+            ->where('project.schedule.actual_end', 'Nov 14, 2026')
+            ->where('project.completion.certificate_saved', false));
+
+    $this->actingAs($user)
+        ->get(route('projects.edit', $project))
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('project.actual_start', '2026-10-07')
+            ->where('project.actual_end', '2026-11-14'));
+});
+
+it('rejects an actual end date before the actual start date', function () {
+    $user = makeApproverUser();
+    $manager = User::factory()->create();
+    seedProjectMasterData();
+
+    $this->actingAs($user)->post(route('projects.store'), projectPayload($manager));
+    $project = Project::firstOrFail();
+
+    $this->actingAs($user)
+        ->put(route('projects.update', $project), projectPayload($manager, [
+            'actual_start' => '2026-11-14', 'actual_end' => '2026-10-07',
+        ]))
+        ->assertSessionHasErrors(['actual_end']);
+});
+
+it('keeps the certificate details when the edit form changes the actual dates', function () {
+    $user = makeApproverUser();
+    $manager = User::factory()->create();
+    seedProjectMasterData();
+
+    $this->actingAs($user)->post(route('projects.store'), projectPayload($manager));
+    $project = Project::firstOrFail();
+    $project->completion()->create(['reference_no' => 'REF-1', 'con_actual_start' => '2026-10-01']);
+
+    $this->actingAs($user)
+        ->put(route('projects.update', $project), projectPayload($manager, [
+            'actual_start' => '2026-10-07', 'actual_end' => '',
+        ]))
+        ->assertRedirect();
+
+    $completion = $project->fresh()->completion;
+    expect($completion->reference_no)->toBe('REF-1')
+        ->and($completion->con_actual_start->format('Y-m-d'))->toBe('2026-10-07')
+        ->and($completion->con_actual_end)->toBeNull();
+});
+
+it('counts projects in calendar days unless set to working days', function () {
+    $user = makeApproverUser();
+    $manager = User::factory()->create();
+    seedProjectMasterData();
+
+    $this->actingAs($user)->post(route('projects.store'), projectPayload($manager))->assertRedirect();
+    $project = Project::firstOrFail();
+    expect($project->duration_basis)->toBe('calendar');
+
+    $this->actingAs($user)
+        ->put(route('projects.update', $project), projectPayload($manager, ['duration_basis' => 'working']))
+        ->assertRedirect();
+    expect($project->fresh()->duration_basis)->toBe('working');
+
+    $this->actingAs($user)
+        ->get(route('projects.edit', $project))
+        ->assertInertia(fn (Assert $page) => $page->where('project.duration_basis', 'working'));
+
+    $this->actingAs($user)
+        ->get(route('projects.show', $project))
+        ->assertInertia(fn (Assert $page) => $page->where('project.duration_basis', 'working'));
+
+    $this->actingAs($user)
+        ->put(route('projects.update', $project), projectPayload($manager, ['duration_basis' => 'fortnights']))
+        ->assertSessionHasErrors(['duration_basis']);
+});
+
+it('skips Sundays when counting working days', function () {
+    $d = fn (string $ymd) => \Illuminate\Support\Carbon::parse($ymd);
+
+    // 2026-11-09 is a Monday.
+    expect(Project::countDays($d('2026-11-09'), $d('2026-11-16'), false))->toBe(7)
+        ->and(Project::countDays($d('2026-11-09'), $d('2026-11-16'), true))->toBe(6)   // one Sunday skipped
+        ->and(Project::countDays($d('2026-11-14'), $d('2026-11-16'), true))->toBe(1)   // Sat → Mon
+        ->and(Project::countDays($d('2026-11-14'), $d('2026-11-15'), true))->toBe(0)   // Sat → Sun
+        ->and(Project::countDays($d('2026-11-16'), $d('2026-11-09'), true))->toBe(-6)  // signed, backwards
+        ->and(Project::countDays($d('2026-11-09'), $d('2026-11-09'), true))->toBe(0)
+        ->and(Project::countDays($d('2026-11-01'), $d('2026-11-30'), true))->toBe(25); // 29 days, 4 Sundays after Nov 1
+});
+
+it('counts days remaining on the project basis', function () {
+    \Illuminate\Support\Carbon::setTestNow('2026-11-09 10:00:00'); // Monday
+
+    $project = new Project(['deadline' => '2026-11-23', 'duration_basis' => 'calendar']);
+    expect($project->daysUntilDeadline())->toBe(14);
+
+    $project->duration_basis = 'working';
+    expect($project->daysUntilDeadline())->toBe(12)
+        ->and($project->durationLabel(12))->toBe('12 working days')
+        ->and($project->durationLabel(1))->toBe('1 working day');
+
+    \Illuminate\Support\Carbon::setTestNow();
+});

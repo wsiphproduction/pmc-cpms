@@ -2,6 +2,7 @@ import { router } from '@inertiajs/react';
 import { useState } from 'react';
 import { ActionBtns, Badge, Button, DataTable, Field, HubProject, HubShell, InfoStrip, Modal, ModalSection, SubTag, inputStyle } from './Common';
 import { useConfirm } from '@/components/useConfirm';
+import { dayUnitTitle, durationLabel } from '@/lib/duration';
 
 import { FileHistory, FileVersion, VersionBadge } from '@/components/FileVersions';
 
@@ -214,7 +215,7 @@ function CreateModal({ project, onClose }: { project: HubProject; onClose: () =>
                 <Field label="Description / Justification">
                     <textarea rows={3} style={inputStyle} placeholder="Describe the variation and why it is needed…" value={desc} onChange={e => setDesc(e.target.value)} />
                 </Field>
-                <Field label="Duration (Calendar Days)">
+                <Field label={`Duration (${dayUnitTitle(project.duration_basis)})`}>
                     <div style={{ display: 'flex', gap: '0' }}>
                         <input type="number" min="0" step="1" style={{ ...inputStyle, borderRadius: '7px 0 0 7px', borderRight: 'none' }} placeholder="e.g., 15" value={duration} onChange={e => setDuration(e.target.value)} />
                         <span style={{ padding: '8px 12px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '0 7px 7px 0', fontSize: '12.5px', color: '#475569', whiteSpace: 'nowrap' }}>Days</span>
@@ -270,7 +271,7 @@ function ReadOnlyDetailTable({
 }
 
 // ── View Modal (read-only) ─────────────────────────────────────────────────
-function ViewVofModal({ vof, onClose }: { vof: VofRow; onClose: () => void }) {
+function ViewVofModal({ project, vof, onClose }: { project: HubProject; vof: VofRow; onClose: () => void }) {
     const priorities = vof.priority ? vof.priority.split(',').filter(Boolean) : [];
 
     return (
@@ -305,7 +306,7 @@ function ViewVofModal({ vof, onClose }: { vof: VofRow; onClose: () => void }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '14px', marginBottom: '14px' }}>
                 <Field label="Description / Justification"><div style={{ whiteSpace: 'pre-wrap' }}>{vof.description || '—'}</div></Field>
-                <Field label="Duration (Calendar Days)"><div>{vof.duration_days != null ? `${vof.duration_days} day${vof.duration_days === 1 ? '' : 's'}` : '—'}</div></Field>
+                <Field label={`Duration (${dayUnitTitle(project.duration_basis)})`}><div>{vof.duration_days != null ? durationLabel(vof.duration_days, project.duration_basis) : '—'}</div></Field>
             </div>
             <div style={{ marginBottom: '20px' }}>
                 <Field label="Attachment">
@@ -429,7 +430,7 @@ function EditModal({ project, vof, onClose }: { project: HubProject; vof: VofRow
                 <Field label="Description / Justification">
                     <textarea rows={3} style={inputStyle} placeholder="Describe the variation and why it is needed…" value={desc} onChange={e => setDesc(e.target.value)} />
                 </Field>
-                <Field label="Duration (Calendar Days)">
+                <Field label={`Duration (${dayUnitTitle(project.duration_basis)})`}>
                     <div style={{ display: 'flex', gap: '0' }}>
                         <input type="number" min="0" step="1" style={{ ...inputStyle, borderRadius: '7px 0 0 7px', borderRight: 'none' }} placeholder="e.g., 15" value={duration} onChange={e => setDuration(e.target.value)} />
                         <span style={{ padding: '8px 12px', background: '#f1f5f9', border: '1.5px solid #e2e8f0', borderRadius: '0 7px 7px 0', fontSize: '12.5px', color: '#475569', whiteSpace: 'nowrap' }}>Days</span>
@@ -504,7 +505,7 @@ export default function VofHub({ project, vofs, canEdit = true }: { project: Hub
         <HubShell>
             {confirmDialog}
             {showCreate && <CreateModal    project={project} onClose={() => setShowCreate(false)} />}
-            {viewVof    && <ViewVofModal   vof={viewVof} onClose={() => setViewVof(null)} />}
+            {viewVof    && <ViewVofModal   project={project} vof={viewVof} onClose={() => setViewVof(null)} />}
             {editVof    && <EditModal      project={project} vof={editVof} onClose={() => setEditVof(null)} />}
 
             <InfoStrip project={project} accent={ACCENT} />

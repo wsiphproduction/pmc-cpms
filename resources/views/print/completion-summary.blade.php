@@ -8,13 +8,13 @@
     $long  = fn ($date) => optional($date)->format('F j, Y') ?? '';
     $money = fn ($n) => $n === null ? '' : '₱' . number_format((float) $n, 2);
 
-    /** Actual minus baseline: positive is late, negative is early. */
-    $slippage = function ($actual, $baseline): ?int {
+    /** Actual minus baseline: positive is late, negative is early. Counted on the project's day basis. */
+    $slippage = function ($actual, $baseline) use ($project): ?int {
         if (! $actual || ! $baseline) {
             return null;
         }
 
-        return (int) $baseline->diffInDays($actual, false);
+        return \App\Models\Project::countDays($baseline, $actual, $project->usesWorkingDays());
     };
 
     $planSlip = $slippage($completion?->plan_actual_end, $completion?->plan_baseline_end);
@@ -75,7 +75,7 @@
                         ['Baseline End Date',   $short($completion?->plan_baseline_end)],
                         ['Actual Start Date',   $short($completion?->plan_actual_start)],
                         ['Actual End Date',     $short($completion?->plan_actual_end)],
-                        ['Slippage (days)',     $planSlip === null ? '' : (string) $planSlip],
+                        [$project->usesWorkingDays() ? 'Slippage (working days)' : 'Slippage (days)',     $planSlip === null ? '' : (string) $planSlip],
                     ] as [$label, $value])
                         <tr><td>{{ $label }}</td><td>{{ $value }}</td></tr>
                     @endforeach
@@ -101,7 +101,7 @@
                         ['Baseline End Date',   $short($completion?->con_baseline_end)],
                         ['Actual Start Date',   $short($completion?->con_actual_start)],
                         ['Actual End Date',     $short($completion?->con_actual_end)],
-                        ['Slippage (days)',     $conSlip === null ? '' : (string) $conSlip],
+                        [$project->usesWorkingDays() ? 'Slippage (working days)' : 'Slippage (days)',     $conSlip === null ? '' : (string) $conSlip],
                         ['Timeline Status',     $timeline],
                         ['Completion Status',   $completion?->completion_status],
                     ] as [$label, $value])
