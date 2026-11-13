@@ -6,6 +6,7 @@ use App\Models\AuditTrail;
 use App\Models\Category;
 use App\Models\CostCode;
 use App\Models\Department;
+use App\Models\Holiday;
 use App\Models\MasterClass;
 use App\Models\MasterStatus;
 use App\Models\Notification;
@@ -1422,6 +1423,9 @@ class ProjectController extends Controller
             'days_elapsed' => $daysElapsed,
             'days_remaining' => $daysRemaining,
             'duration_basis' => $project->duration_basis ?? Project::BASIS_CALENDAR,
+            // The days a working-days project skips besides Sundays, so the
+            // NTP baseline end is suggested the way the server counts it.
+            'holidays' => $project->usesWorkingDays() ? Holiday::activeDates() : [],
             'budget_total' => (float) $project->budget_total,
             'budget_base' => (float) $project->budget_base,
             'budget_paid' => (float) $project->budget_paid,

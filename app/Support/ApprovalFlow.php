@@ -428,11 +428,14 @@ class ApprovalFlow
         // and from their own review page, not the PMD portal.
         if ($record instanceof ProjectNtp && in_array($role, ProjectNtp::REVIEW_ROLES, true)) {
             $project = $record->project;
-            // The department's supervisors share its department but sign nothing.
+            // The department's supervisors share its department but sign
+            // nothing — unless one is covering a Department Manager's roster break.
             $recipients = $role === User::ROLE_DIVISION_MANAGER_USER
                 ? $project->divisionAudience()
                 : User::whereIn('id', $project->departmentAudience())
-                    ->whereHas('roles', fn ($q) => $q->where('name', User::ROLE_REQUESTOR))
+                    ->where(fn ($q) => $q
+                        ->whereHas('roles', fn ($r) => $r->where('name', User::ROLE_REQUESTOR))
+                        ->orWhereIn('id', RosterBreak::oicIdsCovering([User::ROLE_REQUESTOR])))
                     ->pluck('id');
 
             Notification::notify($recipients, $message, route('ntp-reviews.index', absolute: false));

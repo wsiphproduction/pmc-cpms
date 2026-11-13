@@ -1,6 +1,7 @@
 import { Head, router, usePage } from '@inertiajs/react';
 import { useEffect, useRef, useState } from 'react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import HolidaysPanel, { type Holiday } from './HolidaysPanel';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface MasterItem {
@@ -84,6 +85,9 @@ interface Props {
     suppliers?:    Supplier[];
     /** Bulk-imported suppliers, which this list deliberately leaves out. */
     importedSupplierCount?: number;
+    holidays?:     Holiday[];
+    /** Holiday type → label, e.g. regular → "Regular Holiday". */
+    holidayTypes?: Record<string, string>;
 }
 
 type TabKey =
@@ -100,7 +104,8 @@ type TabKey =
     | 'service_types'
     | 'work_forces'
     | 'structures'
-    | 'suppliers';
+    | 'suppliers'
+    | 'holidays';
 
 const formatDateTime = (value?: string | null) => {
     if (!value) return 'â€”';
@@ -258,6 +263,18 @@ const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode; addLabel:
             </svg>
         ),
     },
+    {
+        key: 'holidays',
+        label: 'Holidays',
+        addLabel: 'Add Holiday',
+        icon: (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14l1 2 2 .3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1L9 16.3l2-.3z"/>
+            </svg>
+        ),
+    },
 ];
 
 // ── Remembered Tab ───────────────────────────────────────────────────────
@@ -300,6 +317,7 @@ const ROUTE_MAP: Record<TabKey, string> = {
     work_forces:   'master.work-forces',
     structures:    'master.structures',
     suppliers:     'master.suppliers',
+    holidays:      'master.holidays',
 };
 
 // ── Modal ──────────────────────────────────────────────────────────────────
@@ -1173,6 +1191,8 @@ export default function MasterData({
     structures    = [],
     suppliers     = [],
     importedSupplierCount = 0,
+    holidays      = [],
+    holidayTypes  = {},
 }: Props) {
     const [activeTab,    setActiveTab]    = useState<TabKey>('job_types');
     const [modalTab,     setModalTab]     = useState<TabKey>('job_types');
@@ -1203,7 +1223,7 @@ export default function MasterData({
         writeStoredTab(tab);
     };
 
-    const dataMap: Record<Exclude<TabKey, 'suppliers'>, MasterItem[]> = {
+    const dataMap: Record<Exclude<TabKey, 'suppliers' | 'holidays'>, MasterItem[]> = {
         job_types:     jobTypes,
         job_locations: jobLocations,
         cost_codes:    costCodes.data,
@@ -1252,6 +1272,7 @@ export default function MasterData({
     // the match count, which is what the tab is showing.
     const countFor = (tab: TabKey) => {
         if (tab === 'suppliers') return suppliers.length;
+        if (tab === 'holidays') return holidays.length;
         if (tab === 'cost_codes') return costCodes.total;
         return dataMap[tab].length;
     };
@@ -1369,6 +1390,8 @@ export default function MasterData({
                             onEdit={s => { setEditSupplier(s); setShowSupplierModal(true); }}
                             onToggle={s => toggleActive('suppliers', s.id)}
                         />
+                    ) : activeTab === 'holidays' ? (
+                        <HolidaysPanel holidays={holidays} types={holidayTypes} />
                     ) : (
                         <TabTable
                             key={activeTab}

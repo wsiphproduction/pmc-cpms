@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\CostCode;
 use App\Models\Department;
 use App\Models\Division;
+use App\Models\Holiday;
 use App\Models\JobLocation;
 use App\Models\JobType;
 use App\Models\MasterClass;
@@ -68,6 +69,12 @@ class MasterDataController extends Controller
                     'added_by' => $s->creator?->name,
                 ]),
             'importedSupplierCount' => Supplier::where('source', Supplier::SOURCE_IMPORT)->count(),
+            // Newest year first, each year in date order.
+            'holidays'     => Holiday::orderBy('date')
+                ->get(['id', 'date', 'name', 'type', 'is_active', 'created_at'])
+                ->sortByDesc(fn (Holiday $h) => $h->date->year)
+                ->values(),
+            'holidayTypes' => Holiday::TYPES,
         ]);
     }
 
@@ -89,6 +96,7 @@ class MasterDataController extends Controller
         'work-forces'   => WorkForce::class,
         'structures'    => Structure::class,
         'suppliers'     => Supplier::class,
+        'holidays'      => Holiday::class,
     ];
 
     /**
@@ -880,6 +888,53 @@ class MasterDataController extends Controller
         $structure->delete();
 
         return redirect()->back()->with('success', 'Structure deleted.');
+    }
+
+    // Holidays — the days a working-days project skips besides Sundays.
+    public function storeHoliday(Request $request)
+    {
+        $holiday = Holiday::create($this->validateHoliday($request));
+
+        return redirect()->back()->with('success', "Holiday added: {$holiday->name}, {$holiday->date->format('M d, Y')}.");
+    }
+
+    public function updateHoliday(Request $request, Holiday $holiday)
+    {
+        $holiday->update($this->validateHoliday($request, $holiday->id));
+
+        return redirect()->back()->with('success', 'Holiday updated.');
+    }
+
+    public function destroyHoliday(Holiday $holiday)
+    {
+        $holiday->delete();
+
+        return redirect()->back()->with('success', 'Holiday deleted.');
+    }
+
+    /** Add a year's Philippine regular holidays, leaving dates already listed as they are. */
+    public function loadRegularHolidays(Request $request)
+    {
+        $year = (int) $request->validate([
+            'year' => 'required|integer|min:2000|max:2100',
+        ])['year'];
+
+        $added = Holiday::loadRegular($year);
+
+        return redirect()->back()->with('success', $added > 0
+            ? "Added {$added} Philippine regular holiday" . ($added === 1 ? '' : 's') . " for {$year}."
+            : "The {$year} Philippine regular holidays are already on the list.");
+    }
+
+    private function validateHoliday(Request $request, ?int $ignoreId = null): array
+    {
+        return $request->validate([
+            'date' => 'required|date|unique:holidays,date' . ($ignoreId ? ',' . $ignoreId : ''),
+            'name' => 'required|string|max:191',
+            'type' => 'required|in:' . implode(',', array_keys(Holiday::TYPES)),
+        ], [
+            'date.unique' => 'There is already a holiday on that date.',
+        ]);
     }
 
     private function validateMasterData(Request $request, string $table, ?int $ignoreId = null): array

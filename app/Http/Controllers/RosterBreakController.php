@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Notification;
 use App\Models\RosterBreak;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -14,14 +15,19 @@ use Inertia\Inertia;
 use Inertia\Response;
 
 /**
- * Roster breaks for the PMD managers.
+ * Roster breaks for the managers who sign: the PMD managers, and each
+ * department's Department Manager.
  *
- * A PMD Department Manager or PMD Assistant Manager schedules the dates they
- * will be away and names an officer-in-charge. For the length of the break that
- * OIC acts as the manager's role in the approval chains — requests and NTPs
- * waiting on that role land in the OIC's queue, and whatever the OIC settles
- * is recorded as signed on the manager's behalf. Nothing is taken from the
- * manager: they can still sign themselves while away.
+ * A manager schedules the dates they will be away and names an
+ * officer-in-charge. For the length of the break that OIC acts as the
+ * manager's role in the approval chains — requests and NTPs waiting on that
+ * role land in the OIC's queue, and whatever the OIC settles is recorded as
+ * signed on the manager's behalf. Nothing is taken from the manager: they can
+ * still sign themselves while away.
+ *
+ * A Department Manager's work is their own department's, so their OIC comes
+ * from that department — its Dept Asst Manager/Supervisor by default, or a
+ * fellow Department Manager there — and covers only that department.
  *
  * The OIC has to be free for the whole break — not away on a break of their
  * own — and a manager who is covering somebody cannot leave during that cover.
@@ -29,25 +35,29 @@ use Inertia\Response;
 class RosterBreakController extends Controller
 {
     /**
-     * The roles that take roster breaks, each with the roles that may cover it.
-     * The Department Manager is covered by an Assistant Manager; an Assistant
-     * Manager by a fellow Assistant Manager or by the Department Manager.
+     * The roles that take roster breaks, each with the roles that may cover
+     * it, the usual choice first — it is the one the form starts on. The PMD
+     * Department Manager is covered by an Assistant Manager; an Assistant
+     * Manager by a fellow Assistant Manager or by the Department Manager; a
+     * Department Manager by their department's supervisor or a fellow
+     * Department Manager of that department.
      */
     private const OIC_ROLES = [
         User::ROLE_PMD_DEPT_MANAGER => [User::ROLE_PMD_ASST_MANAGER],
         User::ROLE_PMD_ASST_MANAGER => [User::ROLE_PMD_ASST_MANAGER, User::ROLE_PMD_DEPT_MANAGER],
+        User::ROLE_REQUESTOR        => [User::ROLE_DEPT_SUPERVISOR, User::ROLE_REQUESTOR],
     ];
 
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $oicRoles = self::OIC_ROLES[$this->coveredRole($user)];
+        $role = $this->coveredRole($user);
+        $oicRoles = self::OIC_ROLES[$role];
 
-        $candidates = User::whereHas('roles', fn ($q) => $q->whereIn('name', $oicRoles))
-            ->where('id', '!=', $user->id)
-            ->with('roles')
-            ->orderBy('name')
-            ->get(['id', 'name', 'email']);
+        $candidates = $this->candidates($user, $role)->get(['id', 'name', 'email'])
+            // The usual cover first, then by name.
+            ->sortBy(fn (User $u) => [array_search($this->firstHeld($u, $oicRoles), $oicRoles, true), $u->name])
+            ->values();
 
         // Their own current and upcoming breaks, so the form can grey out
         // anyone who is away on the chosen dates before the server refuses it.
@@ -78,7 +88,14 @@ class RosterBreakController extends Controller
                         ])->values()->all(),
                 ])
                 ->values()->all(),
-            'oic_who' => $this->oicWho($oicRoles),
+            // The form starts on the usual cover: for a Department Manager,
+            // their department's Dept Asst Manager/Supervisor.
+            'default_oic_id' => $candidates->first(fn (User $u) => $u->hasRole($oicRoles[0]))?->id,
+            'oic_who' => $this->oicWho($oicRoles, $role),
+            // Where the covered work is signed: the PMD For Approval portal,
+            // or a department's Requests and NTP Reviews pages.
+            'scope' => $role === User::ROLE_REQUESTOR ? 'department' : 'pmd',
+            'department' => $role === User::ROLE_REQUESTOR ? $user->department : null,
             'today' => today()->toDateString(),
         ]);
     }
@@ -94,9 +111,9 @@ class RosterBreakController extends Controller
         Notification::notify(
             $break->oic_user_id,
             "{$user->name} has named you OIC ({$this->coveredLabel($break)}) for their roster break, "
-                . $this->span($break) . '. Their approvals will sit in your For Approval queue for that period.'
+                . $this->span($break) . '. ' . $this->whereTheWorkGoes($break)
                 . $this->notesSuffix($break),
-            route('approvals.index', absolute: false)
+            $this->queueLink($break)
         );
 
         return back()->with('success', "Roster break scheduled — {$break->oic?->name} will cover for you " . $this->span($break) . '.');
@@ -117,7 +134,7 @@ class RosterBreakController extends Controller
             Notification::notify(
                 $previousOic,
                 "{$user->name}'s roster break " . $this->span($rosterBreak) . ' is now covered by somebody else; you are no longer its OIC.',
-                route('approvals.index', absolute: false)
+                $this->queueLink($rosterBreak)
             );
         }
 
@@ -125,7 +142,7 @@ class RosterBreakController extends Controller
             $rosterBreak->oic_user_id,
             "{$user->name}'s roster break has been updated: you are OIC ({$this->coveredLabel($rosterBreak)}) " . $this->span($rosterBreak) . '.'
                 . $this->notesSuffix($rosterBreak),
-            route('approvals.index', absolute: false)
+            $this->queueLink($rosterBreak)
         );
 
         return back()->with('success', 'Roster break updated.');
@@ -144,7 +161,7 @@ class RosterBreakController extends Controller
         Notification::notify(
             $rosterBreak->oic_user_id,
             "{$user->name} has cancelled their roster break " . $this->span($rosterBreak) . '; you are no longer its OIC.',
-            route('approvals.index', absolute: false)
+            $this->queueLink($rosterBreak)
         );
 
         return back()->with('success', 'Roster break cancelled.');
@@ -172,12 +189,15 @@ class RosterBreakController extends Controller
             'ends_on.after_or_equal' => 'The break must end on or after the day it starts.',
         ]);
 
-        $oicRoles = self::OIC_ROLES[$except?->role ?? $this->coveredRole($user)];
-        $oic = User::find($data['oic_user_id']);
+        $role = $except?->role ?? $this->coveredRole($user);
+        $oicRoles = self::OIC_ROLES[$role];
+        // Holding the role is not enough for a Department Manager's cover:
+        // it has to be somebody from their own department.
+        $oic = $this->candidates($user, $role)->find($data['oic_user_id']);
 
-        if (! $oic?->hasRole($oicRoles)) {
+        if ($oic === null) {
             throw ValidationException::withMessages([
-                'oic_user_id' => 'The OIC must be ' . $this->oicWho($oicRoles) . '.',
+                'oic_user_id' => 'The OIC must be ' . $this->oicWho($oicRoles, $role) . '.',
             ]);
         }
 
@@ -237,6 +257,38 @@ class RosterBreakController extends Controller
         ];
     }
 
+    /**
+     * Who may cover this user's role: anyone else holding one of its OIC
+     * roles — and, for a Department Manager, only from their own department.
+     */
+    private function candidates(User $user, string $role): Builder
+    {
+        $department = $role === User::ROLE_REQUESTOR ? (string) $user->department : null;
+
+        return User::whereHas('roles', fn ($q) => $q->whereIn('name', self::OIC_ROLES[$role]))
+            ->where('id', '!=', $user->id)
+            ->when($department !== null, fn (Builder $q) => blank($department)
+                // A Department Manager with no department has nobody to hand to.
+                ? $q->whereRaw('1 = 0')
+                : $q->whereRaw('LOWER(department) = ?', [mb_strtolower($department)]))
+            ->with('roles');
+    }
+
+    /** Where the OIC finds the covered work, for their notification. */
+    private function queueLink(RosterBreak $break): string
+    {
+        return $break->role === User::ROLE_REQUESTOR
+            ? route('ntp-reviews.index', absolute: false)
+            : route('approvals.index', absolute: false);
+    }
+
+    private function whereTheWorkGoes(RosterBreak $break): string
+    {
+        return $break->role === User::ROLE_REQUESTOR
+            ? "For that period you review your department's requests on Requests and sign its NTPs on NTP Reviews on their behalf."
+            : 'Their approvals will sit in your For Approval queue for that period.';
+    }
+
     private function own(RosterBreak $break, User $user): void
     {
         abort_unless($break->user_id === $user->id, 403);
@@ -290,14 +342,17 @@ class RosterBreakController extends Controller
 
     /**
      * Who may be named, for the page and the error message:
-     * "a PMD Assistant Manager" or "a PMD Assistant Manager or the PMD Department Manager".
+     * "a PMD Assistant Manager", "a PMD Assistant Manager or the PMD Department
+     * Manager", or "a Dept Asst Manager/Supervisor or Department Manager of your department".
      *
      * @param  array<int, string>  $roles
      */
-    private function oicWho(array $roles): string
+    private function oicWho(array $roles, string $covered): string
     {
-        return collect($roles)
+        $who = collect($roles)
             ->map(fn (string $role) => (in_array($role, User::SINGLETON_ROLES, true) ? 'the ' : 'a ') . User::roleLabel($role))
             ->join(', ', ' or ');
+
+        return $covered === User::ROLE_REQUESTOR ? "{$who} of your department" : $who;
     }
 }

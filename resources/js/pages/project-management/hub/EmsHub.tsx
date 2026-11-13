@@ -78,7 +78,7 @@ function ReportModal({ project, report, options, defaults, onClose }: {
 
     return (
         <Modal
-            title={report ? `Edit ${report.control_no}` : 'New Environment Survey Report'}
+            title={report ? `Edit ${report.control_no}` : 'New Environmental Impact Assessment'}
             onClose={onClose}
             headerBg={EMS_TONE}
             size="940px"
@@ -278,7 +278,7 @@ export default function EmsHub({ project, reports, options, mepeoReps, defaults,
                     Representative and approved by the MEPEO Manager.
                 </div>
                 {canManage && (
-                    <button type="button" onClick={() => setCreating(true)} style={btn(EMS_TONE, '#fff')}>+ New Environment Survey Report</button>
+                    <button type="button" onClick={() => setCreating(true)} style={btn(EMS_TONE, '#fff')}>+ New Environmental Impact Assessment</button>
                 )}
             </div>
 

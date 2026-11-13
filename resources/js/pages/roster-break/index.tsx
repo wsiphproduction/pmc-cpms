@@ -28,6 +28,11 @@ interface Props {
     oic_options: OicOption[];
     /** Who may be named, e.g. "a PMD Assistant Manager or the PMD Department Manager". */
     oic_who: string;
+    /** The usual cover the form starts on — a Department Manager's own supervisor. */
+    default_oic_id: number | null;
+    /** Where the covered work is signed: PMD's For Approval, or a department's Requests and NTP Reviews. */
+    scope: 'pmd' | 'department';
+    department: string | null;
     today: string;
 }
 
@@ -39,7 +44,7 @@ type FormState = {
     notes: string;
 };
 
-const emptyForm = (today: string): FormState => ({ oic_user_id: '', starts_on: today, ends_on: today, notes: '' });
+const emptyForm = (today: string, oicId: number | null): FormState => ({ oic_user_id: oicId ? String(oicId) : '', starts_on: today, ends_on: today, notes: '' });
 
 const STATE_META: Record<BreakRow['state'], { label: string; bg: string; color: string }> = {
     active:   { label: 'On break now', bg: '#dcfce7', color: '#166534' },
@@ -57,13 +62,13 @@ const labelStyle: React.CSSProperties = { fontSize: '12.5px', fontWeight: 600, c
 
 const errorStyle: React.CSSProperties = { fontSize: '11.5px', color: '#dc2626', margin: '6px 0 0' };
 
-export default function RosterBreakIndex({ breaks, oic_options, oic_who, today }: Props) {
+export default function RosterBreakIndex({ breaks, oic_options, oic_who, default_oic_id, scope, department, today }: Props) {
     const { props } = usePage<{ flash?: { success?: string; error?: string }; errors?: Record<string, string> }>();
     const flash  = props.flash;
     const errors = props.errors ?? {};
     const { confirm: showConfirm, dialog: confirmDialog } = useConfirm();
 
-    const [form, setForm] = useState<FormState>(() => emptyForm(today));
+    const [form, setForm] = useState<FormState>(() => emptyForm(today, default_oic_id));
     // Null while scheduling a new break; the row being changed otherwise.
     const [editing, setEditing] = useState<BreakRow | null>(null);
     const [submitting, setSubmitting] = useState(false);
@@ -94,7 +99,7 @@ export default function RosterBreakIndex({ breaks, oic_options, oic_who, today }
 
     const cancelEdit = () => {
         setEditing(null);
-        setForm(emptyForm(today));
+        setForm(emptyForm(today, default_oic_id));
     };
 
     const submit = (e: React.FormEvent) => {
@@ -188,9 +193,11 @@ export default function RosterBreakIndex({ breaks, oic_options, oic_who, today }
                 <h1 style={{ fontSize: '20px', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.3px' }}>Roster Break</h1>
                 <p style={{ fontSize: '12.5px', color: '#9ca3af', margin: '4px 0 0', maxWidth: '640px', lineHeight: 1.6 }}>
                     Schedule the dates you will be away and name {oic_who} as officer-in-charge — someone who is not on a roster
-                    break of their own over those dates. For the length of your break the OIC sees your project requests and NTPs
-                    in their For Approval queue and signs them on your behalf. You keep your own access throughout, so anything you
-                    settle yourself still counts.
+                    break of their own over those dates.{' '}
+                    {scope === 'department'
+                        ? <>For the length of your break the OIC reviews the requests your supervisors raise (on Requests) and signs {department ? <strong>{department}</strong> : 'your department'}'s NTPs (on NTP Reviews) on your behalf.</>
+                        : <>For the length of your break the OIC sees your project requests and NTPs in their For Approval queue and signs them on your behalf.</>}
+                    {' '}You keep your own access throughout, so anything you settle yourself still counts.
                 </p>
             </div>
 

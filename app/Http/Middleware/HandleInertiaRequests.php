@@ -68,6 +68,9 @@ class HandleInertiaRequests extends Middleware
                         // Null until the first-login guided-tour offer is answered.
                         'tour_seen_at' => $request->user()->tour_seen_at?->toIso8601String(),
                         'font_scale' => (int) ($request->user()->font_scale ?: 100),
+                        // Roles they cover today as somebody's roster-break OIC,
+                        // so the nav can open the pages that work needs.
+                        'covers' => $request->user()->coveredRoles(),
                     ]
                 ) : null,
                 // The person's other accounts (same email, another role), for

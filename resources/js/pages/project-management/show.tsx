@@ -56,6 +56,8 @@ interface Project {
     days_remaining: number;
     /** How the project counts days; the timeline above follows it. */
     duration_basis: DurationBasis;
+    /** Active holidays (YYYY-MM-DD) a working-days project skips. */
+    holidays?: string[];
     budget_total: number;
     budget_base: number;
     budget_paid: number;
@@ -163,7 +165,7 @@ const OPS_MENU = [
     { key: 'psr', label: 'Project Status Report', short: 'PSR', action: 'Create Status Report', summary: 'Summarize progress, blockers, photos, milestones, and next actions.' },
     { key: 'mom',    label: 'Minutes of the Meeting', short: 'MOM', action: 'Add Minutes', summary: 'Keep the minutes of each project meeting, filed by meeting date.' },
     { key: 'photos', label: 'Photos',                 short: 'PHO', action: 'Upload Photos', summary: 'Site photos grouped by date, viewed as a gallery.' },
-    { key: 'ems',    label: 'Environment Survey Report', short: 'EMS', action: 'New Environment Survey Report', summary: 'Environmental Impact Assessment, filled out by MEPEO and signed off by MEPEO and PMD.' },
+    { key: 'ems',    label: 'Environment Survey Report', short: 'EMS', action: 'New Environmental Impact Assessment', summary: 'Environmental Impact Assessment, filled out by MEPEO and signed off by MEPEO and PMD.' },
     { key: 'ems-register', label: 'EMS Register',     short: 'EMR', action: 'Upload File', summary: 'File the project’s environmental documents, each with a short description.' },
     { key: 'at',   label: 'Project Audit Trail', short: 'AT',  action: 'View Audit Trail',   summary: 'Review project events, status changes, and user activity history.' },
     { key: 'todo', label: 'Todo List',           short: 'TODO', action: 'Add Task',           summary: 'Track project tasks with target dates and completion status.' },
@@ -489,6 +491,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
         dept_owner:         project.dept_owner,
         owner_email:        project.owner_email,
         duration_basis:     project.duration_basis,
+        holidays:           project.holidays ?? [],
         signatories:        project.signatories,
     };
 

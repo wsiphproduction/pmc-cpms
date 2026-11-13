@@ -42,8 +42,9 @@ class Project extends Model
 
     /**
      * How a project counts its days. Calendar days count every day; working
-     * days are Monday to Saturday (Sundays off). Durations, the NTP baseline
-     * end and the timeline all follow the project's basis.
+     * days are Monday to Saturday, less the holidays on the Holidays master
+     * list. Durations, the NTP baseline end and the timeline all follow the
+     * project's basis.
      */
     public const BASIS_CALENDAR = 'calendar';
     public const BASIS_WORKING = 'working';
@@ -409,8 +410,8 @@ class Project extends Model
 
     /**
      * Signed day count from $from to $to (both taken at start of day). With
-     * working days, Sundays are skipped — matching the calendar diff when no
-     * Sunday falls in between.
+     * working days, Sundays and the active holidays on the Holidays master
+     * list are skipped — matching the calendar diff when none falls between.
      */
     public static function countDays(Carbon $from, Carbon $to, bool $workingDays): int
     {
@@ -428,7 +429,9 @@ class Project extends Model
         $sign = $to->lt($from) ? -1 : 1;
         [$start, $end] = $sign === 1 ? [$from, $to] : [$to, $from];
 
-        return $sign * ((int) $start->diffInDays($end) - ($sundaysUpTo($end) - $sundaysUpTo($start)));
+        return $sign * ((int) $start->diffInDays($end)
+            - ($sundaysUpTo($end) - $sundaysUpTo($start))
+            - Holiday::workingDaysOffBetween($start, $end));
     }
 
     public function daysElapsed(): int

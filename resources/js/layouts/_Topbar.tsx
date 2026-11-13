@@ -111,7 +111,8 @@ interface NotificationRow {
 
 interface PageProps {
     auth: {
-        user: { name: string; email: string; role?: string; role_label?: string; is_admin?: boolean };
+        /** `covers`: roles they stand in for today as somebody's roster-break OIC. */
+        user: { name: string; email: string; role?: string; role_label?: string; is_admin?: boolean; covers?: string[] };
         // The person's other accounts — same email, another role.
         linked_accounts?: { id: number; role: string; unread: number }[];
     };
@@ -231,6 +232,9 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     const ntpReviewsCount = props.ntp_reviews_count ?? 0;
     const approvalsCount = props.approvals_count ?? 0;
     const isRequestor = role === 'requestor';
+    // A supervisor covering their Department Manager's roster break signs the
+    // department's NTPs too, so they get the NTP Reviews page meanwhile.
+    const coversDeptManager = (auth?.user?.covers ?? []).includes('requestor');
     const requestReviewsCount = props.request_reviews_count ?? 0;
     // Tied to one division rather than one department; otherwise sees the
     // same portal a department user does.
@@ -242,8 +246,9 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
     // delivery-side sections (master data, weekly status, reports) stay hidden
     // unless they also carry admin rights.
     const isApprovalRole = ['pmd_asst_manager', 'pmd_dept_manager', 'division_manager'].includes(role ?? '') && !isAdmin;
-    // The PMD Department and Assistant Managers schedule roster breaks and name an OIC.
-    const takesRosterBreaks = ['pmd_dept_manager', 'pmd_asst_manager'].includes(role ?? '');
+    // The PMD Department and Assistant Managers, and each department's
+    // Department Manager, schedule roster breaks and name an OIC.
+    const takesRosterBreaks = ['pmd_dept_manager', 'pmd_asst_manager', 'requestor'].includes(role ?? '');
     // User management is admin-only.
     const canManageUsers = isAdmin;
     // Project engineers ("approver") own the weekly status; assistant managers
@@ -323,7 +328,7 @@ export default function Topbar({ isMobile, navCollapsed }: TopbarProps) {
             ),
         }] : []),
         // Department users and division manager users sign NTPs from here.
-        ...(isRequestor || isDivisionUser ? [{
+        ...(isRequestor || isDivisionUser || coversDeptManager ? [{
             label: 'NTP Reviews',
             href: route('ntp-reviews.index'),
             badge: ntpReviewsCount,

@@ -455,7 +455,7 @@ class Hub
                     ['h', 'Creating and submitting one'],
                     ['p', 'Only the project engineer assigned to the project — the one who registered it, or the one named as its project manager — can create one, along with the Assistant Manager and the administrator. A project may have as many as it needs.'],
                     ['ol', [
-                        'Click New Environment Survey Report. The header starts from the project and its latest NTP: date requested, location, contractor and target dates. Correct any of them.',
+                        'Click New Environmental Impact Assessment. The header starts from the project and its latest NTP: date requested, location, contractor and target dates. Correct any of them.',
                         'Below the header is the assessment: tick the Major Activities and Environmental Aspects that apply (writing anything else in Others), and describe the Other Scope of Work, the Environmental Impacts and their Mitigation. The Status and Remarks/Comments are not on your form: MEPEO fills those in.',
                         'Under Supporting Documents, click Add files to attach plans, photos or other papers (PDF, images, Word, Excel or PowerPoint, up to 20 MB each). Add as many as you need.',
                         'Click Create Report. It is saved as a draft you can keep editing.',

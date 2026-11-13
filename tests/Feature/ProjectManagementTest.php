@@ -609,7 +609,8 @@ it('skips Sundays when counting working days', function () {
         ->and(Project::countDays($d('2026-11-14'), $d('2026-11-15'), true))->toBe(0)   // Sat → Sun
         ->and(Project::countDays($d('2026-11-16'), $d('2026-11-09'), true))->toBe(-6)  // signed, backwards
         ->and(Project::countDays($d('2026-11-09'), $d('2026-11-09'), true))->toBe(0)
-        ->and(Project::countDays($d('2026-11-01'), $d('2026-11-30'), true))->toBe(25); // 29 days, 4 Sundays after Nov 1
+        // 29 days, 4 Sundays after Nov 1, and Bonifacio Day (Mon, Nov 30) on the Holidays list.
+        ->and(Project::countDays($d('2026-11-01'), $d('2026-11-30'), true))->toBe(24);
 });
 
 it('counts days remaining on the project basis', function () {

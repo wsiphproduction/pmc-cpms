@@ -114,9 +114,11 @@ it('lets the pmd dept manager schedule a break and tells the oic', function () {
         ->exists())->toBeTrue();
 });
 
-it('keeps the roster break page to the pmd managers', function () {
+it('keeps the roster break page to the managers who sign', function () {
     $this->actingAs($this->engineer)->get(route('roster-break.index'))->assertForbidden();
-    $this->actingAs($this->requester)->get(route('roster-break.index'))->assertForbidden();
+    $this->actingAs(makeUserWithRoleForBreak(User::ROLE_DEPT_SUPERVISOR, ['department' => 'Engineering']))
+        ->get(route('roster-break.index'))->assertForbidden();
+    $this->actingAs($this->requester)->get(route('roster-break.index'))->assertOk();
     $this->actingAs($this->manager)->get(route('roster-break.index'))->assertOk();
     $this->actingAs($this->pmdAsst)->get(route('roster-break.index'))->assertOk();
 });
@@ -492,4 +494,131 @@ it('notifies the oic alongside the manager when an item reaches the dept manager
 
     expect($awaiting($this->manager->id))->toBeTrue()
         ->and($awaiting($this->oic->id))->toBeTrue();
+});
+
+// ── Department Managers ───────────────────────────────────────────────────
+
+/** A supervisor's request, raised through the form so it starts at the department's review. */
+function supervisorRequestForBreak(User $supervisor): ProjectRequest
+{
+    test()->actingAs($supervisor)->post(route('requests.store'), [
+        'title'         => 'Replace roof sheets',
+        'job_type'      => 'civil',
+        'description'   => 'Leaks over the warehouse.',
+        'job_location'  => 'Site A',
+        'costcode'      => 'CC-001',
+        'opex'          => false,
+        'capex'         => false,
+        'for_budgeting' => true,
+    ])->assertRedirect();
+
+    return ProjectRequest::latest('id')->firstOrFail();
+}
+
+it('starts a department manager on their own supervisor as oic, from their department only', function () {
+    $supervisor = makeUserWithRoleForBreak(User::ROLE_DEPT_SUPERVISOR, ['department' => 'Engineering', 'name' => 'Zed Supervisor']);
+    $fellow     = makeUserWithRoleForBreak(User::ROLE_REQUESTOR, ['department' => 'engineering', 'name' => 'Abe Manager']);
+    makeUserWithRoleForBreak(User::ROLE_DEPT_SUPERVISOR, ['department' => 'Assay']);
+
+    $this->actingAs($this->requester)
+        ->get(route('roster-break.index'))
+        ->assertInertia(fn (\Inertia\Testing\AssertableInertia $page) => $page
+            ->component('roster-break/index')
+            ->where('scope', 'department')
+            ->where('default_oic_id', $supervisor->id)
+            // The supervisor leads, though a fellow manager sorts first by name.
+            ->where('oic_options.0.id', $supervisor->id)
+            ->where('oic_options.1.id', $fellow->id)
+            ->has('oic_options', 2));
+});
+
+it('refuses a department manager oic from outside their department', function () {
+    $elsewhere = makeUserWithRoleForBreak(User::ROLE_DEPT_SUPERVISOR, ['department' => 'Assay']);
+
+    foreach ([$elsewhere, $this->pmdAsst] as $oic) {
+        $this->actingAs($this->requester)
+            ->post(route('roster-break.store'), [
+                'oic_user_id' => $oic->id,
+                'starts_on'   => today()->toDateString(),
+                'ends_on'     => today()->addDays(2)->toDateString(),
+            ])
+            ->assertSessionHasErrors(['oic_user_id' => 'The OIC must be a Dept Asst Manager/Supervisor or a Department Manager of your department.']);
+    }
+
+    expect(RosterBreak::count())->toBe(0);
+});
+
+it('lets a supervisor oic review the department requests while the manager is away', function () {
+    $oic   = makeUserWithRoleForBreak(User::ROLE_DEPT_SUPERVISOR, ['department' => 'Engineering']);
+    $other = makeUserWithRoleForBreak(User::ROLE_DEPT_SUPERVISOR, ['department' => 'Engineering']);
+
+    $pr  = supervisorRequestForBreak($other);
+    $own = supervisorRequestForBreak($oic);
+
+    // Before the break the supervisor neither sees nor settles a colleague's request.
+    $this->actingAs($oic)->get(route('requests.show', $pr))->assertForbidden();
+
+    $this->actingAs($this->requester)
+        ->post(route('roster-break.store'), [
+            'oic_user_id' => $oic->id,
+            'starts_on'   => today()->toDateString(),
+            'ends_on'     => today()->addDays(2)->toDateString(),
+        ])
+        ->assertSessionHasNoErrors();
+
+    $break = RosterBreak::firstOrFail();
+    expect($break->role)->toBe(User::ROLE_REQUESTOR)
+        ->and(Notification::where('recipient', $oic->id)->where('message', 'like', '%NTP Reviews%')->exists())->toBeTrue();
+
+    $oic = $oic->fresh();
+    expect(ProjectRequest::awaitingDepartmentReviewBy($oic)->pluck('id')->all())->toBe([$pr->id]);
+
+    // Never their own request, though.
+    $this->actingAs($oic)->patch(route('requests.update', $own), ['status' => 'approved'])->assertForbidden();
+
+    $this->actingAs($oic)->patch(route('requests.update', $pr), ['status' => 'approved'])->assertRedirect();
+
+    $pr->refresh();
+    $step = $pr->approvals()->where('role', User::ROLE_REQUESTOR)->firstOrFail();
+
+    expect($pr->awaitingDepartmentReview())->toBeFalse()
+        ->and($step->user_id)->toBe($oic->id)
+        ->and($step->on_behalf_of_user_id)->toBe($this->requester->id);
+
+    // A new supervisor request calls on the OIC as well as the manager.
+    $next = supervisorRequestForBreak($other);
+    expect(Notification::where('recipient', $oic->id)->where('message', 'like', '%awaiting your review%')->exists())->toBeTrue()
+        ->and($next->departmentReviewers()->all())->toContain($this->requester->id, $oic->id);
+});
+
+it('lets a supervisor oic sign the department step of an ntp', function () {
+    $oic = makeUserWithRoleForBreak(User::ROLE_DEPT_SUPERVISOR, ['department' => 'Engineering']);
+    $division = makeUserWithRoleForBreak(User::ROLE_DIVISION_MANAGER);
+
+    $ntp = makeNtpAtDeptManager($this->engineer, $this->pmdAsst);
+    $ntp->recordApproval($this->manager);
+
+    $step = fn () => $ntp->fresh()->approvals()->where('role', User::ROLE_REQUESTOR)->firstOrFail();
+
+    // Not theirs to sign without a break.
+    expect($ntp->fresh()->approvalStepAuthorizes($step(), $oic))->toBeFalse();
+
+    $this->requester->rosterBreaks()->create([
+        'oic_user_id' => $oic->id,
+        'role'        => User::ROLE_REQUESTOR,
+        'starts_on'   => today(),
+        'ends_on'     => today()->addDay(),
+    ]);
+
+    // Reaching the department step calls on the OIC too.
+    $this->flow->approveNtp($ntp->fresh(), $division);
+    expect(Notification::where('recipient', $oic->id)->where('message', 'like', "%{$ntp->ntp_no}%")->exists())->toBeTrue()
+        ->and(ProjectNtp::awaitingReviewFrom($oic->fresh())->pluck('id')->all())->toBe([$ntp->id]);
+
+    $this->actingAs($oic->fresh())->patch(route('ntp-reviews.approve', $ntp))->assertRedirect();
+
+    expect($step()->status)->toBe('approved')
+        ->and($step()->user_id)->toBe($oic->id)
+        ->and($step()->on_behalf_of_user_id)->toBe($this->requester->id)
+        ->and($ntp->fresh()->currentApprovalRole())->toBe(User::ROLE_DIVISION_MANAGER_USER);
 });

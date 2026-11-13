@@ -687,11 +687,11 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
     ].filter(Boolean) as string[];
 
     // Baseline end date is auto-suggested from the start date + the RFQ's target
-    // duration — in the project's calendar or working days (Sundays skipped) —
+    // duration — in the project's calendar or working days (Sundays and holidays skipped) —
     // whenever the start changes, but stays editable so the user can override it.
     useEffect(() => {
-        if (durationDays && start) setEnd(addDurationDays(start, durationDays, basis));
-    }, [start, durationDays, basis]);
+        if (durationDays && start) setEnd(addDurationDays(start, durationDays, basis, project.holidays ?? []));
+    }, [start, durationDays, basis, project.holidays]);
 
     const handleIssue = () => {
         if (!start) { setError('Baseline Start date is required.'); return; }
@@ -744,7 +744,7 @@ function NtpModal({ row, project, onClose }: { row: RfqRow; project: HubProject;
                         onChange={e => setEnd(e.target.value)}
                     />
                     {durationDays
-                        ? <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>Auto-filled from start + {durationLabel(durationDays, basis)}{basis === 'working' ? ' (Sundays skipped)' : ''} — you can adjust it.</div>
+                        ? <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>Auto-filled from start + {durationLabel(durationDays, basis)}{basis === 'working' ? ' (Sundays and holidays skipped)' : ''} — you can adjust it.</div>
                         : <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '4px' }}>No RFQ duration set — enter the end date manually.</div>}
                 </Field>
             </div>

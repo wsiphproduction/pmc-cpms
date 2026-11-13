@@ -125,7 +125,8 @@ class ProjectRequest extends Model
         if ($user->isDepartmentUser()) {
             return $query->where(fn (Builder $q) => $q
                 ->where('requester_id', $user->id)
-                ->when($user->hasRole(User::ROLE_REQUESTOR) && filled($user->department), fn (Builder $q) => $q
+                // The department manager — or their OIC during a roster break.
+                ->when($user->actsAs(User::ROLE_REQUESTOR) && filled($user->department), fn (Builder $q) => $q
                     ->orWhereHas('requester', fn (Builder $r) => $r
                         ->where('department', $user->department)
                         ->whereHas('roles', fn (Builder $role) => $role->where('name', User::ROLE_DEPT_SUPERVISOR)))));
@@ -235,12 +236,14 @@ class ProjectRequest extends Model
     /**
      * Whether the user is a department user over the supervisor who raised
      * this request — the ones who review it, and who see it on their list.
+     * A Department Manager's OIC (from the same department) stands in for
+     * them during a roster break, though never over a request of their own.
      */
     public function raisedBySupervisorOf(User $user): bool
     {
         $requester = $this->requester;
 
-        return $user->hasRole(User::ROLE_REQUESTOR)
+        return $user->actsAs(User::ROLE_REQUESTOR)
             && filled($user->department)
             && $requester !== null
             && $requester->id !== $user->id
@@ -251,7 +254,7 @@ class ProjectRequest extends Model
     /** Supervisors' requests waiting on this department user's review — the Requests badge. */
     public function scopeAwaitingDepartmentReviewBy(Builder $query, User $user): Builder
     {
-        if (! $user->hasRole(User::ROLE_REQUESTOR)) {
+        if (! $user->actsAs(User::ROLE_REQUESTOR)) {
             return $query->whereRaw('1 = 0');
         }
 
@@ -263,7 +266,7 @@ class ProjectRequest extends Model
                 ->where('status', 'pending'));
     }
 
-    /** The department users who review this request. */
+    /** The department users who review this request, and anyone covering one on a roster break. */
     public function departmentReviewers(): Collection
     {
         $department = $this->requester?->department;
@@ -274,7 +277,9 @@ class ProjectRequest extends Model
 
         return User::where('department', $department)
             ->where('id', '!=', $this->requester_id)
-            ->whereHas('roles', fn (Builder $q) => $q->where('name', User::ROLE_REQUESTOR))
+            ->where(fn (Builder $q) => $q
+                ->whereHas('roles', fn (Builder $r) => $r->where('name', User::ROLE_REQUESTOR))
+                ->orWhereIn('id', RosterBreak::oicIdsCovering([User::ROLE_REQUESTOR])))
             ->pluck('id');
     }
 

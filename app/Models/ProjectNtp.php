@@ -132,9 +132,11 @@ class ProjectNtp extends Model
         // hold — unless they are a supervisor, whose department user signs
         // instead. Otherwise the step falls to the owning department's users —
         // and only its department users: matching on department name alone let
-        // any account carrying that department value sign for it.
+        // any account carrying that department value sign for it. A department
+        // user's OIC — from the same department — signs in their place during
+        // a roster break.
         return ($project->projectRequest?->requester_id === $user->id && ! $user->hasRole(User::ROLE_DEPT_SUPERVISOR))
-            || ($user->hasRole(User::ROLE_REQUESTOR) && $project->belongsToDepartmentOf($user));
+            || ($user->actsAs(User::ROLE_REQUESTOR) && $project->belongsToDepartmentOf($user));
     }
 
     /**
@@ -194,7 +196,8 @@ class ProjectNtp extends Model
             return static::approvalPending()->get();
         }
 
-        $roles = array_values(array_filter(self::REVIEW_ROLES, fn (string $role) => $user->hasRole($role)));
+        // Their own steps, plus a Department Manager's while covering one.
+        $roles = array_values(array_filter(self::REVIEW_ROLES, fn (string $role) => $user->actsAs($role)));
 
         return static::signableBy($user, $roles)
             ->reviewableBy($user)

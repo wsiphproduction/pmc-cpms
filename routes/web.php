@@ -126,8 +126,8 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('approvals/ntps/{ntp}/reject',                 [ApprovalController::class, 'rejectNtp'])->name('approvals.ntps.reject');
     });
 
-    // ── Roster Break (a PMD manager names an OIC while away) ──────────────
-    Route::middleware(['role:pmd_dept_manager|pmd_asst_manager'])->group(function () {
+    // ── Roster Break (a PMD or Department Manager names an OIC while away) ──
+    Route::middleware(['role:pmd_dept_manager|pmd_asst_manager|requestor'])->group(function () {
         Route::get('roster-break',                  [RosterBreakController::class, 'index'])->name('roster-break.index');
         Route::post('roster-break',                 [RosterBreakController::class, 'store'])->name('roster-break.store');
         Route::put('roster-break/{rosterBreak}',    [RosterBreakController::class, 'update'])->name('roster-break.update');
@@ -366,6 +366,11 @@ Route::middleware(['auth'])->group(function () {
         Route::delete('master/structures/{structure}', [MasterDataController::class, 'destroyStructure'])->name('master.structures.destroy');
 
         // Suppliers
+        Route::post('master/holidays/load-regular',  [MasterDataController::class, 'loadRegularHolidays'])->name('master.holidays.load-regular');
+        Route::post('master/holidays',               [MasterDataController::class, 'storeHoliday'])->name('master.holidays.store');
+        Route::put('master/holidays/{holiday}',      [MasterDataController::class, 'updateHoliday'])->name('master.holidays.update');
+        Route::delete('master/holidays/{holiday}',   [MasterDataController::class, 'destroyHoliday'])->name('master.holidays.destroy');
+
         Route::get('master/suppliers/search',        [MasterDataController::class, 'searchSuppliers'])->name('master.suppliers.search');
         Route::post('master/suppliers/import',       [MasterDataController::class, 'importSuppliers'])->name('master.suppliers.import');
         Route::post('master/suppliers',              [MasterDataController::class, 'storeSupplier'])->name('master.suppliers.store');

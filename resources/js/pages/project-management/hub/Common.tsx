@@ -24,6 +24,8 @@ export interface HubProject {
     owner_email?: string;
     /** Calendar or working days (Mon–Sat) — how this project's durations count. */
     duration_basis?: import('@/lib/duration').DurationBasis;
+    /** Active holidays (YYYY-MM-DD) a working-days project skips; empty on calendar days. */
+    holidays?: string[];
     signatories?: HubSignatories;
 }
 
