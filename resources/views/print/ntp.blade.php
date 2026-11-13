@@ -156,7 +156,7 @@
             'name' => $named['division_manager'] ?? '', 'approval' => $stamp('division_manager'),
         ])
         @include('print.partials.signature', [
-            'role' => 'Concurred by:', 'title' => 'Project Owner Representative',
+            'role' => 'Concurred by:', 'title' => 'Project Owner Department Manager',
             'name' => $named['requestor'] ?? '', 'approval' => $stamp('requestor'),
         ])
         @include('print.partials.signature', [

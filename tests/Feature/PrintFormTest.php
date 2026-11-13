@@ -133,7 +133,9 @@ it('stamps only the prepared-by block before anyone has approved', function () {
         ->toContain('Endorsed by:')
         ->toContain('Concurred by:')
         ->toContain('ECS Division Manager')
+        ->toContain('Project Owner Department Manager')
         ->toContain('Project Owner Division Manager')
+        ->not->toContain('Project Owner Representative')
         ->toContain('Service Contractor Representative')
         // Preparing the NTP is the engineer's own sign-off, so that block is
         // stamped from the start; every approval step is still blank.
