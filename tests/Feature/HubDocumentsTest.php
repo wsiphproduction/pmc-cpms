@@ -54,6 +54,18 @@ it('registers a hub page for every document section and the new module sections'
     }
 });
 
+it('opens a page for the menu items that are not built yet', function () {
+    $engineer = docsUser(User::ROLE_ENGINEER);
+    $project  = docsProject($engineer);
+
+    foreach (['safety-risk', 'geological', 'billing-validation', 'eval-schedule', 'eval-coordination'] as $section) {
+        $this->actingAs($engineer)
+            ->get(route("projects.hub.{$section}", $project))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->where('active_section', $section)->where('hub_data', []));
+    }
+});
+
 it('files a document under its section and lists it only there', function () {
     Storage::fake('public');
     $engineer = docsUser(User::ROLE_ENGINEER);

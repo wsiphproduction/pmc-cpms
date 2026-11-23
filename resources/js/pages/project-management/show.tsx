@@ -583,7 +583,6 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
     });
 
     const openItem = (item: OpsItem) => {
-        if (item.soon) return;
         if (item.link === 'request') {
             if (project.project_request_id) router.visit(route('requests.show', project.project_request_id));
             return;
@@ -1103,7 +1102,9 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                                                 const isActive = activeMenu === item.key;
                                                 const count = countOf(item);
                                                 const noRequest = item.link === 'request' && !project.project_request_id;
-                                                const disabled = !!item.soon || noRequest;
+                                                const disabled = noRequest;
+                                                // Not built yet: still opens (to a "Coming soon" page), but reads muted.
+                                                const muted = disabled || (!!item.soon && !isActive);
                                                 return (
                                                     <button
                                                         key={item.key}
@@ -1115,7 +1116,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                                                             width: '100%', padding: '9px 14px 9px 46px',
                                                             display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
                                                             fontSize: '12.5px', fontWeight: isActive ? 600 : 500, lineHeight: 1.35,
-                                                            color: disabled ? '#94a3b8' : isActive ? '#2563eb' : '#475569',
+                                                            color: muted ? '#94a3b8' : isActive ? '#2563eb' : '#475569',
                                                             background: isActive ? '#eff6ff' : 'transparent',
                                                             border: 'none',
                                                             boxShadow: isActive ? 'inset 3px 0 0 #2563eb' : 'none',
@@ -1161,7 +1162,16 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                             </span>
                             <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>Workspace</span>
                         </div>
-                        {activeMenu === 'acceptance' || activeMenu === 'completion-summary'
+                        {activeItem?.soon
+                            ? (
+                                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 32px', textAlign: 'center', gap: '12px' }}>
+                                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" strokeWidth="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                    <span style={{ padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Coming soon</span>
+                                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#334155' }}>{activeItem.label}</div>
+                                    <div style={{ fontSize: '12.5px', color: '#94a3b8', maxWidth: '380px' }}>This part of the Operations Hub is not available yet. It will be added in a later update.</div>
+                                </div>
+                            )
+                            : activeMenu === 'acceptance' || activeMenu === 'completion-summary'
                             ? (
                                 <div style={{ padding: '24px' }}>
                                     {currentStatusKey === 'COMPLETED' ? (

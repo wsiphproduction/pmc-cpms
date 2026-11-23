@@ -50,10 +50,20 @@ class ProjectController extends Controller
         'acceptance', 'completion-summary',
     ];
 
+    /**
+     * Menu items not built yet. They still get a page, so clicking one opens a
+     * "Coming soon" workspace rather than nothing.
+     */
+    private const HUB_SOON_SECTIONS = [
+        'safety-risk', 'geological', 'billing-validation',
+        'eval-schedule', 'eval-quality', 'eval-manpower', 'eval-equipment',
+        'eval-hse', 'eval-contractual', 'eval-documentation', 'eval-coordination',
+    ];
+
     /** Every hub section that has a page — the routes are registered from this. */
     public static function hubSections(): array
     {
-        return [...self::HUB_MODULE_SECTIONS, ...array_keys(ProjectDocument::SECTIONS)];
+        return [...self::HUB_MODULE_SECTIONS, ...array_keys(ProjectDocument::SECTIONS), ...self::HUB_SOON_SECTIONS];
     }
 
     public function index(Request $request): Response

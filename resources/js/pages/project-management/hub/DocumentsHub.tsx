@@ -75,7 +75,14 @@ export default function DocumentsHub({ project, section, label, documents, canEd
                     {error && <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '7px', color: '#dc2626', fontSize: '12.5px', fontWeight: 600, marginTop: '10px' }}>{error}</div>}
                 </div>
             )}
-            <DataTable
+            {documents.length === 0 ? (
+                <div style={{ padding: '40px 24px', border: '1px dashed #e2e8f0', borderRadius: '8px', textAlign: 'center', color: '#94a3b8' }}>
+                    <div style={{ fontSize: '13.5px', fontWeight: 600, color: '#64748b', marginBottom: '4px' }}>No files yet</div>
+                    <div style={{ fontSize: '12.5px' }}>
+                        {canEdit ? `Files uploaded to ${label} will be listed here.` : `Nothing has been filed under ${label} yet.`}
+                    </div>
+                </div>
+            ) : <DataTable
                 headers={['Seq#', ...(hasSubRows ? ['Project'] : []), 'Description', 'File', 'Uploaded By', 'Date', 'Actions']}
                 rows={documents.map((doc, idx) => [
                     <span style={{ color: '#94a3b8' }}>{idx + 1}</span>,
@@ -106,7 +113,7 @@ export default function DocumentsHub({ project, section, label, documents, canEd
                         onOpen={() => router.visit(route('projects.hub.' + section, doc.sub_project_id!))}
                     />,
                 ])}
-            />
+            />}
         </HubShell>
     );
 }

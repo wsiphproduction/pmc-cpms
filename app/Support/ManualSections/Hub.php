@@ -26,7 +26,7 @@ class Hub
                             ['G. Contractor Performance Evaluation', 'Eight evaluation forms', 'Coming in a later update.'],
                         ],
                     ],
-                    ['p', 'Document items — such as Scope of Work, Bill of Quantities or As-Built Drawings — all work the same way: describe the file, attach it (up to 20 MB), and click Upload File. Items marked Soon are listed so the structure is complete, but cannot be opened yet.'],
+                    ['p', 'Document items — such as Scope of Work, Bill of Quantities or As-Built Drawings — all work the same way: describe the file, attach it (up to 20 MB), and click Upload File. Items marked Soon are listed so the structure is complete; opening one shows a Coming soon page until it is built.'],
 
                     ['h', 'Who can change what here'],
                     ['p', 'Editing anything in the hub needs edit rights on the project: the administrator and the assistant manager on any project, a project engineer on projects they registered. Everyone else who can see the project — the sign-off offices, department managers, division manager users — sees the same tabs read-only.'],
