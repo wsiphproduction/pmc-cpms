@@ -259,6 +259,12 @@ class Project extends Model
         return $this->hasMany(ContractorEvaluation::class)->latest('id');
     }
 
+    /** Non-compliance records against the project's contractors. */
+    public function contractorFindings(): HasMany
+    {
+        return $this->hasMany(ContractorFinding::class)->latest('id');
+    }
+
     /** Files across the hub's document-register sections (SOW, BOQ, as-built…). */
     public function documents(): HasMany
     {

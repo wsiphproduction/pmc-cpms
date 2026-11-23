@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
+import type { FindingRow } from '../project-management/hub/NcrHub';
 import { ContractorRow, FilterPanel, Filters, Options, RatingBadge, Stat, filterQuery, fmtScore, peso, withQuery } from './shared';
 
 interface CategoryScore { key: string; letter: string; title: string; weight: number; score: number | null; corrective_actions: string | null }
@@ -35,7 +36,7 @@ interface Profile extends ContractorRow {
     ranked_of: number;
     assignments: Assignment[];
     history: HistoryRow[];
-    corrective_actions: { control_no: string; project_no: string; period: string; category: string; action: string }[];
+    findings: (FindingRow & { project_id: number; project_no: string })[];
 }
 
 interface Props {
@@ -209,26 +210,32 @@ export default function ContractorPerformanceShow({ profile, filters, options, d
                 )}
             </Card>
 
-            <Card title="Required Corrective Actions">
-                {profile.corrective_actions.length === 0 ? (
-                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '12.5px' }}>No corrective actions recorded in this period.</div>
+            <Card title="Non-Compliance and Corrective Actions"
+                right={<span style={{ fontSize: '11px', color: '#64748b' }}>{profile.findings_open} not closed{profile.findings_overdue > 0 ? ` · ${profile.findings_overdue} overdue` : ''}</span>}>
+                {profile.findings.length === 0 ? (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '12.5px' }}>No non-compliance records in this period.</div>
                 ) : (
-                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                        <thead style={{ background: '#f8fafc' }}>
-                            <tr>{['Evaluation', 'Project', 'Period', 'Category', 'Corrective Action'].map(h => <th key={h} style={th}>{h}</th>)}</tr>
-                        </thead>
-                        <tbody>
-                            {profile.corrective_actions.map((c, i) => (
-                                <tr key={i}>
-                                    <td style={td}>{c.control_no}</td>
-                                    <td style={td}>{c.project_no}</td>
-                                    <td style={td}>{c.period}</td>
-                                    <td style={td}>{c.category}</td>
-                                    <td style={{ ...td, whiteSpace: 'pre-wrap', color: '#0f172a' }}>{c.action}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                    <div style={{ overflowX: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead style={{ background: '#f8fafc' }}>
+                                <tr>{['NCR No.', 'Project', 'Deficiency', 'Corrective Action', 'Identified', 'Target', 'Status', 'Contractor Response'].map(h => <th key={h} style={th}>{h}</th>)}</tr>
+                            </thead>
+                            <tbody>
+                                {profile.findings.map(f => (
+                                    <tr key={f.id} onClick={() => router.visit(route('projects.hub.ncr', f.project_id))} style={{ cursor: 'pointer' }}>
+                                        <td style={{ ...td, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' }}>{f.control_no}</td>
+                                        <td style={td}>{f.project_no}</td>
+                                        <td style={{ ...td, whiteSpace: 'pre-wrap', maxWidth: '260px' }}>{f.category_label && <div style={{ fontSize: '11px', color: '#64748b' }}>{f.category_label}</div>}{f.deficiency}</td>
+                                        <td style={{ ...td, whiteSpace: 'pre-wrap', maxWidth: '260px', color: '#0f172a' }}>{f.corrective_action}</td>
+                                        <td style={{ ...td, whiteSpace: 'nowrap' }}>{f.date_identified}</td>
+                                        <td style={{ ...td, whiteSpace: 'nowrap', color: f.overdue ? '#b91c1c' : '#334155', fontWeight: f.overdue ? 700 : 400 }}>{f.target_date ?? '—'}</td>
+                                        <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 700, color: f.overdue ? '#b91c1c' : '#0f172a' }}>{f.overdue ? 'Overdue' : f.status_label}{f.closure_date ? <div style={{ fontWeight: 400, color: '#64748b', fontSize: '11.5px' }}>{f.closure_date}</div> : null}</td>
+                                        <td style={{ ...td, whiteSpace: 'pre-wrap', maxWidth: '260px' }}>{f.contractor_response ?? <span style={{ color: '#94a3b8' }}>—</span>}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 )}
             </Card>
         </AuthenticatedLayout>

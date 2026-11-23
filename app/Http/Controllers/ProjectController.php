@@ -14,6 +14,7 @@ use App\Models\Priority;
 use App\Models\Project;
 use App\Models\ContractorEvaluation;
 use App\Models\ContractorEvaluationCategory;
+use App\Models\ContractorFinding;
 use App\Models\ProjectCompletion;
 use App\Models\ProjectDocument;
 use App\Models\ProjectNtp;
@@ -26,6 +27,7 @@ use App\Models\Supplier;
 use App\Models\User;
 use App\Models\WorkForce;
 use App\Support\ContractorEvaluationScoring;
+use App\Support\ContractorFindings;
 use App\Support\EmsReportPresenter;
 use App\Support\NtpSignatories;
 use Illuminate\Http\RedirectResponse;
@@ -55,6 +57,8 @@ class ProjectController extends Controller
         'eval-summary',
         'eval-schedule', 'eval-quality', 'eval-manpower', 'eval-equipment',
         'eval-hse', 'eval-contractual', 'eval-documentation', 'eval-coordination',
+        // Non-compliance records and their corrective actions.
+        'ncr',
     ];
 
     /**
@@ -582,6 +586,8 @@ class ProjectController extends Controller
         return [
             ...collect(ProjectDocument::SECTIONS)->map(fn ($label, $section) => $documentCounts->get($section, 0))->all(),
             'eval-summary' => $project->contractorEvaluations()->count(),
+            // Still open — the badge is a to-do, not a total.
+            'ncr'          => $project->contractorFindings()->where('status', '!=', ContractorFinding::STATUS_CLOSED)->count(),
             'rfq'         => $countAcross('rfqs'),
             'ntp'         => $countAcross('ntps'),
             // Steps this project hands to someone other than the default.
@@ -645,6 +651,16 @@ class ProjectController extends Controller
         }
 
         return match ($section) {
+            'ncr' => [
+                // The project's own records — a sub-project's contractor is tracked in its own hub.
+                'findings'    => $project->contractorFindings()->with(ContractorFindings::WITH)->get()
+                    ->map(fn (ContractorFinding $f) => ContractorFindings::row($f))->values(),
+                'contractors' => $project->ntps()->where('status', '!=', 'rejected')->latest('id')->pluck('contractor_name')
+                    ->filter()->unique()->values(),
+                'categories'  => collect(ContractorEvaluationScoring::categories())
+                    ->map(fn ($c, $key) => ['value' => $key, 'label' => "{$c['letter']}. {$c['title']}"])->values(),
+            ],
+
             'proposal' => [
                 // A sub-project goes ahead on its parent's approved proposal,
                 // so that is the one it shows (read-only, from the parent).

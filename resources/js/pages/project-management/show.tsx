@@ -13,6 +13,7 @@ import EmsRegisterHub from './hub/EmsRegisterHub';
 import IocHub from './hub/IocHub';
 import MomHub from './hub/MomHub';
 import MtrHub from './hub/MtrHub';
+import NcrHub from './hub/NcrHub';
 import NtpHub from './hub/NtpHub';
 import NtpSignatoriesHub from './hub/NtpSignatoriesHub';
 import PermitsHub from './hub/PermitsHub';
@@ -240,6 +241,7 @@ const OPS_GROUPS: OpsGroup[] = [
         evaluation('eval-contractual',   'Contractual and Administrative Compliance'),
         evaluation('eval-documentation', 'Project Documentation and Reporting'),
         evaluation('eval-coordination',  'Coordination and Responsiveness'),
+        { key: 'ncr', label: 'Non-Compliance and Corrective Actions', summary: 'Deficiencies found in the contractor’s work, the corrective action required, the contractor’s response, and closure.' },
     ] },
 ];
 
@@ -310,6 +312,7 @@ function renderHubSection(
         case 'ems-register': return <EmsRegisterHub project={hubProject} entries={hubData.entries ?? []} canEdit={canEdit} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
         case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} canEdit={canEdit} />;
+        case 'ncr': return <NcrHub project={hubProject} findings={hubData.findings ?? []} contractors={hubData.contractors ?? []} categories={hubData.categories ?? []} canEdit={canEdit} />;
         case 'proposal': return <ProposalHub project={hubProject} proposal={hubData.proposal ?? { url: null, filename: null, versions: [], inherited_from: null }} canEdit={canEdit} />;
     }
 

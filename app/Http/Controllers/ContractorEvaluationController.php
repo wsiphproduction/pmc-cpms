@@ -11,6 +11,7 @@ use App\Models\Project;
 use App\Models\RosterBreak;
 use App\Models\User;
 use App\Support\ContractorEvaluationScoring as Scoring;
+use App\Support\ContractorFindings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -203,11 +204,15 @@ class ContractorEvaluationController extends Controller
         if ($evaluation->approvalChainComplete()) {
             $evaluation->update(['status' => ContractorEvaluation::STATUS_APPROVED, 'approved_at' => now()]);
 
+            // Each required corrective action becomes a tracked non-compliance record.
+            $raised = ContractorFindings::raiseFromEvaluation($evaluation);
+            $tracked = $raised > 0 ? " {$raised} corrective action(s) are now tracked under Non-Compliance and Corrective Actions." : '';
+
             if ($evaluation->created_by) {
-                Notification::notify($evaluation->created_by, "Contractor evaluation {$evaluation->control_no} for project {$project->project_no} was approved.", $this->hubLink($evaluation));
+                Notification::notify($evaluation->created_by, "Contractor evaluation {$evaluation->control_no} for project {$project->project_no} was approved.{$tracked}", $this->hubLink($evaluation));
             }
 
-            return back()->with('success', "Contractor evaluation {$evaluation->control_no} approved.");
+            return back()->with('success', "Contractor evaluation {$evaluation->control_no} approved.{$tracked}");
         }
 
         $this->notifyCurrentSigner($evaluation, "Contractor evaluation {$evaluation->control_no} ({$evaluation->contractor_name}, {$evaluation->period_label}) for project {$project->project_no} was reviewed and is awaiting your approval.");

@@ -124,19 +124,82 @@ class ContractorPerformanceReportWriter
         // History
         $this->historySheet($book->createSheet()->setTitle('Performance History'), $profile['history'], "Performance History — {$profile['name']}");
 
-        // Corrective actions
-        $sheet = $book->createSheet()->setTitle('Corrective Actions');
-        $headers = ['Evaluation', 'Project No.', 'Period', 'Category', 'Required Corrective Action'];
-        $row = $this->title($sheet, "Corrective Actions — {$profile['name']}", null, count($headers));
+        // Non-compliance and corrective actions
+        $this->findingsSheet($book->createSheet()->setTitle('Non-Compliance'), $profile['findings'], "Non-Compliance and Corrective Actions — {$profile['name']}");
+
+        $book->setActiveSheetIndex(0);
+
+        return $this->bytes($book);
+    }
+
+    /** Contractor Non-Compliance and Deficiency Report: every record in full. */
+    public function nonCompliance(array $findings, array $filters): string
+    {
+        $book = $this->book('Contractor Non-Compliance and Deficiency Report');
+        $this->findingsSheet($book->getActiveSheet()->setTitle('Non-Compliance'), $findings, 'Contractor Non-Compliance and Deficiency Report', $this->filterLine($filters));
+
+        return $this->bytes($book);
+    }
+
+    /** Corrective Action Monitoring Report: status, ageing and overdue items, per record and per contractor. */
+    public function correctiveActions(array $findings, array $stats, array $filters): string
+    {
+        $book = $this->book('Corrective Action Monitoring Report');
+
+        $sheet = $book->getActiveSheet()->setTitle('Monitoring');
+        $headers = ['NCR No.', 'Contractor', 'Project No.', 'Corrective Action', 'Date Identified', 'Target Date', 'Status', 'Days Open', 'Overdue', 'Response Received', 'Closure Date'];
+        $row = $this->title($sheet, 'Corrective Action Monitoring Report', $this->filterLine($filters), count($headers));
+        $sheet->setCellValue('A3', "Total {$stats['total']} · Open {$stats['open']} · Responded {$stats['responded']} · Overdue {$stats['overdue']} · Closed {$stats['closed']}"
+            . ($stats['avg_days_to_close'] !== null ? " · Average {$stats['avg_days_to_close']} days to close" : ''));
+        $sheet->getStyle('A3')->getFont()->setBold(true)->setSize(10);
         $this->headerRow($sheet, $row, $headers);
-        foreach ($profile['corrective_actions'] as $c) {
-            $sheet->fromArray([$c['control_no'], $c['project_no'], $c['period'], $c['category'], $c['action']], null, 'A' . ++$row);
+        foreach ($findings as $f) {
+            $sheet->fromArray([
+                $f['control_no'], $f['contractor_name'], $f['project_no'], $f['corrective_action'],
+                $f['date_identified'], $f['target_date'] ?? '—', $f['status_label'], $f['days_open'],
+                $f['overdue'] ? 'Yes' : 'No', $f['responded_at'] ?? 'No', $f['closure_date'] ?? '—',
+            ], null, 'A' . ++$row);
+        }
+        $this->finish($sheet, count($headers));
+
+        // Per contractor
+        $sheet = $book->createSheet()->setTitle('By Contractor');
+        $headers = ['Contractor', 'Records', 'Open', 'Responded', 'Overdue', 'Closed', 'Average Days to Close'];
+        $row = $this->title($sheet, 'Corrective Actions by Contractor', null, count($headers));
+        $this->headerRow($sheet, $row, $headers);
+        foreach (collect($findings)->groupBy('contractor_name')->sortKeys() as $name => $group) {
+            $closed = $group->where('status', 'closed');
+            $sheet->fromArray([
+                $name, $group->count(), $group->where('status', 'open')->count(), $group->where('status', 'responded')->count(),
+                $group->where('overdue', true)->count(), $closed->count(), $closed->isEmpty() ? '—' : round($closed->avg('days_open'), 1),
+            ], null, 'A' . ++$row);
         }
         $this->finish($sheet, count($headers));
 
         $book->setActiveSheetIndex(0);
 
         return $this->bytes($book);
+    }
+
+    private function findingsSheet(Worksheet $sheet, array $findings, string $title, ?string $subtitle = null): void
+    {
+        $headers = ['NCR No.', 'Contractor', 'Project No.', 'Project Title', 'Category', 'From Evaluation', 'Deficiency', 'Date Identified', 'Required Corrective Action', 'Target Date', 'Status', 'Contractor Response', 'Responded', 'Closure Date', 'Closure Remarks', 'Closed By'];
+        $row = $this->title($sheet, $title, $subtitle, count($headers));
+        $this->headerRow($sheet, $row, $headers);
+
+        foreach ($findings as $f) {
+            $sheet->fromArray([
+                $f['control_no'], $f['contractor_name'], $f['project_no'], $f['project_title'], $f['category_label'] ?? '—',
+                $f['evaluation']['control_no'] ?? '—', $f['deficiency'], $f['date_identified'], $f['corrective_action'],
+                $f['target_date'] ?? '—', $f['status_label'], $f['contractor_response'] ?? '', $f['responded_at'] ?? '',
+                $f['closure_date'] ?? '', $f['closure_remarks'] ?? '', $f['closed_by'] ?? '',
+            ], null, 'A' . ++$row);
+        }
+
+        $this->finish($sheet, count($headers));
+        foreach (['G', 'I', 'L', 'O'] as $wide) {
+            $sheet->getColumnDimension($wide)->setWidth(40);
+        }
     }
 
     /** Every approved project-level evaluation in the filtered set, one row each. */

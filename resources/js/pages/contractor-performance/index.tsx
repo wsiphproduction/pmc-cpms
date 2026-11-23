@@ -1,6 +1,6 @@
 import { Head, router } from '@inertiajs/react';
 import AuthenticatedLayout from '@/layouts/AuthenticatedLayout';
-import { ContractorRow, FilterPanel, Filters, Options, RatingBadge, Stat, filterQuery, fmtScore, shareCell, withQuery } from './shared';
+import { ContractorRow, FilterPanel, Filters, Options, RatingBadge, SectionTabs, Stat, filterQuery, fmtScore, shareCell, withQuery } from './shared';
 
 interface Props {
     stats: { contractors: number; projects: number; projects_evaluated: number; pending_evaluation: number; in_signoff: number };
@@ -54,6 +54,8 @@ export default function ContractorPerformanceIndex({ stats, contractors, filters
                 </div>
             </div>
 
+            <SectionTabs active="ranking" filters={filters} />
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '18px' }}>
                 <Stat value={stats.contractors} label="Total Contractors" hint="Contractors with a live NTP or an approved evaluation in this view." />
                 <Stat value={stats.projects} label="Total Projects" hint="Projects assigned to those contractors." />
@@ -92,6 +94,7 @@ export default function ContractorPerformanceIndex({ stats, contractors, filters
                                     <th style={{ ...th, textAlign: 'right' }}>Score</th>
                                     <th style={th}>Rating</th>
                                     {CATEGORY_COLUMNS.map(c => <th key={c.key} style={{ ...th, textAlign: 'center' }} title={c.title}>{c.letter}</th>)}
+                                    <th style={{ ...th, textAlign: 'right' }} title="Non-compliance records not yet closed (overdue)">Open NCR</th>
                                     <th style={th}>Flags</th>
                                 </tr>
                             </thead>
@@ -122,6 +125,10 @@ export default function ContractorPerformanceIndex({ stats, contractors, filters
                                                 </td>
                                             );
                                         })}
+                                        <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                                            {row.findings_open > 0 ? row.findings_open : <span style={{ color: '#cbd5e1' }}>—</span>}
+                                            {row.findings_overdue > 0 && <span style={{ color: '#b91c1c', fontWeight: 700 }}> ({row.findings_overdue} overdue)</span>}
+                                        </td>
                                         <td style={td}>
                                             {row.flags.length > 0
                                                 ? <span title={row.flags.map(f => f.message).join('\n')} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11.5px', fontWeight: 700, color: '#b91c1c' }}>⚑ {row.flags.length}</span>

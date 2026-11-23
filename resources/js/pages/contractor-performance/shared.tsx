@@ -29,7 +29,7 @@ export interface Options {
     ratings: string[];
 }
 
-export interface Flag { type: 'low_rating' | 'recurring'; message: string }
+export interface Flag { type: 'low_rating' | 'recurring' | 'overdue'; message: string }
 
 export interface ContractorRow {
     key: string;
@@ -48,6 +48,9 @@ export interface ContractorRow {
     category_averages: Record<string, number | null>;
     flags: Flag[];
     last_evaluated: string | null;
+    findings_open: number;
+    findings_overdue: number;
+    findings_total: number;
     rank: number | null;
 }
 
@@ -114,6 +117,29 @@ export function Stat({ value, label, hint }: { value: number | string; label: st
         <div title={hint} style={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '14px 16px' }}>
             <div style={{ fontSize: '26px', fontWeight: 900, color: '#0f172a', lineHeight: 1.1 }}>{value}</div>
             <div style={{ fontSize: '10.5px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: '3px' }}>{label}</div>
+        </div>
+    );
+}
+
+/** Switches between the ranking and the corrective-action monitoring, keeping the filters. */
+export function SectionTabs({ active, filters }: { active: 'ranking' | 'findings'; filters: Filters }) {
+    const query = filterQuery(filters);
+    const tabs = [
+        { key: 'ranking',  label: 'Ranking and Comparison',            href: withQuery(route('contractor-performance.index'), query) },
+        { key: 'findings', label: 'Non-Compliance and Corrective Actions', href: withQuery(route('contractor-performance.findings'), query) },
+    ] as const;
+
+    return (
+        <div role="tablist" style={{ display: 'flex', gap: '4px', borderBottom: '1px solid #e2e8f0', marginBottom: '18px' }}>
+            {tabs.map(t => {
+                const on = t.key === active;
+                return (
+                    <button key={t.key} type="button" role="tab" aria-selected={on} onClick={() => router.visit(t.href)}
+                        style={{ padding: '10px 14px', border: 'none', background: 'none', borderBottom: `2px solid ${on ? '#7c3aed' : 'transparent'}`, marginBottom: '-1px', fontSize: '13px', fontWeight: on ? 800 : 600, color: on ? '#6d28d9' : '#64748b', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {t.label}
+                    </button>
+                );
+            })}
         </div>
     );
 }

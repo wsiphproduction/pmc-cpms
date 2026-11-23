@@ -4,6 +4,8 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\ContractorEvaluationController;
+use App\Http\Controllers\ContractorFindingController;
+use App\Http\Controllers\ContractorFindingPortalController;
 use App\Http\Controllers\ContractorPerformanceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmsSurveyReportController;
@@ -43,6 +45,14 @@ Route::prefix('quote/{token}')->group(function () {
     Route::get('/',                        [SupplierQuotationController::class, 'show'])->name('supplier-quote.show');
     Route::post('/',                       [SupplierQuotationController::class, 'store'])->name('supplier-quote.store');
     Route::patch('{quotation}',            [SupplierQuotationController::class, 'update'])->name('supplier-quote.update');
+});
+
+// A non-compliance record as the contractor sees it, and their response. As
+// with quotations, the unguessable token in the emailed link is the whole of
+// the authorisation, scoped to that one record.
+Route::prefix('findings/{token}')->group(function () {
+    Route::get('/',  [ContractorFindingPortalController::class, 'show'])->name('contractor-finding.show');
+    Route::post('/', [ContractorFindingPortalController::class, 'respond'])->middleware('throttle:20,1')->name('contractor-finding.respond');
 });
 
 // The approved NTP as the contractor sees it. The vendor has no account, so
@@ -265,11 +275,24 @@ Route::middleware(['auth'])->group(function () {
         Route::post('{evaluation}/submit',              [ContractorEvaluationController::class, 'submit'])->name('hub.evaluations.submit');
         Route::delete('{evaluation}',                   [ContractorEvaluationController::class, 'destroy'])->name('hub.evaluations.destroy');
     });
+
+    // Non-compliance records (hub group G), kept by whoever may edit the hub.
+    // Updates are POSTs so they can carry files.
+    Route::prefix('projects/{project}/hub/ncr')->middleware('can:update,project')->group(function () {
+        Route::post('/',                  [ContractorFindingController::class, 'store'])->name('hub.ncr.store');
+        Route::post('{finding}',          [ContractorFindingController::class, 'update'])->name('hub.ncr.update');
+        Route::post('{finding}/send',     [ContractorFindingController::class, 'send'])->name('hub.ncr.send');
+        Route::post('{finding}/response', [ContractorFindingController::class, 'recordResponse'])->name('hub.ncr.response');
+        Route::post('{finding}/close',    [ContractorFindingController::class, 'close'])->name('hub.ncr.close');
+        Route::post('{finding}/reopen',   [ContractorFindingController::class, 'reopen'])->name('hub.ncr.reopen');
+        Route::delete('{finding}',        [ContractorFindingController::class, 'destroy'])->name('hub.ncr.destroy');
+    });
     // Contractor-level consolidation: ranking, profiles and reports, for PMD
     // and management. Department users and MEPEO do not see contractor ratings.
     Route::middleware(['role:approver|assistant_manager|pmd_asst_manager|pmd_dept_manager|division_manager|admin'])->group(function () {
         Route::get('contractor-performance',            [ContractorPerformanceController::class, 'index'])->name('contractor-performance.index');
         Route::get('contractor-performance/contractor', [ContractorPerformanceController::class, 'show'])->name('contractor-performance.show');
+        Route::get('contractor-performance/findings',   [ContractorPerformanceController::class, 'findings'])->name('contractor-performance.findings');
         Route::get('contractor-performance/export',     [ContractorPerformanceController::class, 'export'])->name('contractor-performance.export');
     });
     Route::patch('contractor-evaluations/{evaluation}/approve', [ContractorEvaluationController::class, 'approve'])->name('evaluations.approve');

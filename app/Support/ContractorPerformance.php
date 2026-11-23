@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\ContractorEvaluation;
+use App\Models\ContractorFinding;
 use App\Models\Project;
 use App\Models\ProjectNtp;
 use App\Models\Supplier;
@@ -95,7 +96,7 @@ class ContractorPerformance
         $rank = 0;
         foreach ($rows as &$row) {
             $row['rank'] = $row['score'] === null ? null : ++$rank;
-            unset($row['assignments'], $row['history']);
+            unset($row['assignments'], $row['history'], $row['findings']);
         }
 
         return $rows;
@@ -139,21 +140,37 @@ class ContractorPerformance
         $row['rank'] = $ranking->firstWhere('key', $key)['rank'] ?? null;
         $row['ranked_of'] = $ranking->whereNotNull('rank')->count();
 
-        // Corrective actions the evaluators recorded, newest first (§9).
-        $row['corrective_actions'] = collect($row['history'])
-            ->flatMap(fn ($h) => collect($h['categories'])
-                ->filter(fn ($c) => filled($c['corrective_actions']))
-                ->map(fn ($c) => [
-                    'control_no' => $h['control_no'],
-                    'project_no' => $h['project_no'],
-                    'period'     => $h['period_label'],
-                    'category'   => $c['letter'] . '. ' . $c['title'],
-                    'action'     => $c['corrective_actions'],
-                ]))
-            ->values()
-            ->all();
-
         return $row;
+    }
+
+    /**
+     * The non-compliance register across the filtered contractors (§9, §10),
+     * optionally narrowed to one status — `overdue` meaning open or responded
+     * past the target date — with its monitoring figures.
+     */
+    public function findingsRegister(?string $status = null): array
+    {
+        $all = collect($this->contractors())->flatMap(fn ($c) => $c['findings'])->sortByDesc('date_identified')->values();
+
+        $closed = $all->where('status', ContractorFinding::STATUS_CLOSED);
+
+        $stats = [
+            'total'     => $all->count(),
+            'open'      => $all->where('status', ContractorFinding::STATUS_OPEN)->count(),
+            'responded' => $all->where('status', ContractorFinding::STATUS_RESPONDED)->count(),
+            'overdue'   => $all->where('overdue', true)->count(),
+            'closed'    => $closed->count(),
+            'avg_days_to_close' => $closed->isEmpty() ? null : round($closed->avg('days_open'), 1),
+        ];
+
+        $rows = match ($status) {
+            'open', 'responded', 'closed' => $all->where('status', $status),
+            'overdue'                     => $all->where('overdue', true),
+            'unclosed'                    => $all->where('status', '!=', ContractorFinding::STATUS_CLOSED),
+            default                       => $all,
+        };
+
+        return ['stats' => $stats, 'findings' => $rows->values()->all()];
     }
 
     // ── Consolidation ─────────────────────────────────────────────────────────
@@ -188,6 +205,7 @@ class ContractorPerformance
                 ] : null,
                 'assignments' => [],
                 'history'     => [],
+                'findings'    => [],
             ];
 
             return $key;
@@ -222,6 +240,21 @@ class ContractorPerformance
             $key = $touch($evaluation->supplier_id, $evaluation->contractor_name);
             $this->assign($contractors[$key], $evaluation->project);
             $contractors[$key]['history'][] = $this->historyRow($evaluation);
+        }
+
+        // Non-compliance records identified inside the window (§9).
+        $findings = ContractorFinding::query()
+            ->when($this->from, fn ($q) => $q->whereDate('date_identified', '>=', $this->from->toDateString()))
+            ->when($this->to, fn ($q) => $q->whereDate('date_identified', '<=', $this->to->toDateString()))
+            ->whereHas('project', fn (Builder $q) => $this->scopeProjects($q))
+            ->with([...ContractorFindings::WITH, 'project:id,project_no,title,dept_owner,category,status_key,project_type'])
+            ->latest('date_identified')
+            ->get();
+
+        foreach ($findings as $finding) {
+            $key = $touch($finding->supplier_id, $finding->contractor_name);
+            $this->assign($contractors[$key], $finding->project);
+            $contractors[$key]['findings'][] = ContractorFindings::row($finding);
         }
 
         $rows = [];
@@ -341,6 +374,8 @@ class ContractorPerformance
         }
 
         $classification = Scoring::classify($score);
+        $findings = $contractor['findings'];
+        $overdue = count(array_filter($findings, fn ($f) => $f['overdue']));
 
         return [
             'key'               => $contractor['key'],
@@ -357,10 +392,14 @@ class ContractorPerformance
             'classification'    => $classification['label'] ?? null,
             'action'            => $classification['action'] ?? null,
             'category_averages' => $categoryAverages,
-            'flags'             => $this->flags($contractor['history'], $score),
+            'flags'             => $this->flags($contractor['history'], $score, $overdue),
             'last_evaluated'    => $contractor['history'][0]['as_of'] ?? null,
+            'findings_open'     => count(array_filter($findings, fn ($f) => $f['status'] !== ContractorFinding::STATUS_CLOSED)),
+            'findings_overdue'  => $overdue,
+            'findings_total'    => count($findings),
             'assignments'       => array_values($contractor['assignments']),
             'history'           => $contractor['history'],
+            'findings'          => $findings,
         ];
     }
 
@@ -368,12 +407,16 @@ class ContractorPerformance
      * Corrective-action monitoring (§9): a low overall rating, and any category
      * that fell short in two or more evaluations — a recurring deficiency.
      */
-    private function flags(array $history, ?float $score): array
+    private function flags(array $history, ?float $score, int $overdueFindings = 0): array
     {
         $flags = [];
 
         if ($score !== null && $score < self::LOW_RATING) {
             $flags[] = ['type' => 'low_rating', 'message' => 'Overall score below ' . self::LOW_RATING . ' — corrective action plan required.'];
+        }
+
+        if ($overdueFindings > 0) {
+            $flags[] = ['type' => 'overdue', 'message' => "{$overdueFindings} corrective action(s) past their target date."];
         }
 
         $shortfalls = [];
@@ -397,7 +440,7 @@ class ContractorPerformance
     /** Contractor-level filters: name search and performance rating. */
     private function keep(array $row): bool
     {
-        if ($row['projects'] === 0 && $row['evaluations'] === 0) {
+        if ($row['projects'] === 0 && $row['evaluations'] === 0 && $row['findings_total'] === 0) {
             return false;
         }
 

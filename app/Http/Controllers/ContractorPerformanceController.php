@@ -48,6 +48,29 @@ class ContractorPerformanceController extends Controller
         ]);
     }
 
+    /** Non-compliance and corrective action monitoring (§9, §10) across contractors. */
+    public function findings(Request $request): InertiaResponse
+    {
+        $performance = new ContractorPerformance($this->filters($request));
+        $status = $this->findingStatus($request);
+        $register = $performance->findingsRegister($status);
+
+        return Inertia::render('contractor-performance/findings', [
+            'stats'      => $register['stats'],
+            'findings'   => $register['findings'],
+            'ncr_status' => $status,
+            'filters'    => $performance->filters(),
+            'options'    => $this->options(),
+        ]);
+    }
+
+    private function findingStatus(Request $request): ?string
+    {
+        $status = $request->query('ncr_status');
+
+        return in_array($status, ['open', 'responded', 'overdue', 'closed', 'unclosed'], true) ? $status : null;
+    }
+
     /** Consolidated / ranking (default), one contractor, or project-level evaluations. */
     public function export(Request $request): Response
     {
@@ -66,6 +89,12 @@ class ContractorPerformanceController extends Controller
                 return [$writer->individual($profile, $filters), "Contractor-Performance-{$slug}-{$stamp}.xlsx", "individual contractor report ({$profile['name']})"];
             })(),
             'evaluations' => [$writer->projectLevel($performance->evaluations(), $filters), "Project-Level-Evaluations-{$stamp}.xlsx", 'project-level evaluation report'],
+            'noncompliance' => [$writer->nonCompliance($performance->findingsRegister($this->findingStatus($request))['findings'], $filters), "Non-Compliance-Report-{$stamp}.xlsx", 'non-compliance and deficiency report'],
+            'corrective'  => (function () use ($performance, $writer, $filters, $request, $stamp) {
+                $register = $performance->findingsRegister($this->findingStatus($request));
+
+                return [$writer->correctiveActions($register['findings'], $register['stats'], $filters), "Corrective-Action-Monitoring-{$stamp}.xlsx", 'corrective action monitoring report'];
+            })(),
             default       => [$writer->consolidated($performance->ranking(), $filters), "Contractor-Performance-Ranking-{$stamp}.xlsx", 'consolidated contractor performance report'],
         };
 
