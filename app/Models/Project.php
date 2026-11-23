@@ -253,6 +253,12 @@ class Project extends Model
         return $this->hasMany(ProjectEmsRegisterEntry::class)->latest();
     }
 
+    /** Contractor Performance Evaluations, one per evaluation period. */
+    public function contractorEvaluations(): HasMany
+    {
+        return $this->hasMany(ContractorEvaluation::class)->latest('id');
+    }
+
     /** Files across the hub's document-register sections (SOW, BOQ, as-built…). */
     public function documents(): HasMany
     {

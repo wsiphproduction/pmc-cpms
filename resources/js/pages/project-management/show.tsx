@@ -6,6 +6,7 @@ import { durationLabel, type DurationBasis } from '@/lib/duration';
 import AcrHub from './hub/AcrHub';
 import AuditTrailHub from './hub/AuditTrailHub';
 import ContractHub from './hub/ContractHub';
+import ContractorEvaluationHub from './hub/ContractorEvaluationHub';
 import DocumentsHub from './hub/DocumentsHub';
 import EmsHub from './hub/EmsHub';
 import EmsRegisterHub from './hub/EmsRegisterHub';
@@ -169,8 +170,8 @@ const doc = (key: string, label: string): OpsItem => ({ key, label, doc: true, s
 
 const soon = (key: string, label: string): OpsItem => ({ key, label, soon: true, summary: 'Coming in a later update.' });
 
-/** Contractor Performance Evaluation: an encoded rating, the signed form, and the evidence. */
-const evaluation = (key: string, label: string): OpsItem => soon(key, `${label} Evaluation`);
+/** Contractor Performance Evaluation: one category's form — encoded ratings, the signed form, and the evidence. */
+const evaluation = (key: string, label: string): OpsItem => ({ key, label: `${label} Evaluation`, summary: 'Rate this category for the selected evaluation period, with its form and evidence.' });
 
 /** The Operations Hub action menu, grouped A–G as in "CPMS Project Operations Hub". */
 const OPS_GROUPS: OpsGroup[] = [
@@ -230,6 +231,7 @@ const OPS_GROUPS: OpsGroup[] = [
         doc('completion-other', 'Other Applicable Completion Documents'),
     ] },
     { id: 'G', title: 'Contractor Performance Evaluation', items: [
+        { key: 'eval-summary', label: 'Evaluation Summary and Sign-off', summary: 'Raise an evaluation for a period, see the project score, and submit or sign it off.' },
         evaluation('eval-schedule',      'Project Schedule and Timeliness'),
         evaluation('eval-quality',       'Quality of Workmanship and Technical Compliance'),
         evaluation('eval-manpower',      'Manpower Management and Availability'),
@@ -309,6 +311,17 @@ function renderHubSection(
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
         case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} canEdit={canEdit} />;
         case 'proposal': return <ProposalHub project={hubProject} proposal={hubData.proposal ?? { url: null, filename: null, versions: [], inherited_from: null }} canEdit={canEdit} />;
+    }
+
+    if (section.startsWith('eval-')) {
+        return <ContractorEvaluationHub
+            project={hubProject}
+            category={section === 'eval-summary' ? null : section.slice('eval-'.length)}
+            evaluations={hubData.evaluations ?? []}
+            definition={hubData.definition ?? { categories: [], ratings: [], classifications: [], period_types: [] }}
+            contractors={hubData.contractors ?? []}
+            canEdit={canEdit}
+        />;
     }
 
     const item = OPS_ITEMS.find(i => i.key === section);

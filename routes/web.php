@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\CommentController;
+use App\Http\Controllers\ContractorEvaluationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmsSurveyReportController;
 use App\Http\Controllers\FileVersionController;
@@ -251,6 +252,20 @@ Route::middleware(['auth'])->group(function () {
     Route::get('ems-reports/{report}/print',     [EmsSurveyReportController::class, 'print'])->name('ems.print');
     Route::patch('ems-reports/{report}/approve', [EmsSurveyReportController::class, 'approve'])->name('ems.approve');
     Route::patch('ems-reports/{report}/return',  [EmsSurveyReportController::class, 'returnForRevision'])->name('ems.return');
+
+    // Contractor Performance Evaluation (hub group G): raised and rated by
+    // whoever may edit the project's hub; signed by the PMD Assistant Manager
+    // and PMD Department Manager — the controller checks the signer is the
+    // one the chain waits on.
+    Route::prefix('projects/{project}/hub/evaluations')->middleware('can:update,project')->group(function () {
+        Route::post('/',                                [ContractorEvaluationController::class, 'store'])->name('hub.evaluations.store');
+        Route::patch('{evaluation}',                    [ContractorEvaluationController::class, 'update'])->name('hub.evaluations.update');
+        Route::post('{evaluation}/categories/{category}', [ContractorEvaluationController::class, 'saveCategory'])->name('hub.evaluations.category');
+        Route::post('{evaluation}/submit',              [ContractorEvaluationController::class, 'submit'])->name('hub.evaluations.submit');
+        Route::delete('{evaluation}',                   [ContractorEvaluationController::class, 'destroy'])->name('hub.evaluations.destroy');
+    });
+    Route::patch('contractor-evaluations/{evaluation}/approve', [ContractorEvaluationController::class, 'approve'])->name('evaluations.approve');
+    Route::patch('contractor-evaluations/{evaluation}/return',  [ContractorEvaluationController::class, 'returnForRevision'])->name('evaluations.return');
 
     // ── MEPEO (the environmental office's own page) ───────────────────────
     Route::middleware(['role:mepeo_rep|mepeo_manager|admin'])->group(function () {

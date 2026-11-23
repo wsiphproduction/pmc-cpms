@@ -58,7 +58,7 @@ it('opens a page for the menu items that are not built yet', function () {
     $engineer = docsUser(User::ROLE_ENGINEER);
     $project  = docsProject($engineer);
 
-    foreach (['safety-risk', 'geological', 'billing-validation', 'eval-schedule', 'eval-coordination'] as $section) {
+    foreach (['safety-risk', 'geological', 'billing-validation'] as $section) {
         $this->actingAs($engineer)
             ->get(route("projects.hub.{$section}", $project))
             ->assertOk()

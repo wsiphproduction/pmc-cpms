@@ -12,6 +12,8 @@ use App\Models\MasterStatus;
 use App\Models\Notification;
 use App\Models\Priority;
 use App\Models\Project;
+use App\Models\ContractorEvaluation;
+use App\Models\ContractorEvaluationCategory;
 use App\Models\ProjectCompletion;
 use App\Models\ProjectDocument;
 use App\Models\ProjectNtp;
@@ -23,6 +25,7 @@ use App\Models\Structure;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\WorkForce;
+use App\Support\ContractorEvaluationScoring;
 use App\Support\EmsReportPresenter;
 use App\Support\NtpSignatories;
 use Illuminate\Http\RedirectResponse;
@@ -48,6 +51,10 @@ class ProjectController extends Controller
         'qpp', 'mtr', 'photos', 'ems', 'ems-register', 'mom', 'todo',
         'rfp', 'ioc', 'acr', 'psr', 'at',
         'acceptance', 'completion-summary',
+        // Contractor Performance Evaluation: the summary, then one form per category.
+        'eval-summary',
+        'eval-schedule', 'eval-quality', 'eval-manpower', 'eval-equipment',
+        'eval-hse', 'eval-contractual', 'eval-documentation', 'eval-coordination',
     ];
 
     /**
@@ -56,8 +63,6 @@ class ProjectController extends Controller
      */
     private const HUB_SOON_SECTIONS = [
         'safety-risk', 'geological', 'billing-validation',
-        'eval-schedule', 'eval-quality', 'eval-manpower', 'eval-equipment',
-        'eval-hse', 'eval-contractual', 'eval-documentation', 'eval-coordination',
     ];
 
     /** Every hub section that has a page — the routes are registered from this. */
@@ -576,6 +581,7 @@ class ProjectController extends Controller
 
         return [
             ...collect(ProjectDocument::SECTIONS)->map(fn ($label, $section) => $documentCounts->get($section, 0))->all(),
+            'eval-summary' => $project->contractorEvaluations()->count(),
             'rfq'         => $countAcross('rfqs'),
             'ntp'         => $countAcross('ntps'),
             // Steps this project hands to someone other than the default.
@@ -619,6 +625,12 @@ class ProjectController extends Controller
         $subProjectsByNtp = $section === 'ntp'
             ? $project->children()->whereNotNull('source_ntp_id')->get()->keyBy('source_ntp_id')
             : collect();
+
+        // The summary and all eight category forms share one payload: the
+        // project's evaluations, each with every category's ratings and files.
+        if (str_starts_with($section, 'eval-')) {
+            return $this->contractorEvaluationData($project);
+        }
 
         // Every document-register section reads the same table, narrowed to
         // its own slug; a parent lists its sub-projects' files too.
@@ -839,6 +851,80 @@ class ProjectController extends Controller
 
             default => [],
         };
+    }
+
+    /**
+     * Contractor Performance Evaluation for the hub. Evaluations are the
+     * project's own — a sub-project has its own contractor and NTPs, so it is
+     * evaluated in its own hub.
+     */
+    private function contractorEvaluationData(Project $project): array
+    {
+        $user = auth()->user();
+
+        $evaluations = $project->contractorEvaluations()
+            ->with(['creator', 'supplier', 'categories.attachments.fileVersions.uploader', 'approvals.user', 'approvals.onBehalfOf'])
+            ->get()
+            ->map(function (ContractorEvaluation $evaluation) use ($user) {
+                $classification = ContractorEvaluationScoring::classify($evaluation->total_score);
+
+                return [
+                    'id'              => $evaluation->id,
+                    'control_no'      => $evaluation->control_no,
+                    'period_type'     => $evaluation->period_type,
+                    'period_label'    => $evaluation->period_label,
+                    'period_start'    => $evaluation->period_start?->toDateString(),
+                    'period_end'      => $evaluation->period_end?->toDateString(),
+                    'contractor_name' => $evaluation->contractor_name,
+                    // Matched to a contractor on Master Data — what consolidation keys on.
+                    'supplier'        => $evaluation->supplier ? ['id' => $evaluation->supplier->id, 'company' => $evaluation->supplier->company] : null,
+                    'status'          => $evaluation->status,
+                    'status_label'    => $evaluation->statusLabel(),
+                    'total_score'     => $evaluation->total_score,
+                    'classification'  => $classification,
+                    'return_remarks'  => $evaluation->return_remarks,
+                    'evaluated_by'    => $evaluation->creator?->name,
+                    'created'         => $evaluation->created_at?->format('M d, Y'),
+                    'submitted_at'    => $evaluation->submitted_at?->format('M d, Y h:i A'),
+                    'approved_at'     => $evaluation->approved_at?->format('M d, Y h:i A'),
+                    'approvals'       => $evaluation->approvalTimeline(),
+                    'can_sign'        => $evaluation->status === ContractorEvaluation::STATUS_FOR_APPROVAL
+                        && ($user->hasRole(User::ROLE_ADMIN) || $evaluation->awaitingApprovalFrom($user)),
+                    'categories'      => $evaluation->categories->mapWithKeys(fn ($row) => [$row->category => [
+                        'ratings'            => (object) ($row->ratings ?? []),
+                        'score'              => $row->score,
+                        'complete'           => ContractorEvaluationScoring::isComplete($row->category, $row->ratings),
+                        'comments'           => $row->comments,
+                        'corrective_actions' => $row->corrective_actions,
+                        'form'               => $row->attachments->where('type', ContractorEvaluationCategory::FILE_FORM)->map(fn ($a) => $this->evaluationFile($a))->values()->first(),
+                        'evidence'           => $row->attachments->where('type', ContractorEvaluationCategory::FILE_EVIDENCE)->map(fn ($a) => $this->evaluationFile($a))->values(),
+                    ]])->all(),
+                ];
+            })
+            ->values();
+
+        return [
+            'evaluations' => $evaluations,
+            'definition'  => [
+                'categories'      => collect(ContractorEvaluationScoring::categories())->map(fn ($c, $key) => ['key' => $key, ...$c])->values(),
+                'ratings'         => collect(config('contractor_evaluation.ratings'))->map(fn ($r, $value) => ['value' => $value, ...$r])->values(),
+                'classifications' => config('contractor_evaluation.classifications'),
+                'period_types'    => collect(config('contractor_evaluation.period_types'))->map(fn ($label, $value) => ['value' => $value, 'label' => $label])->values(),
+            ],
+            // The contractors on this project's live NTPs — the usual subject of an evaluation.
+            'contractors' => $project->ntps()->where('status', '!=', 'rejected')->latest('id')->pluck('contractor_name')
+                ->filter()->unique()->values(),
+        ];
+    }
+
+    private function evaluationFile($attachment): array
+    {
+        return [
+            'id'       => $attachment->id,
+            'filename' => $attachment->filename,
+            'url'      => $attachment->url,
+            'versions' => $attachment->fileVersionPayload(),
+        ];
     }
 
     /**
