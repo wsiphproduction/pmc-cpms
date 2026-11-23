@@ -130,6 +130,21 @@ it('leaves projects without an approved evaluation out of the average, as Not Ye
         ->and($stats['pending_evaluation'])->toBe(1);
 });
 
+it('counts a project with two contractors as pending until both are evaluated', function () {
+    $shared = cpProject();
+    cpNtp($shared, 'Lambda Civil');
+    cpNtp($shared, 'Mu Electrical');
+    cpEvaluation($shared, 'Lambda Civil', 4);
+
+    $stats = (new ContractorPerformance)->stats();
+    expect($stats['projects'])->toBe(1)
+        ->and($stats['projects_evaluated'])->toBe(0)
+        ->and($stats['pending_evaluation'])->toBe(1);
+
+    cpEvaluation($shared, 'Mu Electrical', 4);
+    expect((new ContractorPerformance)->stats()['projects_evaluated'])->toBe(1);
+});
+
 it('ranks contractors best first, with unevaluated ones last', function () {
     cpNtp(cpProject(), 'Unrated Co');
     cpEvaluation($p = cpProject(), 'Gamma Works', 3);

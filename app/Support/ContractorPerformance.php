@@ -115,14 +115,16 @@ class ContractorPerformance
     /** The dashboard indicators of framework §8. */
     public function stats(): array
     {
-        $projects = collect($this->contractors())->flatMap(fn ($c) => $c['assignments']);
-        $evaluated = $projects->filter(fn ($a) => $a['evaluation'] !== null)->pluck('project_id')->unique();
+        // A project with two contractors is evaluated only once both are, so
+        // the tiles agree with the per-contractor "pending" in the ranking.
+        $byProject = collect($this->contractors())->flatMap(fn ($c) => $c['assignments'])->groupBy('project_id');
+        $evaluated = $byProject->filter(fn ($rows) => $rows->every(fn ($a) => $a['evaluation'] !== null))->count();
 
         return [
             'contractors'        => count($this->contractors()),
-            'projects'           => $projects->pluck('project_id')->unique()->count(),
-            'projects_evaluated' => $evaluated->count(),
-            'pending_evaluation' => $projects->pluck('project_id')->unique()->diff($evaluated)->count(),
+            'projects'           => $byProject->count(),
+            'projects_evaluated' => $evaluated,
+            'pending_evaluation' => $byProject->count() - $evaluated,
             'in_signoff'         => ContractorEvaluation::where('status', ContractorEvaluation::STATUS_FOR_APPROVAL)->count(),
         ];
     }
