@@ -542,7 +542,19 @@ class Hub
                     ],
                     ['h', 'Sign-off'],
                     ['p', 'Submitting is the engineer’s “Evaluated by”. The PMD Assistant Manager then reviews it and the PMD Department Manager approves it, each from the project’s Evaluation Summary; each is notified when it reaches them. Either may return it to the engineer with a reason, and resubmitting starts the sign-off again. Once submitted, an evaluation can no longer be changed unless it is returned.'],
-                    ['note', 'An evaluation links to the contractor’s Master Data record when the contractor name matches a supplier’s company name exactly. Only linked, approved evaluations will feed the contractor’s consolidated performance.'],
+                    ['note', 'An evaluation links to the contractor’s Master Data record when the contractor name matches a supplier’s company name. Only approved evaluations count toward the contractor’s consolidated performance.'],
+
+                    ['h', 'Contractors — consolidated performance'],
+                    ['path', 'Contractors (top menu)'],
+                    ['p', 'Brings each contractor’s approved evaluations together across every project they handled. A contractor’s overall score is the average of its projects’ scores, each project counted once by its latest approved evaluation in the selected period; projects with none are shown as Not Yet Evaluated and left out of the average. Choose “Weighted by contract value” to let larger contracts count for more.'],
+                    ['ul', [
+                        'The dashboard shows total contractors, projects, projects evaluated and pending evaluation, then ranks the contractors with their score, rating and each category’s average.',
+                        'Filter by evaluation period and type, contractor, project, project owner, category, status, type, rating and evaluation status.',
+                        'Click a contractor for their profile: category strengths and weaknesses, projects handled, performance history and the corrective actions recorded against them.',
+                        'Contractors are flagged when their overall score is below 70, or when the same category falls under 60% of its weight in two or more evaluations.',
+                        'Download the Ranking, Project-Level and Individual Contractor reports as Excel workbooks; each follows the filters on screen.',
+                    ]],
+                    ['p', 'Available to project engineers, the assistant manager, the PMD managers, the division manager and administrators.'],
                 ],
             ],
         ];

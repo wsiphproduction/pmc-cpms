@@ -4,6 +4,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\ApprovalController;
 use App\Http\Controllers\CommentController;
 use App\Http\Controllers\ContractorEvaluationController;
+use App\Http\Controllers\ContractorPerformanceController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmsSurveyReportController;
 use App\Http\Controllers\FileVersionController;
@@ -263,6 +264,13 @@ Route::middleware(['auth'])->group(function () {
         Route::post('{evaluation}/categories/{category}', [ContractorEvaluationController::class, 'saveCategory'])->name('hub.evaluations.category');
         Route::post('{evaluation}/submit',              [ContractorEvaluationController::class, 'submit'])->name('hub.evaluations.submit');
         Route::delete('{evaluation}',                   [ContractorEvaluationController::class, 'destroy'])->name('hub.evaluations.destroy');
+    });
+    // Contractor-level consolidation: ranking, profiles and reports, for PMD
+    // and management. Department users and MEPEO do not see contractor ratings.
+    Route::middleware(['role:approver|assistant_manager|pmd_asst_manager|pmd_dept_manager|division_manager|admin'])->group(function () {
+        Route::get('contractor-performance',            [ContractorPerformanceController::class, 'index'])->name('contractor-performance.index');
+        Route::get('contractor-performance/contractor', [ContractorPerformanceController::class, 'show'])->name('contractor-performance.show');
+        Route::get('contractor-performance/export',     [ContractorPerformanceController::class, 'export'])->name('contractor-performance.export');
     });
     Route::patch('contractor-evaluations/{evaluation}/approve', [ContractorEvaluationController::class, 'approve'])->name('evaluations.approve');
     Route::patch('contractor-evaluations/{evaluation}/return',  [ContractorEvaluationController::class, 'returnForRevision'])->name('evaluations.return');
