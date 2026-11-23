@@ -56,4 +56,18 @@ class ProjectCompletion extends Model
     {
         return $this->belongsTo(Project::class);
     }
+
+    /**
+     * Whether the completion details behind the certificates are filled in.
+     * The edit form can create this record with just the actual dates, so it
+     * only counts once something beyond those is set; completion_status is
+     * skipped too, as the column defaults to 'Finished'.
+     */
+    public function isCertificateFilled(): bool
+    {
+        return collect($this->getAttributes())
+            ->except(['id', 'project_id', 'con_actual_start', 'con_actual_end', 'completion_status', 'photos', 'saved_by', 'created_at', 'updated_at'])
+            ->filter(fn ($v) => $v !== null && $v !== '')
+            ->isNotEmpty();
+    }
 }

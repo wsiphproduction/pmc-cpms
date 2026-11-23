@@ -54,7 +54,7 @@ it('registers a hub page for every document section and the new module sections'
     }
 });
 
-it('opens a page for the menu items that are not built yet', function () {
+it('opens the former Coming soon items as working pages with their form', function () {
     $engineer = docsUser(User::ROLE_ENGINEER);
     $project  = docsProject($engineer);
 
@@ -62,7 +62,10 @@ it('opens a page for the menu items that are not built yet', function () {
         $this->actingAs($engineer)
             ->get(route("projects.hub.{$section}", $project))
             ->assertOk()
-            ->assertInertia(fn (Assert $page) => $page->where('active_section', $section)->where('hub_data', []));
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('active_section', $section)
+                ->where('hub_data.definition.type', $section)
+                ->has('hub_data.assessments', 0));
     }
 });
 

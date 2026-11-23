@@ -16,6 +16,7 @@ use App\Http\Controllers\MasterDataController;
 use App\Http\Controllers\MepeoController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\NtpReviewController;
+use App\Http\Controllers\ProjectAssessmentController;
 use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectHubController;
 use App\Http\Controllers\PrintController;
@@ -275,6 +276,19 @@ Route::middleware(['auth'])->group(function () {
         Route::post('{evaluation}/submit',              [ContractorEvaluationController::class, 'submit'])->name('hub.evaluations.submit');
         Route::delete('{evaluation}',                   [ContractorEvaluationController::class, 'destroy'])->name('hub.evaluations.destroy');
     });
+
+    // Hub documents with an electronic approver process (safety, geological,
+    // billing validation, completion certificates). Prepared by whoever may
+    // edit the hub; signed by the roles each type's chain names.
+    Route::prefix('projects/{project}/hub/assessments')->middleware('can:update,project')->group(function () {
+        Route::post('{type}',                    [ProjectAssessmentController::class, 'store'])->name('hub.assessments.store')
+            ->where('type', 'safety-risk|geological|billing-validation|acceptance|completion-summary');
+        Route::post('item/{assessment}',         [ProjectAssessmentController::class, 'update'])->name('hub.assessments.update');
+        Route::post('item/{assessment}/submit',  [ProjectAssessmentController::class, 'submit'])->name('hub.assessments.submit');
+        Route::delete('item/{assessment}',       [ProjectAssessmentController::class, 'destroy'])->name('hub.assessments.destroy');
+    });
+    Route::patch('assessments/{assessment}/approve', [ProjectAssessmentController::class, 'approve'])->name('assessments.approve');
+    Route::patch('assessments/{assessment}/return',  [ProjectAssessmentController::class, 'returnForRevision'])->name('assessments.return');
 
     // Non-compliance records (hub group G), kept by whoever may edit the hub.
     // Updates are POSTs so they can carry files.

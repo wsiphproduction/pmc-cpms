@@ -5,6 +5,7 @@ import type { HubProject } from './hub/Common';
 import { durationLabel, type DurationBasis } from '@/lib/duration';
 import AcrHub from './hub/AcrHub';
 import AuditTrailHub from './hub/AuditTrailHub';
+import AssessmentHub, { SignoffBar, type AssessmentRow } from './hub/AssessmentHub';
 import ContractHub from './hub/ContractHub';
 import ContractorEvaluationHub from './hub/ContractorEvaluationHub';
 import DocumentsHub from './hub/DocumentsHub';
@@ -206,8 +207,8 @@ const OPS_GROUPS: OpsGroup[] = [
         doc('site-observation', 'Site Observation Report'),
         { key: 'photos', label: 'Project Progress Photos', summary: 'Site photos grouped by date, viewed as a gallery.' },
         { key: 'ems',    label: 'Environmental Risk Assessment', summary: 'MEPEO Environmental Survey Report and Responses, signed off by MEPEO and PMD.' },
-        soon('safety-risk', 'Safety Risk Assessment'),
-        soon('geological',  'Geological Assessment'),
+        { key: 'safety-risk', label: 'Safety Risk Assessment', summary: 'Hazards and risk ratings for the work, with control measures — signed off electronically.' },
+        { key: 'geological',  label: 'Geological Assessment', summary: 'Site ground conditions, geohazards and recommendations — signed off electronically.' },
         { key: 'ems-register', label: 'Environmental Management System (EMS) Register', summary: 'File the project’s environmental documents, each with a short description.' },
         { key: 'mom',    label: 'Minutes of the Meeting', summary: 'Keep the minutes of each project meeting, filed by meeting date.' },
         { key: 'todo',   label: 'To-Do List / Action Items', summary: 'Track project tasks with target dates and completion status.' },
@@ -217,7 +218,7 @@ const OPS_GROUPS: OpsGroup[] = [
         { key: 'ioc', label: 'Input Other Costs', summary: 'Capture miscellaneous project costs outside the main budget line.' },
         { key: 'acr', label: 'Actual Cost Report', summary: 'Review paid, committed, and actual project cost movement.' },
         { key: 'psr', label: 'Project Status Report / Weekly Progress Report', summary: 'Summarize progress, blockers, photos, milestones, and next actions.' },
-        soon('billing-validation', 'Billing Validation Report'),
+        { key: 'billing-validation', label: 'Billing Validation Report', summary: 'A billing checked against verified accomplishment and the contract — signed off electronically.' },
         { key: 'at',  label: 'Project Audit Trail', summary: 'Review project events, status changes, and user activity history.' },
     ] },
     { id: 'F', title: 'Project Completion and Turnover', items: [
@@ -316,6 +317,10 @@ function renderHubSection(
         case 'proposal': return <ProposalHub project={hubProject} proposal={hubData.proposal ?? { url: null, filename: null, versions: [], inherited_from: null }} canEdit={canEdit} />;
     }
 
+    if (['safety-risk', 'geological', 'billing-validation'].includes(section) && hubData.definition) {
+        return <AssessmentHub key={section} project={hubProject} definition={hubData.definition} assessments={hubData.assessments ?? []} billings={hubData.billings ?? []} canEdit={canEdit} />;
+    }
+
     if (section.startsWith('eval-')) {
         return <ContractorEvaluationHub
             project={hubProject}
@@ -334,6 +339,52 @@ function renderHubSection(
     }
 
     return <RfqHub project={hubProject} rfqs={[]} canEdit={canEdit} />;
+}
+
+/**
+ * Electronic approval of a completion certificate. The completion details
+ * are its content, so there is nothing to fill in here: the engineer submits
+ * it once those are saved, and the chain signs it.
+ */
+function CompletionSignoff({ projectId, type, label, rows, chain, filled, canEdit }: {
+    projectId: number;
+    type: string;
+    label: string;
+    rows: AssessmentRow[];
+    chain: string[];
+    filled: boolean;
+    canEdit: boolean;
+}) {
+    const current = rows[0] ?? null;
+    const [submitting, setSubmitting] = useState(false);
+    const canSubmit = canEdit && filled && (!current || current.status === 'draft');
+
+    const submit = () => {
+        setSubmitting(true);
+        router.post(route('hub.assessments.store', [projectId, type]), {}, { preserveScroll: true, onFinish: () => setSubmitting(false) });
+    };
+
+    return (
+        <div style={{ marginTop: '16px', display: 'grid', gap: '10px' }}>
+            {current
+                ? <SignoffBar row={current} label={label} chain={chain} />
+                : (
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px 14px', background: '#f8fafc', fontSize: '12.5px', color: '#475569' }}>
+                        <span style={{ fontSize: '11px', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginRight: '8px' }}>Electronic Approval</span>
+                        Not yet submitted. Signed by: <strong>{chain.join(' → ')}</strong>.
+                        {!filled && ' Fill in the completion details first.'}
+                    </div>
+                )}
+            {canSubmit && (
+                <div>
+                    <button type="button" onClick={submit} disabled={submitting}
+                        style={{ padding: '9px 16px', borderRadius: '8px', border: 'none', background: '#0f766e', color: '#fff', fontWeight: 700, fontSize: '12.5px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {submitting ? 'Submitting…' : current ? 'Resubmit for Electronic Approval' : 'Submit for Electronic Approval'}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 }
 
 // ── Mini Doughnut (SVG-based, no Chart.js dep) ─────────────────────────────
@@ -1191,14 +1242,25 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                             ? (
                                 <div style={{ padding: '24px' }}>
                                     {currentStatusKey === 'COMPLETED' ? (
-                                        <CompletionPanel
-                                            project={completionProject}
-                                            completion={project.completion}
-                                            signatories={project.signatories}
-                                            canEdit={project.can.update}
-                                            only={activeMenu === 'acceptance' ? 'acceptance' : 'summary'}
-                                            inHub
-                                        />
+                                        <>
+                                            <CompletionPanel
+                                                project={completionProject}
+                                                completion={project.completion}
+                                                signatories={project.signatories}
+                                                canEdit={project.can.update}
+                                                only={activeMenu === 'acceptance' ? 'acceptance' : 'summary'}
+                                                inHub
+                                            />
+                                            <CompletionSignoff
+                                                projectId={project.id}
+                                                type={activeMenu}
+                                                label={activeItem?.label ?? ''}
+                                                rows={hub_data.assessments ?? []}
+                                                chain={hub_data.definition?.chain_labels ?? []}
+                                                filled={!!project.completion?.certificate_saved}
+                                                canEdit={project.can.update}
+                                            />
+                                        </>
                                     ) : (
                                         <div style={{ padding: '16px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc', fontSize: '13px', color: '#475569' }}>
                                             The {activeItem?.label} is prepared once the project is marked <strong>Completed</strong>. Update the project status above to fill in the completion details.

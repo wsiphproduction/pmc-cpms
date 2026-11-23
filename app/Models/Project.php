@@ -259,6 +259,12 @@ class Project extends Model
         return $this->hasMany(ContractorEvaluation::class)->latest('id');
     }
 
+    /** Hub documents with an electronic approver process (safety, geological, billing validation, completion). */
+    public function assessments(): HasMany
+    {
+        return $this->hasMany(ProjectAssessment::class)->latest('id');
+    }
+
     /** Non-compliance records against the project's contractors. */
     public function contractorFindings(): HasMany
     {

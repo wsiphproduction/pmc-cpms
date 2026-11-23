@@ -24,6 +24,17 @@ trait HasApprovalChain
         return $this->morphMany(ApprovalStep::class, 'approvable')->orderBy('sequence');
     }
 
+    /**
+     * The roles this record is signed by, in order. The model's fixed
+     * APPROVAL_CHAIN unless it varies per record (one model, several forms).
+     *
+     * @return array<int, string>
+     */
+    public function approvalChainRoles(): array
+    {
+        return static::APPROVAL_CHAIN;
+    }
+
     /** Write out the full chain. Safe to call once, when the record is created. */
     public function startApprovalChain(): void
     {
@@ -31,7 +42,7 @@ trait HasApprovalChain
             return;
         }
 
-        foreach (array_values(static::APPROVAL_CHAIN) as $index => $role) {
+        foreach (array_values($this->approvalChainRoles()) as $index => $role) {
             $this->approvals()->create([
                 'role'     => $role,
                 'sequence' => $index + 1,

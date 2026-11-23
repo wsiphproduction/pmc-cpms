@@ -20,13 +20,13 @@ class Hub
                             ['A. Project Initiation and Proposal', 'Project Request, Project Proposal, CAPEX & OPEX, Scope of Work, Feasibility Study, Site Investigation / Survey Reports', 'The originating request, the approved proposal, and the documents the project was planned on.'],
                             ['B. Engineering and Cost Planning', 'Engineering Drawings, Technical Specifications, Bill of Quantities, Detailed Cost Estimate, Project Schedule / Gantt Chart', 'Design and costing documents.'],
                             ['C. Procurement and Contract Administration', 'RFQ, NTP, NTP Signatories, Project Contract, Sub-Projects, Permits and Clearances, Variation Order Form', 'Quotations, the notices awarding work and their approval chain, the contract, permits, and changes after award.'],
-                            ['D. Project Execution and Monitoring', 'Quality Plan and Procedures, Materials Testing Reports, Site Observation Report, Project Progress Photos, Environmental Risk Assessment, EMS Register, Minutes of the Meeting, To-Do List', 'Quality, testing, site and environmental records kept while the work runs.'],
-                            ['E. Project Cost and Performance Monitoring', 'Request for Payment, Input Other Costs, Actual Cost Report, Project Status / Weekly Progress Report, Project Audit Trail', 'Billings, other costs, actual cost, weekly progress, and everything that has happened on the project.'],
+                            ['D. Project Execution and Monitoring', 'Quality Plan and Procedures, Materials Testing Reports, Site Observation Report, Project Progress Photos, Environmental Risk Assessment, Safety Risk Assessment, Geological Assessment, EMS Register, Minutes of the Meeting, To-Do List', 'Quality, testing, site, safety and environmental records kept while the work runs.'],
+                            ['E. Project Cost and Performance Monitoring', 'Request for Payment, Input Other Costs, Actual Cost Report, Project Status / Weekly Progress Report, Billing Validation Report, Project Audit Trail', 'Billings and their validation, other costs, actual cost, weekly progress, and everything that has happened on the project.'],
                             ['F. Project Completion and Turnover', 'Inspection and Walkthrough Log, Punch List, Completion and Acceptance Certificate, Completion Summary, As-Built Drawings, O&M Manuals, Warranties and Certificates, Final Turnover Documents, Other Completion Documents', 'What is handed over when the work is done. The two certificates are filled in once the project is Completed.'],
                             ['G. Contractor Performance Evaluation', 'Evaluation Summary and Sign-off, then forms A–H', 'The contractor’s performance on the project, rated per period across eight weighted categories and signed off by PMD.'],
                         ],
                     ],
-                    ['p', 'Document items — such as Scope of Work, Bill of Quantities or As-Built Drawings — all work the same way: describe the file, attach it (up to 20 MB), and click Upload File. Items marked Soon are listed so the structure is complete; opening one shows a Coming soon page until it is built.'],
+                    ['p', 'Document items — such as Scope of Work, Bill of Quantities or As-Built Drawings — all work the same way: describe the file, attach it (up to 20 MB), and click Upload File. Safety Risk Assessment, Geological Assessment, Billing Validation Report and the two completion certificates are signed electronically — see Documents with Electronic Approval.'],
 
                     ['h', 'Who can change what here'],
                     ['p', 'Editing anything in the hub needs edit rights on the project: the administrator and the assistant manager on any project, a project engineer on projects they registered. Everyone else who can see the project — the sign-off offices, department managers, division manager users — sees the same tabs read-only.'],
@@ -503,6 +503,29 @@ class Hub
                         'Save.',
                     ]],
                     ['p', 'Tick a task to mark it complete, and untick it if it turns out it was not. Delete a task that is no longer needed. Every change is written to the audit trail.'],
+                ],
+            ],
+
+            'hub-approver-documents' => [
+                'title' => 'Documents with Electronic Approval',
+                'blocks' => [
+                    ['path', 'Open a project > D. Execution > Safety Risk Assessment or Geological Assessment; E. Cost and Performance > Billing Validation Report; F. Completion and Turnover > the two completion certificates'],
+                    ['p', 'These documents are prepared in the hub and signed electronically instead of on paper. The engineer prepares and submits; the PMD Assistant Manager reviews; the PMD Department Manager approves. The two completion certificates go on to the Division Manager as well. Each signer is notified when it reaches them and signs from the same page; any of them may return it with a reason, and resubmitting starts the signatures again.'],
+                    ['table',
+                        ['Document', 'What it records'],
+                        [
+                            ['Safety Risk Assessment', 'The work assessed, then a hazard register: each task, its hazard and consequence, likelihood and severity (1–5), the risk they give, the control measures, and the residual risk after controls. Risk = likelihood × severity: 1–4 Low, 5–9 Medium, 10–16 High, 20–25 Extreme. Plus PPE, permits and emergency measures.'],
+                            ['Geological Assessment', 'The site, the type of assessment, soil and rock conditions, groundwater, bearing capacity, slope stability, a geohazard checklist, findings and recommendations.'],
+                            ['Billing Validation Report', 'One of the project’s billings, checked: claimed against verified accomplishment and amount, deductions, the validated amount payable, an eight-point validation checklist, and a recommendation.'],
+                            ['Completion and Acceptance Certificate / Completion Summary', 'The completion details already filled in on the project. Once they are saved, click Submit for Electronic Approval under the certificate.'],
+                        ],
+                    ],
+                    ['ol', [
+                        'Click New, fill in the form and attach any supporting documents. Save Draft keeps it without checking it is complete.',
+                        'Open the draft and click Submit for Approval. Every required field must be filled; anything missing is listed.',
+                        'Once submitted it is locked. If it is returned, revise it and submit again.',
+                    ]],
+                    ['note', 'These forms are a standard starting point until PMC issues its own; the fields and the signers of each are set in one configuration file and can be adjusted.'],
                 ],
             ],
 

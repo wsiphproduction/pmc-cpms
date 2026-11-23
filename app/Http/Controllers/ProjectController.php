@@ -15,6 +15,7 @@ use App\Models\Project;
 use App\Models\ContractorEvaluation;
 use App\Models\ContractorEvaluationCategory;
 use App\Models\ContractorFinding;
+use App\Models\ProjectAssessment;
 use App\Models\ProjectCompletion;
 use App\Models\ProjectDocument;
 use App\Models\ProjectNtp;
@@ -59,15 +60,15 @@ class ProjectController extends Controller
         'eval-hse', 'eval-contractual', 'eval-documentation', 'eval-coordination',
         // Non-compliance records and their corrective actions.
         'ncr',
+        // Documents with an electronic approver process (config/project_assessments.php).
+        'safety-risk', 'geological', 'billing-validation',
     ];
 
     /**
      * Menu items not built yet. They still get a page, so clicking one opens a
      * "Coming soon" workspace rather than nothing.
      */
-    private const HUB_SOON_SECTIONS = [
-        'safety-risk', 'geological', 'billing-validation',
-    ];
+    private const HUB_SOON_SECTIONS = [];
 
     /** Every hub section that has a page — the routes are registered from this. */
     public static function hubSections(): array
@@ -587,6 +588,8 @@ class ProjectController extends Controller
             ...collect(ProjectDocument::SECTIONS)->map(fn ($label, $section) => $documentCounts->get($section, 0))->all(),
             'eval-summary' => $project->contractorEvaluations()->count(),
             // Still open — the badge is a to-do, not a total.
+            // Documents still in draft or awaiting signatures.
+            ...collect(['safety-risk', 'geological', 'billing-validation'])->mapWithKeys(fn ($t) => [$t => $project->assessments()->where('type', $t)->where('status', '!=', ProjectAssessment::STATUS_APPROVED)->count()])->all(),
             'ncr'          => $project->contractorFindings()->where('status', '!=', ContractorFinding::STATUS_CLOSED)->count(),
             'rfq'         => $countAcross('rfqs'),
             'ntp'         => $countAcross('ntps'),
@@ -636,6 +639,12 @@ class ProjectController extends Controller
         // project's evaluations, each with every category's ratings and files.
         if (str_starts_with($section, 'eval-')) {
             return $this->contractorEvaluationData($project);
+        }
+
+        // Documents with an electronic approver process, including the
+        // sign-off of the completion certificates.
+        if (ProjectAssessment::isType($section)) {
+            return $this->assessmentData($project, $section);
         }
 
         // Every document-register section reads the same table, narrowed to
@@ -930,6 +939,47 @@ class ProjectController extends Controller
             // The contractors on this project's live NTPs — the usual subject of an evaluation.
             'contractors' => $project->ntps()->where('status', '!=', 'rejected')->latest('id')->pluck('contractor_name')
                 ->filter()->unique()->values(),
+        ];
+    }
+
+    /** One approver-process document type on this project: its records, form and options. */
+    private function assessmentData(Project $project, string $type): array
+    {
+        $user = auth()->user();
+        $definition = ProjectAssessment::types()[$type];
+
+        $billings = $type === 'billing-validation'
+            ? $project->billings()->orderBy('id')->get()->map(fn ($b) => [
+                'value'  => (string) $b->id,
+                'label'  => trim(($b->stmt_no ?: 'Billing #' . $b->id) . ' — ' . ucfirst((string) $b->billing_type) . ' — PhP ' . number_format((float) $b->amount, 2)),
+                'amount' => (float) $b->amount,
+                'progress' => $b->progress_pct !== null ? (float) $b->progress_pct : null,
+            ])->values()
+            : [];
+
+        return [
+            'definition'  => ['type' => $type, ...collect($definition)->except('verbs')->all(), 'chain_labels' => array_map(fn ($r) => User::roleLabel($r), $definition['chain'])],
+            'billings'    => $billings,
+            'assessments' => $project->assessments()->where('type', $type)
+                ->with(['creator:id,name', 'attachments', 'approvals.user', 'approvals.onBehalfOf'])
+                ->get()
+                ->map(fn (ProjectAssessment $a) => [
+                    'id'             => $a->id,
+                    'control_no'     => $a->control_no,
+                    'title'          => $a->title,
+                    'data'           => (object) ($a->data ?? []),
+                    'status'         => $a->status,
+                    'status_label'   => $a->statusLabel(),
+                    'prepared_by'    => $a->creator?->name,
+                    'created'        => $a->created_at?->format('M d, Y'),
+                    'submitted_at'   => $a->submitted_at?->format('M d, Y h:i A'),
+                    'approved_at'    => $a->approved_at?->format('M d, Y h:i A'),
+                    'return_remarks' => $a->return_remarks,
+                    'approvals'      => $a->approvalTimeline(),
+                    'can_sign'       => $a->status === ProjectAssessment::STATUS_FOR_APPROVAL
+                        && ($user->hasRole(User::ROLE_ADMIN) || $a->awaitingApprovalFrom($user)),
+                    'files'          => $a->attachments->map(fn ($f) => ['id' => $f->id, 'filename' => $f->filename, 'url' => $f->url])->values(),
+                ])->values(),
         ];
     }
 
@@ -1697,13 +1747,7 @@ class ProjectController extends Controller
 
         $d = fn ($date) => optional($date)->format('Y-m-d');
 
-        // The edit form can create this record with just the actual dates; the
-        // certificate only counts as filled once something beyond those is set.
-        // completion_status is skipped too: the column defaults to 'Finished'.
-        $certificateSaved = collect($c->getAttributes())
-            ->except(['id', 'project_id', 'con_actual_start', 'con_actual_end', 'completion_status', 'photos', 'saved_by', 'created_at', 'updated_at'])
-            ->filter(fn ($v) => $v !== null && $v !== '')
-            ->isNotEmpty();
+        $certificateSaved = $c->isCertificateFilled();
 
         return [
             'certificate_saved'   => $certificateSaved,
