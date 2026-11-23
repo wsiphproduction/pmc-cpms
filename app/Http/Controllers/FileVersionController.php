@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Project;
 use App\Models\ProjectBilling;
 use App\Models\ProjectContract;
+use App\Models\ProjectDocument;
 use App\Models\ProjectEmsRegisterEntry;
 use App\Models\ProjectIocItem;
 use App\Models\ProjectMeetingMinute;
@@ -43,7 +44,8 @@ class FileVersionController extends Controller
         'qpp'         => [ProjectQualityDoc::class,     'file_path',         'filename', 'hub/qpp/%d'],
         'contract'    => [ProjectContract::class,       'file_path',         'filename', 'hub/contract/%d'],
         'ems-register' => [ProjectEmsRegisterEntry::class, 'file_path',      'filename', 'hub/ems-register/%d'],
-        'mtr'         => [ProjectMtrDoc::class,         'file_path',         'filename', 'hub/mtr/%d'],
+        'doc'         => [ProjectDocument::class,       'file_path',         'filename', 'hub/docs/%d'],
+        'mtr'        => [ProjectMtrDoc::class,         'file_path',         'filename', 'hub/mtr/%d'],
         'mom'         => [ProjectMeetingMinute::class,  'file_path',         'filename', 'hub/mom/%d'],
         'rfp'         => [ProjectBilling::class,        'file_path',         'filename', 'hub/rfp/%d'],
         'ioc'         => [ProjectIocItem::class,        'file_path',         'filename', 'hub/ioc/%d'],
@@ -58,7 +60,8 @@ class FileVersionController extends Controller
         'qpp'         => 'QPP',
         'contract'    => 'Contract',
         'ems-register' => 'EMS Register',
-        'mtr'         => 'MTR',
+        'doc'         => 'Project Documents',
+        'mtr'        => 'MTR',
         'mom'         => 'MOM',
         'rfp'         => 'RFP',
         'ioc'         => 'IOC',

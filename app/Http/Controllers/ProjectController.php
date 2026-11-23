@@ -13,6 +13,7 @@ use App\Models\Notification;
 use App\Models\Priority;
 use App\Models\Project;
 use App\Models\ProjectCompletion;
+use App\Models\ProjectDocument;
 use App\Models\ProjectNtp;
 use App\Models\ProjectRequest;
 use App\Models\ServiceType;
@@ -36,6 +37,24 @@ class ProjectController extends Controller
 {
     /** Defined on the model so exports and reports share one mapping. */
     private const STATUS_LABELS = Project::STATUS_LABELS;
+
+    /**
+     * Hub sections with a module of their own. The document-register sections
+     * (ProjectDocument::SECTIONS) are added on top — see hubSections().
+     */
+    private const HUB_MODULE_SECTIONS = [
+        'proposal',
+        'rfq', 'ntp', 'signatories', 'contract', 'subprojects', 'permits', 'vof',
+        'qpp', 'mtr', 'photos', 'ems', 'ems-register', 'mom', 'todo',
+        'rfp', 'ioc', 'acr', 'psr', 'at',
+        'acceptance', 'completion-summary',
+    ];
+
+    /** Every hub section that has a page — the routes are registered from this. */
+    public static function hubSections(): array
+    {
+        return [...self::HUB_MODULE_SECTIONS, ...array_keys(ProjectDocument::SECTIONS)];
+    }
 
     public function index(Request $request): Response
     {
@@ -494,8 +513,7 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
-        $validSections = ['rfq', 'ntp', 'signatories', 'contract', 'subprojects', 'permits', 'vof', 'qpp', 'mtr', 'rfp', 'ioc', 'acr', 'psr', 'mom', 'photos', 'ems', 'ems-register', 'at', 'todo'];
-        abort_unless(in_array($section, $validSections, true), 404);
+        abort_unless(in_array($section, self::hubSections(), true), 404);
 
         // Sub-projects run their own procurement now, so no section is off
         // limits to them — only the depth cap distinguishes what they can do.
@@ -538,7 +556,16 @@ class ProjectController extends Controller
             // withCount names its column in snake case (mtrDocs → mtr_docs_count).
             ->whereIn('id', $ids)->withCount($relation)->get()->sum(Str::snake($relation).'_count');
 
+        // Document-register sections share one table, so they are counted in
+        // one grouped query rather than one per section.
+        $documentCounts = ProjectDocument::whereIn('project_id', $ids)
+            ->selectRaw('section, count(*) as total')
+            ->groupBy('section')
+            ->pluck('total', 'section')
+            ->map(fn ($n) => (int) $n);
+
         return [
+            ...collect(ProjectDocument::SECTIONS)->map(fn ($label, $section) => $documentCounts->get($section, 0))->all(),
             'rfq'         => $countAcross('rfqs'),
             'ntp'         => $countAcross('ntps'),
             // Steps this project hands to someone other than the default.
@@ -583,7 +610,36 @@ class ProjectController extends Controller
             ? $project->children()->whereNotNull('source_ntp_id')->get()->keyBy('source_ntp_id')
             : collect();
 
+        // Every document-register section reads the same table, narrowed to
+        // its own slug; a parent lists its sub-projects' files too.
+        if (isset(ProjectDocument::SECTIONS[$section])) {
+            return [
+                'documents' => $this->collectHubRows(
+                    $project,
+                    fn ($p) => $p->documents()->where('section', $section)->with('creator', 'fileVersions.uploader')->get(),
+                    fn ($m, $sub) => $this->uploadRow($m, $sub, ['description' => $m->description]),
+                ),
+            ];
+        }
+
         return match ($section) {
+            'proposal' => [
+                // A sub-project goes ahead on its parent's approved proposal,
+                // so that is the one it shows (read-only, from the parent).
+                'proposal' => (function () use ($project) {
+                    $owner = $project->parent && !$project->proposal_document ? $project->parent : $project;
+                    $owner->load('fileVersions.uploader');
+                    $current = $owner->latestFileVersion();
+
+                    return [
+                        'url'           => $owner->proposal_document ? Storage::disk('public')->url($owner->proposal_document) : null,
+                        'filename'      => $current?->filename ?? ($owner->proposal_document ? basename($owner->proposal_document) : null),
+                        'versions'      => $owner->fileVersionPayload(),
+                        'inherited_from' => $owner->id === $project->id ? null : ['id' => $owner->id, 'project_no' => $owner->project_no],
+                    ];
+                })(),
+            ],
+
             'rfq' => [
                 // Own RFQs plus, for a parent, its sub-projects' RFQs (read-only,
                 // tagged). NTP status is resolved against each row's owning project.

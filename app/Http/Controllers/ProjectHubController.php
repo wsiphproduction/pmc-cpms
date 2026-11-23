@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Mail;
 use App\Models\Project;
 use App\Models\ProjectBilling;
 use App\Models\ProjectContract;
+use App\Models\ProjectDocument;
 use App\Models\ProjectEmsRegisterEntry;
 use App\Models\ProjectIocItem;
 use App\Models\ProjectMeetingMinute;
@@ -1065,6 +1066,54 @@ class ProjectHubController extends Controller
         AuditTrail::log("EMS Register file deleted: {$entry->filename}", $project, ['module' => 'EMS Register', 'type' => 'delete']);
         Storage::disk('public')->delete($entry->file_path);
         $entry->delete();
+
+        return back()->with('success', 'File deleted.');
+    }
+
+    // ── Document-register sections ────────────────────────────────────────────
+
+    public function storeDocument(Request $request, Project $project, string $section): RedirectResponse
+    {
+        abort_unless(isset(ProjectDocument::SECTIONS[$section]), 404);
+
+        $data = $request->validate([
+            'description' => ['required', 'string', 'max:1000'],
+            'file'        => ['required', 'file', 'max:20480'],
+        ]);
+
+        $file  = $request->file('file');
+        $path  = $file->store("hub/docs/{$project->id}", 'public');
+        $label = ProjectDocument::label($section);
+
+        $document = $project->documents()->create([
+            'section'     => $section,
+            'description' => $data['description'],
+            'file_path'   => $path,
+            'filename'    => $file->getClientOriginalName(),
+            'created_by'  => auth()->id(),
+        ]);
+
+        $document->recordFileVersion(
+            $path,
+            $file->getClientOriginalName(),
+            mimeType: $file->getMimeType(),
+            size: $file->getSize(),
+        );
+
+        AuditTrail::log("{$label} file uploaded: {$file->getClientOriginalName()}", $project, ['module' => $label, 'type' => 'upload']);
+
+        return back()->with('success', "File added to {$label}.");
+    }
+
+    public function destroyDocument(Project $project, ProjectDocument $document): RedirectResponse
+    {
+        abort_unless((int) $document->project_id === (int) $project->id, 403);
+
+        $label = ProjectDocument::label($document->section);
+
+        AuditTrail::log("{$label} file deleted: {$document->filename}", $project, ['module' => $label, 'type' => 'delete']);
+        Storage::disk('public')->delete($document->file_path);
+        $document->delete();
 
         return back()->with('success', 'File deleted.');
     }

@@ -77,9 +77,14 @@ export default function PermitsHub({ project, permits, canEdit = true }: { proje
                             <select style={inputStyle} value={docType} onChange={e => setDocType(e.target.value)}>
                                 <option value="" disabled>Select type...</option>
                                 <option value="Building Permit">Building Permit</option>
-                                <option value="Safety Permit">Safety Permit</option>
+                                <option value="Mechanical Permit">Mechanical Permit</option>
+                                <option value="Electrical Permit">Electrical Permit</option>
+                                <option value="Plumbing Permit">Plumbing Permit</option>
+                                <option value="Safety Permits and Clearances">Safety Permits and Clearances</option>
+                                <option value="Bureau of Fire Protection (BFP) Clearance">Bureau of Fire Protection (BFP) Clearance</option>
+                                <option value="Septic Tank / Sanitary Permit">Septic Tank / Sanitary Permit</option>
                                 <option value="Environmental Permit">Environmental Permit</option>
-                                <option value="OTHERS">Others (Specify...)</option>
+                                <option value="OTHERS">Other Applicable Permits (Specify...)</option>
                             </select>
                             {docType === 'OTHERS' && (
                                 <input

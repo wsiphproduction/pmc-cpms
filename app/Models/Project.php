@@ -253,6 +253,12 @@ class Project extends Model
         return $this->hasMany(ProjectEmsRegisterEntry::class)->latest();
     }
 
+    /** Files across the hub's document-register sections (SOW, BOQ, as-built…). */
+    public function documents(): HasMany
+    {
+        return $this->hasMany(ProjectDocument::class)->latest();
+    }
+
     public function mtrDocs(): HasMany
     {
         return $this->hasMany(ProjectMtrDoc::class)->latest();

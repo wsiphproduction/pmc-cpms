@@ -6,6 +6,7 @@ import { durationLabel, type DurationBasis } from '@/lib/duration';
 import AcrHub from './hub/AcrHub';
 import AuditTrailHub from './hub/AuditTrailHub';
 import ContractHub from './hub/ContractHub';
+import DocumentsHub from './hub/DocumentsHub';
 import EmsHub from './hub/EmsHub';
 import EmsRegisterHub from './hub/EmsRegisterHub';
 import IocHub from './hub/IocHub';
@@ -15,6 +16,7 @@ import NtpHub from './hub/NtpHub';
 import NtpSignatoriesHub from './hub/NtpSignatoriesHub';
 import PermitsHub from './hub/PermitsHub';
 import PhotosHub from './hub/PhotosHub';
+import ProposalHub from './hub/ProposalHub';
 import PsrHub from './hub/PsrHub';
 import QppHub from './hub/QppHub';
 import RfpHub from './hub/RfpHub';
@@ -149,27 +151,113 @@ const STATUS_HINTS: Record<string, string> = {
     CANCELED:        'Project has been canceled and nullified.',
 };
 
-const OPS_MENU = [
-    { key: 'rfq', label: 'Request for Quotations', short: 'RFQ', action: 'Create RFQ Package', summary: 'Prepare quotation requests, contractor scopes, and bid comparison notes.' },
-    { key: 'ntp', label: 'Notice to Proceed', short: 'NTP', action: 'Prepare NTP', summary: 'Track approval readiness, signatures, and notice issuance details.' },
-    { key: 'signatories', label: 'NTP Signatories', short: 'SIG', action: 'Set Signatories', summary: 'See who signs each NTP step on this project, and name someone else where needed.' },
-    { key: 'contract', label: 'Project Contract', short: 'CON', action: 'Upload Contract', summary: 'Keep the approved project contract on file, as a PDF.' },
-    { key: 'subprojects', label: 'Sub-Projects', short: 'SUB', action: 'Add Sub-Project', summary: 'Split the project into parts that are planned, procured and billed on their own.' },
-    { key: 'permits', label: 'Permits', short: 'PER', action: 'Add Permit', summary: 'Monitor required permits, filing dates, and release status.' },
-    { key: 'vof', label: 'Variation Order Form', short: 'VOF', action: 'Create Variation', summary: 'Log scope changes, cost movement, and approval remarks.' },
-    { key: 'qpp', label: 'Quality Plan & Procedures', short: 'QPP', action: 'Add Quality Plan', summary: 'Maintain quality procedures, inspection points, and acceptance criteria.' },
-    { key: 'mtr', label: 'Materials Test Reports', short: 'MTR', action: 'Add Test Report', summary: 'Track material submissions, test results, and compliance records.' },
-    { key: 'rfp', label: 'Request for Payment', short: 'RFP', action: 'Create Payment Request', summary: 'Prepare payment requests, billing references, and payable amounts.' },
-    { key: 'ioc', label: 'Input Other Cost', short: 'IOC', action: 'Add Other Cost', summary: 'Capture miscellaneous project costs outside the main budget line.' },
-    { key: 'acr', label: 'Actual Cost Report', short: 'ACR', action: 'Generate Cost Report', summary: 'Review paid, committed, and actual project cost movement.' },
-    { key: 'psr', label: 'Project Status Report', short: 'PSR', action: 'Create Status Report', summary: 'Summarize progress, blockers, photos, milestones, and next actions.' },
-    { key: 'mom',    label: 'Minutes of the Meeting', short: 'MOM', action: 'Add Minutes', summary: 'Keep the minutes of each project meeting, filed by meeting date.' },
-    { key: 'photos', label: 'Photos',                 short: 'PHO', action: 'Upload Photos', summary: 'Site photos grouped by date, viewed as a gallery.' },
-    { key: 'ems',    label: 'Environment Survey Report', short: 'EMS', action: 'New Environmental Impact Assessment', summary: 'Environmental Impact Assessment, filled out by MEPEO and signed off by MEPEO and PMD.' },
-    { key: 'ems-register', label: 'EMS Register',     short: 'EMR', action: 'Upload File', summary: 'File the project’s environmental documents, each with a short description.' },
-    { key: 'at',   label: 'Project Audit Trail', short: 'AT',  action: 'View Audit Trail',   summary: 'Review project events, status changes, and user activity history.' },
-    { key: 'todo', label: 'Todo List',           short: 'TODO', action: 'Add Task',           summary: 'Track project tasks with target dates and completion status.' },
+interface OpsItem {
+    key: string;
+    label: string;
+    summary?: string;
+    /** A section of the shared document register (ProjectDocument::SECTIONS). */
+    doc?: boolean;
+    /** Opens the originating project request rather than a hub section. */
+    link?: 'request';
+    /** Listed so the structure is complete, but not built yet. */
+    soon?: boolean;
+}
+
+interface OpsGroup { id: string; title: string; items: OpsItem[] }
+
+const doc = (key: string, label: string): OpsItem => ({ key, label, doc: true, summary: 'File documents for this item, each with a short description.' });
+
+const soon = (key: string, label: string): OpsItem => ({ key, label, soon: true, summary: 'Coming in a later update.' });
+
+/** Contractor Performance Evaluation: an encoded rating, the signed form, and the evidence. */
+const evaluation = (key: string, label: string): OpsItem => soon(key, `${label} Evaluation`);
+
+/** The Operations Hub action menu, grouped A–G as in "CPMS Project Operations Hub". */
+const OPS_GROUPS: OpsGroup[] = [
+    { id: 'A', title: 'Project Initiation and Proposal', items: [
+        { key: 'request',  label: 'Project Request', link: 'request', summary: 'Open the work request this project was raised from.' },
+        { key: 'proposal', label: 'Project Proposal (Design Review and Approval)', summary: 'The approved proposal the project was registered on, with its version history.' },
+        doc('capex-opex',         'CAPEX & OPEX'),
+        doc('sow',                'Scope of Work (SOW)'),
+        doc('feasibility',        'Feasibility Study'),
+        doc('site-investigation', 'Site Investigation / Survey Reports'),
+    ] },
+    { id: 'B', title: 'Engineering and Cost Planning', items: [
+        doc('drawings',      'Engineering Drawings'),
+        doc('tech-specs',    'Technical Specifications'),
+        doc('boq',           'Bill of Quantities (BOQ)'),
+        doc('cost-estimate', 'Detailed Cost Estimate'),
+        doc('gantt',         'Project Schedule / Gantt Chart'),
+    ] },
+    { id: 'C', title: 'Procurement and Contract Administration', items: [
+        { key: 'rfq',         label: 'Request for Quotations (RFQ)', summary: 'Prepare quotation requests, contractor scopes, and bid comparison notes.' },
+        { key: 'ntp',         label: 'Notice to Proceed (NTP)', summary: 'Track approval readiness, signatures, and notice issuance details.' },
+        { key: 'signatories', label: 'NTP Signatories', summary: 'See who signs each NTP step on this project, and name someone else where needed.' },
+        { key: 'contract',    label: 'Project Contract', summary: 'Keep the approved project contract on file, as a PDF.' },
+        { key: 'subprojects', label: 'Sub-Projects', summary: 'Split the project into parts that are planned, procured and billed on their own.' },
+        { key: 'permits',     label: 'Permits and Clearances', summary: 'Building, mechanical, electrical, plumbing, safety, BFP and sanitary permits, with their documents.' },
+        { key: 'vof',         label: 'Variation Order Form', summary: 'Log scope changes, cost movement, and approval remarks.' },
+    ] },
+    { id: 'D', title: 'Project Execution and Monitoring', items: [
+        { key: 'qpp',    label: 'Quality Plan and Procedures', summary: 'Maintain quality procedures, inspection points, and acceptance criteria.' },
+        { key: 'mtr',    label: 'Materials Testing Reports', summary: 'Track material submissions, test results, and compliance records.' },
+        doc('site-observation', 'Site Observation Report'),
+        { key: 'photos', label: 'Project Progress Photos', summary: 'Site photos grouped by date, viewed as a gallery.' },
+        { key: 'ems',    label: 'Environmental Risk Assessment', summary: 'MEPEO Environmental Survey Report and Responses, signed off by MEPEO and PMD.' },
+        soon('safety-risk', 'Safety Risk Assessment'),
+        soon('geological',  'Geological Assessment'),
+        { key: 'ems-register', label: 'Environmental Management System (EMS) Register', summary: 'File the project’s environmental documents, each with a short description.' },
+        { key: 'mom',    label: 'Minutes of the Meeting', summary: 'Keep the minutes of each project meeting, filed by meeting date.' },
+        { key: 'todo',   label: 'To-Do List / Action Items', summary: 'Track project tasks with target dates and completion status.' },
+    ] },
+    { id: 'E', title: 'Project Cost and Performance Monitoring', items: [
+        { key: 'rfp', label: 'Request for Payment', summary: 'Prepare payment requests, billing references, and payable amounts.' },
+        { key: 'ioc', label: 'Input Other Costs', summary: 'Capture miscellaneous project costs outside the main budget line.' },
+        { key: 'acr', label: 'Actual Cost Report', summary: 'Review paid, committed, and actual project cost movement.' },
+        { key: 'psr', label: 'Project Status Report / Weekly Progress Report', summary: 'Summarize progress, blockers, photos, milestones, and next actions.' },
+        soon('billing-validation', 'Billing Validation Report'),
+        { key: 'at',  label: 'Project Audit Trail', summary: 'Review project events, status changes, and user activity history.' },
+    ] },
+    { id: 'F', title: 'Project Completion and Turnover', items: [
+        doc('inspection-log', 'Project Inspection and Walkthrough Log'),
+        doc('punch-list',     'Project Construction Punch List'),
+        { key: 'acceptance',         label: 'Project Completion and Acceptance Certificate', summary: 'Fill in the completion details and print the acceptance certificate.' },
+        { key: 'completion-summary', label: 'Project Completion Summary', summary: 'Fill in the completion details and print the completion summary.' },
+        doc('as-built',         'As-Built Drawings'),
+        doc('om-manuals',       'Operation and Maintenance Manuals'),
+        doc('warranties',       'Equipment Warranties and Certificates'),
+        doc('turnover',         'Final Turnover Documents'),
+        doc('completion-other', 'Other Applicable Completion Documents'),
+    ] },
+    { id: 'G', title: 'Contractor Performance Evaluation', items: [
+        evaluation('eval-schedule',      'Project Schedule and Timeliness'),
+        evaluation('eval-quality',       'Quality of Workmanship and Technical Compliance'),
+        evaluation('eval-manpower',      'Manpower Management and Availability'),
+        evaluation('eval-equipment',     'Equipment and Resource Management'),
+        evaluation('eval-hse',           'Health, Safety and Environmental Compliance'),
+        evaluation('eval-contractual',   'Contractual and Administrative Compliance'),
+        evaluation('eval-documentation', 'Project Documentation and Reporting'),
+        evaluation('eval-coordination',  'Coordination and Responsiveness'),
+    ] },
 ];
+
+const OPS_ITEMS = OPS_GROUPS.flatMap(g => g.items);
+
+/** Groups a viewer has expanded, kept per browser — each item click is a page visit, which would otherwise reset them. */
+const OPEN_GROUPS_KEY = 'cpms.opsHub.openGroups';
+
+function readOpenGroups(): string[] {
+    try {
+        const parsed = JSON.parse(window.localStorage.getItem(OPEN_GROUPS_KEY) ?? '[]');
+        return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeOpenGroups(ids: string[]) {
+    try { window.localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify(ids)); } catch { /* storage unavailable */ }
+}
 
 /** The two read-only panels a department user sees, as tabs rather than a
     stacked pair — together they ran long enough to bury the record card. */
@@ -220,8 +308,16 @@ function renderHubSection(
         case 'ems-register': return <EmsRegisterHub project={hubProject} entries={hubData.entries ?? []} canEdit={canEdit} />;
         case 'at':      return <AuditTrailHub project={hubProject} logs={hubData.logs ?? []} />;
         case 'todo':    return <TodoHub     project={hubProject} tasks={hubData.tasks ?? []} canEdit={canEdit} />;
-        default:        return <RfqHub     project={hubProject} rfqs={[]} canEdit={canEdit} />;
+        case 'proposal': return <ProposalHub project={hubProject} proposal={hubData.proposal ?? { url: null, filename: null, versions: [], inherited_from: null }} canEdit={canEdit} />;
     }
+
+    const item = OPS_ITEMS.find(i => i.key === section);
+    if (item?.doc) {
+        // Keyed by section so moving between two document sections starts a fresh form.
+        return <DocumentsHub key={section} project={hubProject} section={section} label={item.label} documents={hubData.documents ?? []} canEdit={canEdit} />;
+    }
+
+    return <RfqHub project={hubProject} rfqs={[]} canEdit={canEdit} />;
 }
 
 // ── Mini Doughnut (SVG-based, no Chart.js dep) ─────────────────────────────
@@ -472,6 +568,41 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
     const [deptTab, setDeptTab] = useState<DeptTabKey>('rfq');
 
     const activeMenu = active_section ?? null;
+    const activeItem = OPS_ITEMS.find(i => i.key === activeMenu);
+
+    // The open item's group always starts expanded; the rest stay as the viewer left them.
+    const activeGroup = OPS_GROUPS.find(g => g.items.some(i => i.key === activeMenu))?.id;
+    const [openGroups, setOpenGroups] = useState<string[]>(() => {
+        const saved = readOpenGroups();
+        return activeGroup && !saved.includes(activeGroup) ? [...saved, activeGroup] : saved;
+    });
+    const toggleGroup = (id: string) => setOpenGroups(prev => {
+        const next = prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id];
+        writeOpenGroups(next);
+        return next;
+    });
+
+    const openItem = (item: OpsItem) => {
+        if (item.soon) return;
+        if (item.link === 'request') {
+            if (project.project_request_id) router.visit(route('requests.show', project.project_request_id));
+            return;
+        }
+        router.visit(route('projects.hub.' + item.key, project.id), { preserveScroll: true });
+    };
+
+    const completionProject = {
+        id: project.id,
+        project_no: project.project_no,
+        title: project.title,
+        site: project.site,
+        dept_owner: project.dept_owner,
+        owner_name: project.owner_name,
+        cost_code: project.cost_code,
+        budget_total: project.budget_total,
+        budget_paid: project.budget_paid,
+        project_type: project.project_type,
+    };
 
     const currentMeta = STATUS_META[currentStatusKey] ?? STATUS_META['PLANNING'];
     const budgetPct   = project.budget_total > 0 ? Math.round((project.budget_paid / project.budget_total) * 100) : 0;
@@ -688,18 +819,7 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                 {/* Completion documents (only when project is completed) */}
                 {currentStatusKey === 'COMPLETED' && (
                     <CompletionPanel
-                        project={{
-                            id: project.id,
-                            project_no: project.project_no,
-                            title: project.title,
-                            site: project.site,
-                            dept_owner: project.dept_owner,
-                            owner_name: project.owner_name,
-                            cost_code: project.cost_code,
-                            budget_total: project.budget_total,
-                            budget_paid: project.budget_paid,
-                            project_type: project.project_type,
-                        }}
+                        project={completionProject}
                         completion={project.completion}
                         signatories={project.signatories}
                         canEdit={project.can.update}
@@ -935,48 +1055,100 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                     Project Operations Hub
                 </h5>
 
-                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', minHeight: '600px', display: 'grid', gridTemplateColumns: '240px 1fr' }}>
-                    {/* Sidebar */}
+                <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', overflow: 'hidden', minHeight: '600px', display: 'grid', gridTemplateColumns: '280px 1fr' }}>
+                    {/* Sidebar — groups A–G, each collapsible */}
                     <div style={{ borderRight: '1px solid #e5e7eb' }}>
                         <div style={{ padding: '10px 14px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
                             <span style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Action Menu</span>
                         </div>
-                        {OPS_MENU.map(item => {
-                            const isActive = activeMenu === item.key;
+                        {OPS_GROUPS.map(group => {
+                            const isOpen = openGroups.includes(group.id);
+                            const hasActive = group.id === activeGroup;
                             // Audit Trail has no meaningful "pending" count — hide its badge.
-                            const count = item.key === 'at' ? 0 : (hub_counts[item.key] ?? 0);
+                            const countOf = (item: OpsItem) => item.key === 'at' ? 0 : (hub_counts[item.key] ?? 0);
+                            const groupCount = group.items.reduce((sum, item) => sum + countOf(item), 0);
                             return (
-                                <button
-                                    key={item.key}
-                                    onClick={() => router.visit(route('projects.hub.' + item.key, project.id), { preserveScroll: true })}
-                                    style={{
-                                        width: '100%', padding: '13px 18px',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
-                                        fontSize: '13px', fontWeight: isActive ? 600 : 500,
-                                        color: isActive ? '#2563eb' : '#475569',
-                                        background: isActive ? '#eff6ff' : 'transparent',
-                                        borderLeft: `3px solid ${isActive ? '#2563eb' : 'transparent'}`,
-                                        border: 'none', borderBottom: '1px solid #f3f4f6',
-                                        cursor: 'pointer', textAlign: 'left',
-                                        transition: 'all 0.12s',
-                                    }}
-                                    onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc'; }}
-                                    onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent'; }}
-                                >
-                                    <span>{item.label}</span>
-                                    {count > 0 && (
+                                <div key={group.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                                    <button
+                                        type="button"
+                                        aria-expanded={isOpen}
+                                        aria-controls={`ops-group-${group.id}`}
+                                        onClick={() => toggleGroup(group.id)}
+                                        style={{
+                                            width: '100%', padding: '11px 14px',
+                                            display: 'flex', alignItems: 'center', gap: '10px',
+                                            border: 'none', background: hasActive ? '#f8fafc' : '#fff',
+                                            cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                                        }}
+                                    >
                                         <span style={{
-                                            minWidth: '20px', height: '20px', padding: '0 6px',
-                                            borderRadius: '10px', fontSize: '11px', fontWeight: 700,
+                                            width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0,
                                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                            background: isActive ? '#2563eb' : '#e2e8f0',
-                                            color: isActive ? '#fff' : '#475569',
-                                            flexShrink: 0,
-                                        }}>
-                                            {count}
-                                        </span>
+                                            fontSize: '11px', fontWeight: 800,
+                                            background: hasActive ? '#2563eb' : '#e2e8f0',
+                                            color: hasActive ? '#fff' : '#475569',
+                                        }}>{group.id}</span>
+                                        <span style={{ flex: 1, fontSize: '12.5px', fontWeight: 700, color: '#0f172a', lineHeight: 1.3 }}>{group.title}</span>
+                                        {!isOpen && groupCount > 0 && (
+                                            <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b' }}>{groupCount}</span>
+                                        )}
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5"
+                                            style={{ flexShrink: 0, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>
+                                            <polyline points="9 18 15 12 9 6"/>
+                                        </svg>
+                                    </button>
+                                    {isOpen && (
+                                        <div id={`ops-group-${group.id}`}>
+                                            {group.items.map(item => {
+                                                const isActive = activeMenu === item.key;
+                                                const count = countOf(item);
+                                                const noRequest = item.link === 'request' && !project.project_request_id;
+                                                const disabled = !!item.soon || noRequest;
+                                                return (
+                                                    <button
+                                                        key={item.key}
+                                                        type="button"
+                                                        onClick={() => openItem(item)}
+                                                        disabled={disabled}
+                                                        title={noRequest ? 'This project was not raised from a project request.' : item.summary}
+                                                        style={{
+                                                            width: '100%', padding: '9px 14px 9px 46px',
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px',
+                                                            fontSize: '12.5px', fontWeight: isActive ? 600 : 500, lineHeight: 1.35,
+                                                            color: disabled ? '#94a3b8' : isActive ? '#2563eb' : '#475569',
+                                                            background: isActive ? '#eff6ff' : 'transparent',
+                                                            border: 'none',
+                                                            boxShadow: isActive ? 'inset 3px 0 0 #2563eb' : 'none',
+                                                            cursor: disabled ? 'not-allowed' : 'pointer', textAlign: 'left', fontFamily: 'inherit',
+                                                            transition: 'background 0.12s',
+                                                        }}
+                                                        onMouseEnter={e => { if (!isActive && !disabled) e.currentTarget.style.background = '#f8fafc'; }}
+                                                        onMouseLeave={e => { if (!isActive && !disabled) e.currentTarget.style.background = 'transparent'; }}
+                                                    >
+                                                        <span>
+                                                            {item.label}
+                                                            {item.link && !noRequest && <span aria-hidden style={{ marginLeft: '4px', color: '#94a3b8' }}>↗</span>}
+                                                        </span>
+                                                        {item.soon ? (
+                                                            <span style={{ padding: '1px 7px', borderRadius: '999px', fontSize: '10px', fontWeight: 700, background: '#f1f5f9', color: '#94a3b8', border: '1px solid #e2e8f0', flexShrink: 0 }}>Soon</span>
+                                                        ) : count > 0 && (
+                                                            <span style={{
+                                                                minWidth: '20px', height: '20px', padding: '0 6px',
+                                                                borderRadius: '10px', fontSize: '11px', fontWeight: 700,
+                                                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                                                background: isActive ? '#2563eb' : '#e2e8f0',
+                                                                color: isActive ? '#fff' : '#475569',
+                                                                flexShrink: 0,
+                                                            }}>
+                                                                {count}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     )}
-                                </button>
+                                </div>
                             );
                         })}
                     </div>
@@ -985,11 +1157,30 @@ export default function ProjectShow({ project, active_section, hub_data = {}, hu
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <div style={{ padding: '8px 16px', background: '#f8fafc', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                                {OPS_MENU.find(m => m.key === activeMenu)?.label ?? 'Select an action'}
+                                {activeItem?.label ?? 'Select an action'}
                             </span>
                             <span style={{ fontSize: '11.5px', color: '#94a3b8' }}>Workspace</span>
                         </div>
-                        {activeMenu
+                        {activeMenu === 'acceptance' || activeMenu === 'completion-summary'
+                            ? (
+                                <div style={{ padding: '24px' }}>
+                                    {currentStatusKey === 'COMPLETED' ? (
+                                        <CompletionPanel
+                                            project={completionProject}
+                                            completion={project.completion}
+                                            signatories={project.signatories}
+                                            canEdit={project.can.update}
+                                            only={activeMenu === 'acceptance' ? 'acceptance' : 'summary'}
+                                            inHub
+                                        />
+                                    ) : (
+                                        <div style={{ padding: '16px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: '#f8fafc', fontSize: '13px', color: '#475569' }}>
+                                            The {activeItem?.label} is prepared once the project is marked <strong>Completed</strong>. Update the project status above to fill in the completion details.
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                            : activeMenu
                             ? renderHubSection(activeMenu, hubProject, hub_data, project.can.update)
                             : (
                                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 32px', color: '#94a3b8', textAlign: 'center', gap: '12px' }}>

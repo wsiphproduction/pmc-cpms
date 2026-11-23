@@ -11,33 +11,22 @@ class Hub
             'hub-overview' => [
                 'title' => 'The Project Hub',
                 'blocks' => [
-                    ['path', 'Open a project > the hub tabs'],
-                    ['p', 'The hub is where a project is actually run. Sixteen sections sit behind one project, each holding one kind of record, and every change made in any of them is written to the project’s audit trail with your name against it.'],
+                    ['path', 'Open a project > Project Operations Hub'],
+                    ['p', 'The hub is where a project is actually run. Its Action Menu is grouped A to G, following the life of a project from request to turnover; click a group to open it. Each item holds one kind of record, and every change made in any of them is written to the project’s audit trail with your name against it.'],
 
                     ['table',
-                        ['Tab', 'Full name', 'What it holds'],
+                        ['Group', 'Items', 'What it holds'],
                         [
-                            ['RFQ', 'Request for Quotations', 'Quotation requests sent to contractors, and the offers that came back.'],
-                            ['NTP', 'Notice to Proceed', 'The notices awarding work, and their five-office approval chain.'],
-                            ['SIG', 'NTP Signatories', 'Who signs each NTP step on this project, where it is not the default.'],
-                            ['CON', 'Project Contract', 'The approved project contract, as a PDF.'],
-                            ['SUB', 'Sub-Projects', 'Parts of the project planned, procured and billed on their own.'],
-                            ['PER', 'Permits', 'Permits the work needs, with the documents behind them.'],
-                            ['VOF', 'Variation Order Form', 'Changes to scope, schedule and cost after award.'],
-                            ['QPP', 'Quality Plan & Procedures', 'Quality procedures, inspection points and acceptance criteria.'],
-                            ['MTR', 'Materials Test Reports', 'Material submissions, test results and compliance records.'],
-                            ['RFP', 'Request for Payment', 'Billings against the work, with retention and payment status.'],
-                            ['IOC', 'Input Other Cost', 'Costs outside the main contract line.'],
-                            ['ACR', 'Actual Cost Report', 'Paid, committed and actual cost, read together.'],
-                            ['PSR', 'Project Status Report', 'Weekly progress, site checklist, issues and action plans.'],
-                            ['MOM', 'Minutes of the Meeting', 'The minutes of each project meeting, filed by meeting date.'],
-                            ['PHO', 'Photos', 'Site photos grouped by date, viewed as a gallery.'],
-                            ['EMS', 'Environment Survey Report', 'The Environmental Impact Assessment, prepared by the engineer, reviewed and noted by PMD, then verified and approved by MEPEO.'],
-                            ['EMR', 'EMS Register', 'Environmental documents filed with a description.'],
-                            ['AT', 'Project Audit Trail', 'Everything that has happened on the project.'],
-                            ['TODO', 'Todo List', 'Project tasks with target dates.'],
+                            ['A. Project Initiation and Proposal', 'Project Request, Project Proposal, CAPEX & OPEX, Scope of Work, Feasibility Study, Site Investigation / Survey Reports', 'The originating request, the approved proposal, and the documents the project was planned on.'],
+                            ['B. Engineering and Cost Planning', 'Engineering Drawings, Technical Specifications, Bill of Quantities, Detailed Cost Estimate, Project Schedule / Gantt Chart', 'Design and costing documents.'],
+                            ['C. Procurement and Contract Administration', 'RFQ, NTP, NTP Signatories, Project Contract, Sub-Projects, Permits and Clearances, Variation Order Form', 'Quotations, the notices awarding work and their approval chain, the contract, permits, and changes after award.'],
+                            ['D. Project Execution and Monitoring', 'Quality Plan and Procedures, Materials Testing Reports, Site Observation Report, Project Progress Photos, Environmental Risk Assessment, EMS Register, Minutes of the Meeting, To-Do List', 'Quality, testing, site and environmental records kept while the work runs.'],
+                            ['E. Project Cost and Performance Monitoring', 'Request for Payment, Input Other Costs, Actual Cost Report, Project Status / Weekly Progress Report, Project Audit Trail', 'Billings, other costs, actual cost, weekly progress, and everything that has happened on the project.'],
+                            ['F. Project Completion and Turnover', 'Inspection and Walkthrough Log, Punch List, Completion and Acceptance Certificate, Completion Summary, As-Built Drawings, O&M Manuals, Warranties and Certificates, Final Turnover Documents, Other Completion Documents', 'What is handed over when the work is done. The two certificates are filled in once the project is Completed.'],
+                            ['G. Contractor Performance Evaluation', 'Eight evaluation forms', 'Coming in a later update.'],
                         ],
                     ],
+                    ['p', 'Document items — such as Scope of Work, Bill of Quantities or As-Built Drawings — all work the same way: describe the file, attach it (up to 20 MB), and click Upload File. Items marked Soon are listed so the structure is complete, but cannot be opened yet.'],
 
                     ['h', 'Who can change what here'],
                     ['p', 'Editing anything in the hub needs edit rights on the project: the administrator and the assistant manager on any project, a project engineer on projects they registered. Everyone else who can see the project — the sign-off offices, department managers, division manager users — sees the same tabs read-only.'],
@@ -51,7 +40,7 @@ class Hub
             'hub-rfq' => [
                 'title' => 'RFQ — Request for Quotations',
                 'blocks' => [
-                    ['path', 'Open a project > RFQ'],
+                    ['path', 'Open a project > C. Procurement > Request for Quotations (RFQ)'],
                     ['p', 'An RFQ is a request for a price, sent to one contractor. A project normally carries several — one per contractor invited — and each fills up with the offers actually made against it.'],
 
                     ['h', 'Sending an RFQ'],
@@ -136,7 +125,7 @@ class Hub
             'hub-ntp' => [
                 'title' => 'NTP — Notice to Proceed',
                 'blocks' => [
-                    ['path', 'Open a project > NTP'],
+                    ['path', 'Open a project > C. Procurement > Notice to Proceed (NTP)'],
                     ['p', 'The Notice to Proceed is what tells a contractor to begin. It is the most heavily controlled document in CPMS: five offices sign it in a fixed order, and only the last signature issues it.'],
 
                     ['h', 'The approval chain'],
@@ -199,7 +188,7 @@ class Hub
             'hub-subprojects' => [
                 'title' => 'SUB — Sub-Projects',
                 'blocks' => [
-                    ['path', 'Open a project > Sub-Projects'],
+                    ['path', 'Open a project > C. Procurement > Sub-Projects'],
                     ['p', 'A sub-project is a part of a project that is planned, procured and billed on its own. It has its own number derived from its parent, its own hub, its own RFQs and NTPs — but it rolls up into its parent’s progress.'],
 
                     ['h', 'Adding one'],
@@ -223,12 +212,12 @@ class Hub
             'hub-permits' => [
                 'title' => 'PER — Permits',
                 'blocks' => [
-                    ['path', 'Open a project > Permits'],
+                    ['path', 'Open a project > C. Procurement > Permits and Clearances'],
                     ['p', 'The permits the work needs, with the documents that prove them. A permit record can carry several files — the application, the approval, the renewal — and each file is versioned.'],
                     ['ol', [
                         'Click Add Permit.',
                         'Give it a label — the permit as you would name it.',
-                        'Set the document type.',
+                        'Set the document type: Building, Mechanical, Electrical or Plumbing Permit; Safety Permits and Clearances; Bureau of Fire Protection (BFP) Clearance; Septic Tank / Sanitary Permit; Environmental Permit; or Other Applicable Permits, naming it yourself.',
                         'Attach the files. At least one is required; each may be up to 20 MB.',
                         'Save.',
                     ]],
@@ -239,7 +228,7 @@ class Hub
             'hub-vof' => [
                 'title' => 'VOF — Variation Order Form',
                 'blocks' => [
-                    ['path', 'Open a project > Variation Order Form'],
+                    ['path', 'Open a project > C. Procurement > Variation Order Form'],
                     ['p', 'A variation order records a change to the work after it has been awarded: a change of scope, of schedule, of cost, or of all three. Each takes its own VO number.'],
 
                     ['h', 'Raising a variation'],
@@ -269,7 +258,7 @@ class Hub
             'hub-qpp' => [
                 'title' => 'QPP — Quality Plan & Procedures',
                 'blocks' => [
-                    ['path', 'Open a project > Quality Plan & Procedures'],
+                    ['path', 'Open a project > D. Execution > Quality Plan and Procedures'],
                     ['p', 'The quality documents governing the work — procedures, inspection and test plans, acceptance criteria.'],
                     ['ol', [
                         'Click Add Quality Plan.',
@@ -284,7 +273,7 @@ class Hub
             'hub-contract' => [
                 'title' => 'CON — Project Contract',
                 'blocks' => [
-                    ['path', 'Open a project > Project Contract'],
+                    ['path', 'Open a project > C. Procurement > Project Contract'],
                     ['p', 'The approved project contract, kept on file with the project.'],
                     ['ol', [
                         'Give it a label, such as Approved Project Contract.',
@@ -298,7 +287,7 @@ class Hub
             'hub-ems-register' => [
                 'title' => 'EMR — EMS Register',
                 'blocks' => [
-                    ['path', 'Open a project > EMS Register'],
+                    ['path', 'Open a project > D. Execution > Environmental Management System (EMS) Register'],
                     ['p', 'A place to file the project’s environmental documents. There are no document types: each file just carries a description.'],
                     ['ol', [
                         'Describe the file.',
@@ -311,7 +300,7 @@ class Hub
             'hub-mtr' => [
                 'title' => 'MTR — Materials Test Reports',
                 'blocks' => [
-                    ['path', 'Open a project > Materials Test Reports'],
+                    ['path', 'Open a project > D. Execution > Materials Testing Reports'],
                     ['p', 'Test results for the materials used, and the compliance record behind them.'],
                     ['ol', [
                         'Click Add Test Report.',
@@ -325,7 +314,7 @@ class Hub
             'hub-rfp' => [
                 'title' => 'RFP — Request for Payment',
                 'blocks' => [
-                    ['path', 'Open a project > Request for Payment'],
+                    ['path', 'Open a project > E. Cost and Performance > Request for Payment'],
                     ['p', 'Billings against the work. Each takes a statement number and may be tied to the NTP it is billed under, so that payment can be read against the award it belongs to.'],
 
                     ['h', 'Raising a billing'],
@@ -357,7 +346,7 @@ class Hub
             'hub-ioc' => [
                 'title' => 'IOC — Input Other Cost',
                 'blocks' => [
-                    ['path', 'Open a project > Input Other Cost'],
+                    ['path', 'Open a project > E. Cost and Performance > Input Other Costs'],
                     ['p', 'Costs that fall outside the main contract line — materials bought directly, equipment hire, incidental spending. Logging them here is what makes the Actual Cost Report a true picture rather than a contract summary.'],
                     ['ol', [
                         'Click Add Other Cost.',
@@ -373,7 +362,7 @@ class Hub
             'hub-acr' => [
                 'title' => 'ACR — Actual Cost Report',
                 'blocks' => [
-                    ['path', 'Open a project > Actual Cost Report'],
+                    ['path', 'Open a project > E. Cost and Performance > Actual Cost Report'],
                     ['p', 'A read-only view that puts the project’s money in one place: what was budgeted, what has been committed through awarded NTPs and approved variations, what has been billed, what has been paid, and what other costs have been logged.'],
                     ['p', 'Nothing is entered here. The report is built from the RFP, IOC, VOF and NTP records, so it is only as good as what has been logged in them. If a figure looks wrong, correct it in the section it came from.'],
                     ['tip', 'Read the ACR before raising a variation. It tells you how much of the budget is already committed.'],
@@ -383,7 +372,7 @@ class Hub
             'hub-psr' => [
                 'title' => 'PSR — Project Status Report',
                 'blocks' => [
-                    ['path', 'Open a project > Project Status Report'],
+                    ['path', 'Open a project > E. Cost and Performance > Project Status Report / Weekly Progress Report'],
                     ['p', 'The weekly progress report on a project: how far the work has got, what is in the way, and what is being done about it. The same report can be filed from here or from the Weekly Status page — they write the same record.'],
 
                     ['h', 'Filing a report'],
@@ -412,7 +401,7 @@ class Hub
             'hub-mom' => [
                 'title' => 'MOM — Minutes of the Meeting',
                 'blocks' => [
-                    ['path', 'Open a project > Minutes of the Meeting'],
+                    ['path', 'Open a project > D. Execution > Minutes of the Meeting'],
                     ['p', 'The minutes of each meeting held on the project, one document per meeting, listed newest meeting first.'],
                     ['ol', [
                         'Pick the meeting date.',
@@ -427,7 +416,7 @@ class Hub
             'hub-photos' => [
                 'title' => 'Photos',
                 'blocks' => [
-                    ['path', 'Open a project > Photos'],
+                    ['path', 'Open a project > D. Execution > Project Progress Photos'],
                     ['p', 'Site photos, grouped by the date they were taken. Each date is one row in the table, with a preview of its first few photos.'],
                     ['ol', [
                         'Pick the date the photos were taken.',
@@ -444,7 +433,7 @@ class Hub
             'hub-ems' => [
                 'title' => 'EMS — Environment Survey Report',
                 'blocks' => [
-                    ['path', 'Open a project > Environment Survey Report'],
+                    ['path', 'Open a project > D. Execution > Environmental Risk Assessment'],
                     ['p', 'The Environmental Impact Assessment (PMD-PRJ-FRM-19) for the work. The project engineer prepares it (Prepared by), and it is signed off in this order:'],
                     ['ol', [
                         'PMD Assistant Manager — reviews it (Reviewed by).',
@@ -496,7 +485,7 @@ class Hub
             'hub-at' => [
                 'title' => 'AT — Project Audit Trail',
                 'blocks' => [
-                    ['path', 'Open a project > Project Audit Trail'],
+                    ['path', 'Open a project > E. Cost and Performance > Project Audit Trail'],
                     ['p', 'Everything that has happened on the project, newest first: who did it, when, which module it was in, and what changed. Status changes, uploads, approvals, dispatches and deletions all land here.'],
                     ['p', 'The trail is written by the system and cannot be edited by anyone, including the administrator. That is the point of it — when there is a question about who changed a figure or when a notice went out, this is the answer.'],
                     ['tip', 'When a contractor disputes a date, the audit trail usually settles it: the dispatch of the RFQ and the issue of the NTP are both stamped here.'],
@@ -506,7 +495,7 @@ class Hub
             'hub-todo' => [
                 'title' => 'TODO — Todo List',
                 'blocks' => [
-                    ['path', 'Open a project > Todo List'],
+                    ['path', 'Open a project > D. Execution > To-Do List / Action Items'],
                     ['p', 'A simple task list for the project — the small things that do not belong in any of the other sections but still have to be done.'],
                     ['ol', [
                         'Click Add Task.',

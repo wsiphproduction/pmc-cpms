@@ -298,11 +298,15 @@ export function printCompletionSummary(project: ProjectLite) {
 }
 
 // ── Panel shown on the project page when status is COMPLETED ─────────────────
-export function CompletionPanel({ project, completion, signatories, canEdit }: {
+export function CompletionPanel({ project, completion, signatories, canEdit, only, inHub = false }: {
     project: ProjectLite;
     completion: CompletionData | null;
     signatories: Signatories;
     canEdit: boolean;
+    /** In the Operations Hub each certificate has its own menu item, so the panel offers just that one. */
+    only?: 'acceptance' | 'summary';
+    /** Drop the outer margin the record card needs. */
+    inHub?: boolean;
 }) {
     const [showModal, setShowModal] = useState(false);
     const filled = !!completion?.certificate_saved;
@@ -313,7 +317,7 @@ export function CompletionPanel({ project, completion, signatories, canEdit }: {
     });
 
     return (
-        <div style={{ margin: '0 30px 20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px 20px' }}>
+        <div style={{ margin: inHub ? 0 : '0 30px 20px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '16px 20px' }}>
             {showModal && (
                 <CompletionModal project={project} completion={completion} signatories={signatories} onClose={() => setShowModal(false)} />
             )}
@@ -336,18 +340,18 @@ export function CompletionPanel({ project, completion, signatories, canEdit }: {
                             {filled ? 'Edit Details' : 'Fill Details'}
                         </button>
                     )}
-                    <button onClick={() => printAcceptanceCertificate(project)} disabled={!filled}
+                    {only !== 'summary' && <button onClick={() => printAcceptanceCertificate(project)} disabled={!filled}
                         title={filled ? '' : 'Fill in the completion details first'}
                         style={{ ...btn(filled ? '#16a34a' : '#f1f5f9', filled ? '#fff' : '#94a3b8', filled ? '#16a34a' : '#e2e8f0'), cursor: filled ? 'pointer' : 'not-allowed' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Acceptance Certificate
-                    </button>
-                    <button onClick={() => printCompletionSummary(project)} disabled={!filled}
+                    </button>}
+                    {only !== 'acceptance' && <button onClick={() => printCompletionSummary(project)} disabled={!filled}
                         title={filled ? '' : 'Fill in the completion details first'}
                         style={{ ...btn(filled ? '#0f766e' : '#f1f5f9', filled ? '#fff' : '#94a3b8', filled ? '#0f766e' : '#e2e8f0'), cursor: filled ? 'pointer' : 'not-allowed' }}>
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                         Completion Summary
-                    </button>
+                    </button>}
                 </div>
             </div>
         </div>
